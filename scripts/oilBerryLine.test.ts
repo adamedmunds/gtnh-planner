@@ -66,8 +66,8 @@ test('has the planned machines and exports cleanly', () => {
   expect(ofKey('distillery_lv')).toHaveLength(17);
   expect(ofKey('chemical_reactor_lv')).toHaveLength(1);
   expect(ofKey('electrolyzer_lv')).toHaveLength(1);
-  expect(ofKey('combustion_generator_mv')).toHaveLength(7);
-  expect(ofKey('transformer_mv_lv')).toHaveLength(7);
+  expect(ofKey('combustion_generator_mv')).toHaveLength(9);
+  expect(ofKey('transformer_mv_lv')).toHaveLength(9);
   expect(buildSchematic(OIL_BERRY_LINE).warnings).toEqual([]);
 });
 
@@ -106,11 +106,11 @@ test('sulfuric light fuel network: distillery outputs reach the chemical reactor
   for (const d of ofKey('distillery_lv')) expect(network(outputPipe(d)).size).toBe(sulfuric.size);
 });
 
-test('light fuel network: chemical reactor feeds all 7 generators and has an open end for storage', () => {
+test('light fuel network: chemical reactor feeds all 9 generators and has an open end for storage', () => {
   const gen = ofKey('combustion_generator_mv')[0];
   const pipe = neighbours(gen).find(({ n, side }) => isConduit(n) && (conns.get(posKey(n.block.pos))! & (1 << OPPOSITE[side])))!.n;
   const fuel = network(pipe);
-  expect(count(fuel.machines, 'combustion_generator_mv')).toBe(7);
+  expect(count(fuel.machines, 'combustion_generator_mv')).toBe(9);
   expect(count(fuel.machines, 'chemical_reactor_lv')).toBe(1);
   expect(fuel.machines.filter((k) => k !== 'combustion_generator_mv' && k !== 'chemical_reactor_lv')).toEqual([]);
 });
@@ -129,4 +129,27 @@ test('chemical reactor and electrolyzer share a cell loop item pipe', () => {
     (c) => c.entry.kind === 'itemPipe' && neighbours(c).some(({ n }) => n.block.key === 'electrolyzer_lv'),
   )!;
   expect(network(pipe).machines.sort()).toEqual(['chemical_reactor_lv', 'electrolyzer_lv']);
+});
+
+test('uses a lean pipe layout (no full rings around machines)', () => {
+  const pipes = [...cells.values()].filter(isConduit);
+  expect(pipes.length).toBeLessThanOrEqual(95);
+});
+
+test('every pipe is connected to its own network on at least one side (no dead stubs)', () => {
+  for (const c of cells.values()) {
+    if (!isConduit(c)) continue;
+    expect(conns.get(posKey(c.block.pos)), `pipe at ${posKey(c.block.pos)}`).not.toBe(0);
+  }
+});
+
+test('pipes of the same kind never sit side by side unless they are connected (nothing to wrench apart)', () => {
+  for (const c of cells.values()) {
+    if (!isConduit(c)) continue;
+    const mask = conns.get(posKey(c.block.pos))!;
+    for (const { side, n } of neighbours(c)) {
+      if (n.entry.kind !== c.entry.kind) continue;
+      expect(mask & (1 << side), `pipes at ${posKey(c.block.pos)} side ${side}`).not.toBe(0);
+    }
+  }
 });
