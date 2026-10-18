@@ -15,8 +15,11 @@ export interface CatalogEntry {
   thickness?: number;
   /** Material/placeholder colour, CSS hex. */
   color: string;
-  /** Paths relative to public/textures/. */
-  textures: { top?: string; side?: string; bottom?: string; front?: string };
+  /**
+   * Paths relative to public/textures/. Machines: top/side/bottom + front overlay. Cables/pipes: `side` along
+   * the length, `end` on the open end, `core` (cables) the wire under the insulation; tinted by `color`.
+   */
+  textures: { top?: string; side?: string; bottom?: string; front?: string; end?: string; core?: string };
 }
 
 export type Catalog = ReadonlyMap<string, CatalogEntry>;

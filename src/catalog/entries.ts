@@ -41,8 +41,8 @@ const CABLES = [
 
 function cableEntries(): CatalogEntry[] {
   return CABLES.flatMap((c) => [
-    { size: '1x', offset: 6, thickness: 0.25 },
-    { size: '4x', offset: 8, thickness: 0.5 },
+    { size: '1x', offset: 6, thickness: 0.25, insulation: 'SMALL' },
+    { size: '4x', offset: 8, thickness: 0.5, insulation: 'MEDIUM' },
   ].map((s): CatalogEntry => ({
     key: `${c.base}_cable_${s.size}`,
     name: `${s.size} ${c.name} Cable`,
@@ -52,9 +52,19 @@ function cableEntries(): CatalogEntry[] {
     group: 'Cables',
     thickness: s.thickness,
     color: c.color,
-    textures: {},
+    textures: {
+      side: 'blocks/iconsets/INSULATION_FULL.png',
+      end: `blocks/iconsets/INSULATION_${s.insulation}.png`,
+      core: 'blocks/materialicons/NONE/wire.png',
+    },
   })));
 }
+
+// Metal pipes use GT's NONE icon set (METALLIC/SHINY fall back to it), tinted with the material colour.
+const pipeTextures = (icon: string) => ({
+  side: 'blocks/materialicons/NONE/pipeSide.png',
+  end: `blocks/materialicons/NONE/${icon}.png`,
+});
 
 // GT FluidPipeBuilder: tiny = start, small +1, normal +2, large +3. Meta = 4 + tool quality.
 const FLUID_PIPES = [
@@ -63,9 +73,9 @@ const FLUID_PIPES = [
 ] as const;
 
 const PIPE_SIZES = [
-  { size: 'small', label: 'Small', offset: 1, thickness: 0.375 },
-  { size: 'normal', label: 'Normal', offset: 2, thickness: 0.5 },
-  { size: 'large', label: 'Large', offset: 3, thickness: 0.75 },
+  { size: 'small', label: 'Small', offset: 1, thickness: 0.375, icon: 'pipeSmall' },
+  { size: 'normal', label: 'Normal', offset: 2, thickness: 0.5, icon: 'pipeMedium' },
+  { size: 'large', label: 'Large', offset: 3, thickness: 0.75, icon: 'pipeLarge' },
 ] as const;
 
 function fluidPipeEntries(): CatalogEntry[] {
@@ -79,7 +89,7 @@ function fluidPipeEntries(): CatalogEntry[] {
       group: 'Fluid pipes',
       thickness: s.thickness,
       color: p.color,
-      textures: {},
+      textures: pipeTextures(s.icon),
     })),
   );
 }
@@ -92,8 +102,8 @@ const ITEM_PIPES = [
 
 function itemPipeEntries(): CatalogEntry[] {
   return ITEM_PIPES.flatMap((p) => [
-    { size: 'small', label: 'Small', mID: p.small, thickness: 0.375 },
-    { size: 'normal', label: 'Normal', mID: p.normal, thickness: 0.5 },
+    { size: 'small', label: 'Small', mID: p.small, thickness: 0.375, icon: 'pipeSmall' },
+    { size: 'normal', label: 'Normal', mID: p.normal, thickness: 0.5, icon: 'pipeMedium' },
   ].map((s): CatalogEntry => ({
     key: `${p.base}_item_pipe_${s.size}`,
     name: `${s.label} ${p.name} Item Pipe`,
@@ -103,7 +113,7 @@ function itemPipeEntries(): CatalogEntry[] {
     group: 'Item pipes',
     thickness: s.thickness,
     color: p.color,
-    textures: {},
+    textures: pipeTextures(s.icon),
   })));
 }
 

@@ -61,7 +61,48 @@ export function createTextureCache(load: Loader = loadImage, base = '/textures/'
     return textures.get(key)!;
   }
 
-  return { get, composite };
+  /**
+   * Layers drawn bottom-up, each optionally multiplied by a colour (GT tints greyscale material icons this
+   * way). Resolves to null if the first layer is missing; missing upper layers are skipped.
+   */
+  function layered(layers: readonly { rel?: string; tint?: string }[]): Promise<THREE.Texture | null> {
+    const present = layers.filter((l): l is { rel: string; tint?: string } => !!l.rel);
+    if (present.length === 0) return Promise.resolve(null);
+    const key = present.map((l) => `${l.rel}*${l.tint ?? ''}`).join('+');
+    if (!textures.has(key)) {
+      textures.set(key, Promise.all(present.map((l) => image(l.rel))).then((imgs) => {
+        if (!imgs[0]) return null;
+        const size = (imgs[0] as HTMLImageElement).width || 16;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+        ctx.imageSmoothingEnabled = false;
+        imgs.forEach((img, i) => {
+          if (!img) return;
+          const tint = present[i].tint;
+          if (!tint) {
+            ctx.drawImage(img as CanvasImageSource, 0, 0, size, size, 0, 0, size, size);
+            return;
+          }
+          const layer = document.createElement('canvas');
+          layer.width = layer.height = size;
+          const lctx = layer.getContext('2d')!;
+          lctx.imageSmoothingEnabled = false;
+          lctx.drawImage(img as CanvasImageSource, 0, 0, size, size, 0, 0, size, size);
+          lctx.globalCompositeOperation = 'multiply';
+          lctx.fillStyle = tint;
+          lctx.fillRect(0, 0, size, size);
+          lctx.globalCompositeOperation = 'destination-in'; // keep the icon's transparency
+          lctx.drawImage(img as CanvasImageSource, 0, 0, size, size, 0, 0, size, size);
+          ctx.drawImage(layer, 0, 0);
+        });
+        return pixelTexture(canvas);
+      }));
+    }
+    return textures.get(key)!;
+  }
+
+  return { get, composite, layered };
 }
 
 export const textureCache = createTextureCache();
