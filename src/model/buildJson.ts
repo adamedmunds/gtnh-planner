@@ -1,5 +1,5 @@
 import { registerMachines, type GeneratedMachine } from '../catalog';
-import type { Build, Facing, ManualMask, PlacedBlock } from './types';
+import type { Build, FaceSetting, Facing, ManualMask, PlacedBlock } from './types';
 
 export class BuildParseError extends Error {}
 
@@ -20,7 +20,7 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw) || (raw as { version?: unknown }).version !== 1) {
     throw new BuildParseError('Unsupported build file (expected version 1)');
   }
-  const obj = raw as { name?: unknown; blocks?: unknown; machines?: unknown; notes?: unknown };
+  const obj = raw as { name?: unknown; blocks?: unknown; machines?: unknown; notes?: unknown; covers?: unknown; generated?: unknown };
   if (!Array.isArray(obj.blocks)) throw new BuildParseError('Build file has no blocks list');
 
   const warnings: string[] = [];
@@ -37,6 +37,7 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
       return;
     }
     const block: PlacedBlock = { pos: [pos[0], pos[1], pos[2]], key: rb.key };
+    if (typeof rb.role === 'string') block.role = rb.role;
     if (rb.facing !== undefined) {
       if (isInt(rb.facing) && rb.facing >= 0 && rb.facing <= 5) block.facing = rb.facing as Facing;
       else warnings.push(`Block #${i + 1}: ignored invalid facing`);
@@ -69,5 +70,17 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
     registerMachines(machines);
   }
   if (Array.isArray(obj.notes) && obj.notes.every((n) => typeof n === 'string') && obj.notes.length) build.notes = obj.notes as string[];
+  const covers = (Array.isArray(obj.covers) ? obj.covers : []).filter((c): c is FaceSetting => {
+    const r = c as Record<string, unknown> | null;
+    return !!r && Array.isArray(r.pos) && r.pos.length === 3 && r.pos.every(isInt) && isInt(r.side) && r.side >= 0 && r.side <= 5 &&
+      (r.kind === 'pump' || r.kind === 'conveyor' || r.kind === 'inputFromOutput');
+  });
+  if (covers.length) build.covers = covers;
+  // A generated line is only kept when it looks whole; otherwise the build is just blocks.
+  const g = obj.generated as Record<string, unknown> | undefined;
+  if (g && typeof g === 'object' && (g.style === 'modular' || g.style === 'straight') && Array.isArray(g.template) &&
+      ['sliceLength', 'sliceCount', 'left', 'right', 'leftStart', 'rightStart'].every((k) => isInt(g[k]))) {
+    build.generated = g as unknown as Build['generated'];
+  }
   return { build, warnings };
 }

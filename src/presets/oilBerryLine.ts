@@ -166,7 +166,22 @@ export function makeOilBerryLine({ extractors, distilleries }: OilBerryLineOptio
 
   const custom = extractors !== 6 || distilleries !== 17;
   const name = custom ? `oil-berry-line-${extractors}fe-${distilleries}d` : 'oil-berry-line';
-  return { version: 1, name, blocks: [...blocks.values()] };
+  // GregTech settings the line relies on: the reactor's Light Fuel leaves through a pump cover underneath, and the
+  // reactor and electrolyzer take their cells in through their output face ("input from output side").
+  return {
+    version: 1,
+    name,
+    blocks: [...blocks.values()],
+    covers: [
+      { pos: [-1, 2, 0], side: 0, kind: 'pump' },
+      { pos: [-1, 2, 0], side: 1, kind: 'inputFromOutput' },
+      { pos: [1, 3, 0], side: 4, kind: 'inputFromOutput' },
+    ],
+    notes: [
+      'Put a pump cover on the bottom of the Chemical Reactor at (-1, 2, 0), set to export, so Light Fuel drops into the pipe below.',
+      'Use a screwdriver on the output face of the Chemical Reactor (top) and the MV Electrolyzer (west) to turn on "input from output side", so they can take in the cells that pipe brings.',
+    ],
+  };
 }
 
 /** The line sized for the current farm: ≈5.6 berries/s. */

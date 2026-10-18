@@ -1,4 +1,5 @@
 import type { GeneratedMachine } from '../catalog/types';
+import type { GeneratedLine } from '../layout/types';
 
 export type Vec3 = readonly [number, number, number];
 
@@ -18,6 +19,15 @@ export interface PlacedBlock {
   facing?: Facing;
   /** Cables/pipes only. */
   manualMask?: ManualMask;
+  /** Generated lines: which recipe node or marker this block is. */
+  role?: string;
+}
+
+/** Something to set on a machine face in game: a cover, or GregTech's "input from output side" screwdriver toggle. */
+export interface FaceSetting {
+  pos: Vec3;
+  side: Facing;
+  kind: 'pump' | 'conveyor' | 'inputFromOutput';
 }
 
 export interface Build {
@@ -28,4 +38,8 @@ export interface Build {
   machines?: GeneratedMachine[];
   /** Plain notes for building it (covers to add, what slices handle, warnings). */
   notes?: string[];
+  /** Covers and face settings the layout relies on. */
+  covers?: FaceSetting[];
+  /** Present while the build is an untouched generated line (enables "+ slice" and "Export one slice"). */
+  generated?: GeneratedLine;
 }

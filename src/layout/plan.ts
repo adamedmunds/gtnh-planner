@@ -86,7 +86,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
       result.nodes.reduce((s, n) => s + Math.max(0, n.rates.get(key) ?? 0), 0),
       result.nodes.reduce((s, n) => s - Math.min(0, n.rates.get(key) ?? 0), 0),
     );
-    networks.push({ key, kind: kindOf(key), flow, producers, consumers });
+    networks.push({ key, name: resourceInfo(key, db).name, kind: kindOf(key), flow, producers, consumers });
   }
 
   // Power: the machines' tiers, from the line's generators or from outside, stepping down with transformers.

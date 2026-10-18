@@ -204,3 +204,14 @@ test('rejects sizes the single chemical reactor cannot handle or that make no se
   expect(() => makeOilBerryLine({ extractors: 0, distilleries: 3 })).toThrow(/at least 1/);
   expect(() => makeOilBerryLine({ extractors: 2.5, distilleries: 3 })).toThrow(/whole number/);
 });
+
+test('the line records the cover and screwdriver settings it relies on, with plain notes', () => {
+  const b = makeOilBerryLine({ extractors: 6, distilleries: 17 });
+  expect(b.covers).toEqual([
+    { pos: [-1, 2, 0], side: 0, kind: 'pump' },
+    { pos: [-1, 2, 0], side: 1, kind: 'inputFromOutput' },
+    { pos: [1, 3, 0], side: 4, kind: 'inputFromOutput' },
+  ]);
+  expect(b.notes?.join(' ')).toMatch(/pump cover .*bottom .*Chemical Reactor/);
+  expect(b.notes?.join(' ')).toMatch(/input from output side/);
+});

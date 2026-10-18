@@ -22,6 +22,7 @@ export interface PlanMachine {
 /** Something that flows between machines or to/from a marker; producers/consumers are node ids or marker ids. */
 export interface PlanNetwork {
   key: ResourceKey;
+  name: string;
   kind: 'fluid' | 'item';
   /** Per second, whole build. */
   flow: number;

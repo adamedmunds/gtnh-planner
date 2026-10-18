@@ -1,0 +1,217 @@
+import { CATALOG, type CatalogEntry } from '../catalog';
+import { computeConnections } from '../model/connections';
+import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
+import type { Build, PlacedBlock, Vec3 } from '../model/types';
+import type { LinePlan, PlanMachine } from './types';
+
+interface Cell { block: PlacedBlock; entry: CatalogEntry }
+
+const TIERS = ['ULV', 'LV', 'MV', 'HV', 'EV', 'IV', 'LuV', 'ZPM', 'UV'];
+const tierIdx = (t?: string) => (t ? TIERS.indexOf(t) : -1);
+const where = (p: Vec3) => `(${p.join(', ')})`;
+const isConduit = (e: CatalogEntry) => e.kind === 'cable' || e.kind === 'fluidPipe' || e.kind === 'itemPipe';
+const isTransformer = (e: CatalogEntry) => e.key.startsWith('transformer_');
+
+/**
+ * Proves a line is buildable as laid out: every machine gets each input and can push out each output on the face
+ * GregTech uses (or a recorded cover/setting), fluids never mix, every machine gets power at a voltage it survives,
+ * and — for generated lines — the walkway is clear and every slice is identical. Returns plain problems, [] if none.
+ */
+export function checkLine(build: Build, plan: LinePlan): string[] {
+  const problems: string[] = [];
+  const cells = new Map<string, Cell>();
+  for (const block of build.blocks) {
+    const entry = CATALOG.get(block.key);
+    if (entry) cells.set(posKey(block.pos), { block, entry });
+    else problems.push(`Unknown block "${block.key}" at ${where(block.pos)}`);
+  }
+  const masks = computeConnections(build.blocks);
+  const neighbour = (c: Cell, side: number) => cells.get(posKey(addVec(c.block.pos, DIRS[side])));
+
+  // Conduit components: same-kind pieces joined by connected sides.
+  const compOf = new Map<string, number>();
+  const comps: { kind: CatalogEntry['kind']; cells: Cell[] }[] = [];
+  for (const [k, c] of cells) {
+    if (!isConduit(c.entry) || compOf.has(k)) continue;
+    const id = comps.length;
+    comps.push({ kind: c.entry.kind, cells: [] });
+    const stack = [c];
+    compOf.set(k, id);
+    while (stack.length) {
+      const cur = stack.pop()!;
+      comps[id].cells.push(cur);
+      const mask = masks.get(posKey(cur.block.pos)) ?? 0;
+      for (let side = 0; side < 6; side++) {
+        if (!(mask & (1 << side))) continue;
+        const n = neighbour(cur, side);
+        if (!n || n.entry.kind !== cur.entry.kind) continue;
+        const nk = posKey(n.block.pos);
+        if (!compOf.has(nk)) {
+          compOf.set(nk, id);
+          stack.push(n);
+        }
+      }
+    }
+  }
+  /** Conduit components touching a block, with the block's side they touch. */
+  const attachments = (c: Cell) => {
+    const out: { side: number; comp: number }[] = [];
+    for (let side = 0; side < 6; side++) {
+      const n = neighbour(c, side);
+      if (!n || !isConduit(n.entry)) continue;
+      if ((masks.get(posKey(n.block.pos)) ?? 0) & (1 << OPPOSITE[side])) out.push({ side, comp: compOf.get(posKey(n.block.pos))! });
+    }
+    return out;
+  };
+
+  // Which plan machine (or marker) each block is: its role, else the only plan machine with that key.
+  const planMachines = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])];
+  const byNode = new Map(planMachines.map((m) => [m.nodeId, m]));
+  const roleOf = (c: Cell): string | undefined => {
+    if (c.block.role) return c.block.role;
+    const same = planMachines.filter((m) => m.key === c.block.key);
+    return same.length === 1 ? same[0].nodeId : undefined;
+  };
+  const blocksOf = new Map<string, Cell[]>();
+  for (const c of cells.values()) {
+    const r = roleOf(c);
+    if (r) blocksOf.set(r, [...(blocksOf.get(r) ?? []), c]);
+  }
+  const setting = (c: Cell, side: number, kind: string) =>
+    (build.covers ?? []).some((s) => posKey(s.pos) === posKey(c.block.pos) && s.side === side && s.kind === kind);
+  const label = (c: Cell) => `${c.entry.name} at ${where(c.block.pos)}`;
+
+  // Item and fluid networks.
+  const compNets = new Map<number, Set<string>>();
+  for (const net of plan.networks) {
+    const kind = net.kind === 'fluid' ? 'fluidPipe' : 'itemPipe';
+    const cover = net.kind === 'fluid' ? 'pump' : 'conveyor';
+    const candidates: Set<number>[] = [];
+    const endpoint = (id: string, producing: boolean) => {
+      const blocks = blocksOf.get(id);
+      if (!blocks?.length) {
+        problems.push(`${byNode.get(id)?.machine.name ?? id} is missing (needed for ${net.name})`);
+        return;
+      }
+      for (const c of blocks) {
+        const marker = c.entry.kind === 'marker';
+        const ok = attachments(c).filter(({ side, comp }) => {
+          if (comps[comp].kind !== kind) return false;
+          if (marker) return true;
+          if (producing) return side === c.block.facing || setting(c, side, cover);
+          return side !== c.block.facing || setting(c, side, 'inputFromOutput');
+        });
+        if (!ok.length) {
+          const viaOutput = !producing && attachments(c).some(({ side, comp }) => comps[comp].kind === kind && side === c.block.facing);
+          problems.push(
+            producing
+              ? `${net.name} can't get out of the ${label(c)}`
+              : viaOutput
+                ? `The ${label(c)} gets ${net.name} through its output face — turn on "input from output side" with a screwdriver, or feed it from another side`
+                : `The ${label(c)} gets no ${net.name}`,
+          );
+          continue;
+        }
+        candidates.push(new Set(ok.map((o) => o.comp)));
+      }
+    };
+    for (const p of net.producers) endpoint(p, true);
+    for (const q of net.consumers) endpoint(q, false);
+    if (!candidates.length) continue;
+    const shared = [...candidates[0]].filter((comp) => candidates.every((s) => s.has(comp)));
+    if (!shared.length) problems.push(`${net.name} is split into pipes that don't join`);
+    for (const comp of shared) compNets.set(comp, new Set([...(compNets.get(comp) ?? []), net.name]));
+  }
+  for (const [comp, nets] of compNets) {
+    if (comps[comp].kind === 'fluidPipe' && nets.size > 1) {
+      problems.push(`A pipe at ${where(comps[comp].cells[0].block.pos)} joins ${[...nets].join(' and ')}, which would mix`);
+    }
+  }
+
+  // Power: generators push out of their face; transformers take the higher voltage on their face and give the
+  // lower one on every other side; a "power in" marker feeds everything around it.
+  const fed = new Map<string, number>(); // block posKey or `c<comp>` -> tier index reaching it
+  const machineTier = (c: Cell) => tierIdx(byNode.get(roleOf(c) ?? '')?.tier ?? c.entry.tier);
+  const queue: { c: Cell; side: number; tier: number }[] = [];
+  const emitAll = (c: Cell, tier: number, sides: number[]) => sides.forEach((side) => queue.push({ c, side, tier }));
+  const allSides = [0, 1, 2, 3, 4, 5];
+  for (const c of cells.values()) {
+    const m = byNode.get(roleOf(c) ?? '');
+    if (m?.generator && c.block.facing !== undefined) emitAll(c, machineTier(c), [c.block.facing]);
+    if (c.entry.key === 'marker_power_in') emitAll(c, tierIdx(plan.power.source.tier), allSides);
+  }
+  const raise = (k: string, tier: number) => {
+    if ((fed.get(k) ?? -1) >= tier) return false;
+    fed.set(k, tier);
+    return true;
+  };
+  const feedBlock = (n: Cell, fromSide: number, tier: number) => {
+    // `fromSide` is the side of `n` the power arrives on.
+    if (isTransformer(n.entry)) {
+      if (fromSide !== n.block.facing) return;
+      if (raise(posKey(n.block.pos), tier)) {
+        const low = tierIdx(n.entry.tier);
+        if (tier === low + 1) emitAll(n, low, allSides.filter((s) => s !== n.block.facing));
+      }
+      return;
+    }
+    if (n.entry.kind === 'machine' && !byNode.get(roleOf(n) ?? '')?.generator && fromSide !== n.block.facing) raise(posKey(n.block.pos), tier);
+  };
+  while (queue.length) {
+    const { c, side, tier } = queue.pop()!;
+    const n = neighbour(c, side);
+    if (!n) continue;
+    if (n.entry.kind === 'cable') {
+      if (!((masks.get(posKey(n.block.pos)) ?? 0) & (1 << OPPOSITE[side]))) continue;
+      const comp = compOf.get(posKey(n.block.pos))!;
+      if (!raise(`c${comp}`, tier)) continue;
+      for (const cell of comps[comp].cells) {
+        const mask = masks.get(posKey(cell.block.pos)) ?? 0;
+        for (let s = 0; s < 6; s++) {
+          if (!(mask & (1 << s))) continue;
+          const target = neighbour(cell, s);
+          if (target && !isConduit(target.entry)) feedBlock(target, OPPOSITE[s], tier);
+        }
+      }
+    } else feedBlock(n, OPPOSITE[side], tier);
+  }
+  for (const [comp, { kind, cells: list }] of comps.entries()) {
+    const tier = fed.get(`c${comp}`);
+    if (kind !== 'cable' || tier === undefined) continue;
+    const weakest = list.find((c) => tierIdx(c.entry.cable?.tier) < tier);
+    if (weakest) problems.push(`The ${weakest.entry.name} at ${where(weakest.block.pos)} can't carry ${TIERS[tier]} power`);
+  }
+  for (const c of cells.values()) {
+    if (c.entry.kind !== 'machine' || isTransformer(c.entry)) continue;
+    const m = byNode.get(roleOf(c) ?? '');
+    if (m?.generator || m?.multiblock) continue;
+    const tier = fed.get(posKey(c.block.pos));
+    if (tier === undefined) problems.push(`No power reaches the ${label(c)}`);
+    else if (tier > machineTier(c)) problems.push(`The ${label(c)} gets ${TIERS[tier]} power — too much voltage for an ${TIERS[machineTier(c)]} machine`);
+  }
+
+  // Generated lines: a clear walkway, and every slice exactly like the first.
+  const g = build.generated;
+  if (g) {
+    const xs = build.blocks.map((b) => b.pos[0]);
+    for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
+      for (const y of [0, 1]) if (cells.has(posKey([x, y, 0]))) problems.push(`Something is in the walkway at ${where([x, y, 0])}`);
+    }
+    if (g.style === 'modular') {
+      const sig = (blocks: PlacedBlock[], x0: number) =>
+        blocks.map((b) => `${b.pos[0] - x0},${b.pos[1]},${b.pos[2]}:${b.key}:${b.facing ?? ''}:${b.manualMask?.forcedOn ?? ''}/${b.manualMask?.forcedOff ?? ''}`).sort().join('|');
+      const template = sig(g.template, 0);
+      const starts = [
+        ...Array.from({ length: g.left }, (_, k) => g.leftStart + k * g.sliceLength),
+        ...Array.from({ length: g.right }, (_, k) => g.rightStart + k * g.sliceLength),
+      ];
+      starts.forEach((x0, i) => {
+        const inside = build.blocks.filter((b) => b.pos[0] >= x0 && b.pos[0] < x0 + g.sliceLength);
+        if (sig(inside, x0) !== template) problems.push(`Slice ${i + 1} differs from the others, so pasting slices wouldn't line up`);
+      });
+    }
+  }
+  return problems;
+}
+
+export type { PlanMachine };
