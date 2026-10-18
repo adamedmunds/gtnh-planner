@@ -37,3 +37,14 @@ test('fuelsFor and mapIndexById', () => {
   expect(db.gregtech).toBe('5.09.54.183');
   expect(db.dumpFormat).toBe(2);
 });
+
+test('recipes with the same items but different EU/t or duration get different signatures', () => {
+  const data = oilBerryData();
+  data.recipes.push({ ...data.recipes[1], id: 5, eut: 120, duration: 5 });
+  const d = new RecipeDb(data);
+  const a = recipeSignature(d.recipe(1)!, d);
+  const b = recipeSignature(d.recipe(5)!, d);
+  expect(a).not.toBe(b);
+  expect(d.bySignature(a)!.id).toBe(1);
+  expect(d.bySignature(b)!.id).toBe(5);
+});

@@ -85,6 +85,7 @@ export function importDump(raw: unknown): { data: AppRecipeData; warnings: strin
         }
         return;
       }
+      if (!(r.dur > 0)) throw new RangeError(`non-positive duration ${r.dur} in ${maps[r.m].id}`);
       const inputs: Stack[] = [
         ...(r.ii ?? []).map(([i, amount]) => ({ key: item(i), amount, consumed: amount > 0 })),
         ...(r.fi ?? []).map(([i, amount]) => ({ key: fluid(i), amount, consumed: true })),

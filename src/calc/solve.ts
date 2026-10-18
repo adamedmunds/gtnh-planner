@@ -1,6 +1,6 @@
 import type { RecipeDb } from '../recipes/db';
 import { EU, type ResourceKey } from '../recipes/types';
-import type { Chain } from './chain';
+import type { Chain, Limit } from './chain';
 import { nodeRates } from './rates';
 import type { LpModel, LpSolver } from './solver/types';
 
@@ -22,6 +22,8 @@ export interface ChainResult {
   status: 'ok' | 'infeasible' | 'unbounded' | 'error';
   message?: string;
   shortfalls: { key: ResourceKey; needed: number; available: number }[];
+  /** Supply limits the solution is pressed up against: the reason more cannot be made. */
+  bindingLimits: Limit[];
   nodes: NodeResult[];
   /** Taken from outside the chain, per second. */
   inputs: Map<ResourceKey, number>;
@@ -34,6 +36,7 @@ export interface ChainResult {
 }
 
 const EPS = 1e-9;
+const round = (n: number) => Math.round(n * 100) / 100;
 /** Tie-break weight: among equally good plans prefer fewer machines and fewer outside inputs. */
 const TIE = 1e-6;
 /** Cost of missing a rate target in the elastic re-solve. */
@@ -106,8 +109,12 @@ export async function solveChain(chain: Chain, db: RecipeDb, solver: LpSolver): 
   };
 
   const empty = (status: ChainResult['status'], message?: string): ChainResult => ({
-    status, message, shortfalls: [], nodes: [...invalidNodes], inputs: new Map(), outputs: new Map(), byproducts: new Map(), euUsed: 0, euMade: 0,
+    status, message, shortfalls: [], bindingLimits: [], nodes: [...invalidNodes], inputs: new Map(), outputs: new Map(), byproducts: new Map(), euUsed: 0, euMade: 0,
   });
+
+  const name = (k: ResourceKey) => db.resource(k)?.name ?? k;
+  const unmade = maxTargets.filter((k) => !produced.has(k));
+  if (unmade.length) return empty('infeasible', `Nothing in the chain makes ${unmade.map(name).join(', ')}.`);
 
   const first = await solver.solve(model(false));
   if (first.status === 'error') return empty('error', first.message);
@@ -158,5 +165,17 @@ export async function solveChain(chain: Chain, db: RecipeDb, solver: LpSolver): 
     if (v < -1e-7) inputs.set(k, -v);
     else if (v > 1e-7) (targetKeys.has(k) ? outputs : byproducts).set(k, v);
   }
-  return { status, shortfalls, nodes: [...nodes, ...invalidNodes], inputs, outputs, byproducts, euUsed, euMade };
+  const bindingLimits = chain.limits.filter((l) => {
+    const t = totals.get(l.key);
+    return t !== undefined && t <= -l.maxRate + 1e-6 * Math.max(1, l.maxRate);
+  });
+  let message: string | undefined;
+  if (status === 'infeasible') {
+    const short = shortfalls.map((f) => `${name(f.key)} (needs ${round(f.needed)}/s, can make ${round(f.available)}/s)`).join(', ');
+    const why = bindingLimits.length
+      ? `limited by ${bindingLimits.map((l) => `${name(l.key)} ≤ ${round(l.maxRate)}/s`).join(', ')}`
+      : 'nothing in the chain can make more';
+    message = `Can't reach ${short || 'the targets'}: ${why}.`;
+  }
+  return { status, message, shortfalls, bindingLimits, nodes: [...nodes, ...invalidNodes], inputs, outputs, byproducts, euUsed, euMade };
 }

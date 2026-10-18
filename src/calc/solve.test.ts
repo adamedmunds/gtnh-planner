@@ -39,7 +39,7 @@ test('reference: oil berry line, 5.57 berries/s, self-powered, maximise light fu
   expect(r.inputs.has(K.hydrogenCell)).toBe(false);
   expect(r.byproducts.has(K.hydrogenCell)).toBe(false);
   within(r.euUsed, 599.3);
-  within(r.outputs.get(K.lightFuel)!, 513.3);
+  within(r.outputs.get(K.lightFuel)!, 513.25); // 557 - 599.3 x 20 / 274 (GT truncates EU/L)
 });
 
 test('rate mode: 100 L/s light fuel with power bought in', async () => {
@@ -67,6 +67,22 @@ test('infeasible: 1000 L/s with only 5.57 berries/s names the shortfall', async 
   expect(r.shortfalls[0].key).toBe(K.lightFuel);
   expect(r.shortfalls[0].needed).toBe(1000);
   within(r.shortfalls[0].available, 513.3);
+  expect(r.bindingLimits).toEqual([{ key: K.oilBerry, maxRate: 5.57 }]);
+  expect(r.message).toMatch(/Oil Berry/);
+});
+
+test('a rate target nothing valid can make is infeasible with nothing available', async () => {
+  const chain: Chain = { ...emptyChain(), nodes: [rn('el', 4, 371)], targets: [{ key: K.sulfur, rate: 1 }] };
+  const r = await solveChain(chain, db, solver);
+  expect(r.status).toBe('infeasible');
+  expect(r.shortfalls).toEqual([{ key: K.sulfur, needed: 1, available: 0 }]);
+});
+
+test('a maximise target nothing makes is infeasible with a message', async () => {
+  const chain: Chain = { ...emptyChain(), nodes: [rn('fe', 0, 511)], targets: [{ key: K.sulfur, maximise: true }], limits: [{ key: K.oilBerry, maxRate: 1 }] };
+  const r = await solveChain(chain, db, solver);
+  expect(r.status).toBe('infeasible');
+  expect(r.message).toMatch(/Sulfur Dust/);
 });
 
 test('unbounded: maximise without a supply limit asks for one', async () => {

@@ -1,11 +1,14 @@
 import type { AppRecipeData, Fuel, Recipe, RecipeMapInfo, Resource, ResourceKey } from './types';
 
-const stackPart = (stacks: { key: string; amount: number }[]) =>
-  stacks.map((s) => `${s.key}*${s.amount}`).sort().join(',');
+const stackPart = (stacks: { key: string; amount: number; chance?: number }[]) =>
+  stacks.map((s) => `${s.key}*${s.amount}${s.chance !== undefined && s.chance !== 1 ? `~${s.chance}` : ''}`).sort().join(',');
 
-/** Content-based recipe identity, stable across re-dumps: map id + sorted inputs + sorted outputs. */
+/**
+ * Content-based recipe identity, stable across re-dumps: map id, EU/t, duration, special value, sorted inputs and
+ * sorted outputs (with chances). Same items at a different speed or power are different recipes.
+ */
 export function recipeSignature(r: Recipe, db: RecipeDb): string {
-  return `${db.map(r.map).id}|${stackPart(r.inputs)}|${stackPart(r.outputs)}`;
+  return `${db.map(r.map).id}|${r.eut}|${r.duration}|${r.specialValue}|${stackPart(r.inputs)}|${stackPart(r.outputs)}`;
 }
 
 /** Read-only recipe database with the lookups the calculator needs. */

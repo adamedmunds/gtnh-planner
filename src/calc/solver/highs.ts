@@ -49,6 +49,12 @@ export async function createHighsSolver(settings?: Parameters<typeof loadHighs>[
   const highs = await loadHighs(settings);
   return {
     async solve(model) {
+      // A constraint with no terms is just a comparison of constants; if it fails, nothing can satisfy the model.
+      for (const c of model.constraints) {
+        if (Object.values(c.terms).some((v) => v !== 0)) continue;
+        const holds = c.op === '>=' ? 0 >= c.rhs : c.op === '<=' ? 0 <= c.rhs : c.rhs === 0;
+        if (!holds) return { status: 'infeasible' };
+      }
       const { text, vars } = toLp(model);
       let result: ReturnType<typeof highs.solve>;
       try {

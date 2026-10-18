@@ -55,14 +55,25 @@ test('LV electrolyzer cannot run the 120 EU/t recipe; MV can', () => {
   expect(rates(recipeNode(4, 372)).perMachine.get(K.eu)).toBe(-120);
 });
 
-test('ULV recipe on an LV machine with overclock: one overclock, never zero duration', () => {
+test('GT overclock rule: ULV recipes count as LV, so none on LV and one on MV', () => {
   const data = oilBerryData();
   data.recipes.push({ id: 5, map: 0, eut: 7, duration: 100, specialValue: 0,
     inputs: [{ key: K.oilBerry, amount: 1, consumed: true }], outputs: [{ key: K.oil, amount: 10, chance: 1 }] });
+  data.recipes.push({ id: 6, map: 0, eut: 2, duration: 100, specialValue: 0,
+    inputs: [{ key: K.oilBerry, amount: 2, consumed: true }], outputs: [{ key: K.oil, amount: 10, chance: 1 }] });
   const d = new RecipeDb(data);
-  const r = rates(recipeNode(5, 511, true, d), d);
-  expect(r.eut).toBe(28);
-  expect(r.duration).toBe(50);
+  expect(rates(recipeNode(5, 511, true, d), d)).toMatchObject({ eut: 7, duration: 100 });
+  expect(rates(recipeNode(5, 512, true, d), d)).toMatchObject({ eut: 28, duration: 50 });
+  expect(rates(recipeNode(6, 512, true, d), d)).toMatchObject({ eut: 8, duration: 50 }); // GT: 8 EU/t x 50 t
+});
+
+test('GT overclock rule: recipe tier uses total EU/t, so 48 EU/t on a 2 A map gets no overclock on MV', () => {
+  const data = oilBerryData();
+  data.maps[0] = { ...data.maps[0], amperage: 2 };
+  data.recipes.push({ id: 5, map: 0, eut: 48, duration: 100, specialValue: 0,
+    inputs: [{ key: K.oilBerry, amount: 1, consumed: true }], outputs: [{ key: K.oil, amount: 10, chance: 1 }] });
+  const d = new RecipeDb(data);
+  expect(rates(recipeNode(5, 512, true, d), d)).toMatchObject({ eut: 48, duration: 100 });
 });
 
 test('missing recipe signature is invalid', () => {
@@ -74,7 +85,16 @@ test('MV combustion generator burning light fuel', () => {
   const gen: ChainNode = { id: 'g', kind: 'generator', fuelMap: 'gt.recipe.dieselgeneratorfuel', fuelKey: K.lightFuel, machineMID: 1111, position: pos };
   const r = rates(gen);
   expect(r.perMachine.get(K.eu)).toBe(128);
-  expect(r.perMachine.get(K.lightFuel)).toBeCloseTo(-(128 * 20) / (305 * 0.9));
+  // GT truncates EU per litre: floor(305 x 90 / 100) = 274.
+  expect(r.perMachine.get(K.lightFuel)).toBeCloseTo(-(128 * 20) / 274);
+});
+
+test('weak fuels: EU per litre is rounded down like GT (fish oil 2 EU/L at 95% gives 1 EU/L)', () => {
+  const data = oilBerryData();
+  data.fuels.push({ map: 4, key: K.oil, euPerLitre: 2 });
+  const d = new RecipeDb(data);
+  const gen: ChainNode = { id: 'g', kind: 'generator', fuelMap: 'gt.recipe.dieselgeneratorfuel', fuelKey: K.oil, machineMID: 1110, position: pos };
+  expect(rates(gen, d).perMachine.get(K.oil)).toBeCloseTo(-(32 * 20) / 1);
 });
 
 test('generator node on a format-1 database asks for a re-dump', () => {

@@ -82,3 +82,9 @@ test('a recipe with an out-of-range index is skipped with a warning', () => {
 test('rejects something that is not a dump', () => {
   expect(() => importDump({ hello: 1 })).toThrow(/not a recipe dump/i);
 });
+
+test('non-fuel recipes with zero or negative duration are skipped with a warning', () => {
+  const { data, warnings } = importDump(dump({ recipes: [{ m: 0, eut: 30, dur: 0, ii: [[0, 1]], fo: [[0, 100]] }] }));
+  expect(data.recipes).toHaveLength(0);
+  expect(warnings[0]).toMatch(/duration/);
+});

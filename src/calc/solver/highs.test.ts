@@ -49,3 +49,8 @@ test('variable and row names with resource-key characters round-trip', async () 
   expect(r.status).toBe('optimal');
   if (r.status === 'optimal') expect(r.values[v]).toBeCloseTo(3);
 });
+
+test('a constraint with no terms that cannot hold makes the model infeasible', async () => {
+  const r = await solver.solve({ sense: 'min', objective: { x: 1 }, constraints: [{ name: 'empty', terms: {}, op: '>=', rhs: 100 }] });
+  expect(r.status).toBe('infeasible');
+});

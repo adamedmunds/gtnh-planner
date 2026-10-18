@@ -63,7 +63,8 @@ problems without failing on individual bad recipes.
 - `RecipeMap { id, name, amperage, machines: MachineRef[] }`;
   `MachineRef { mID, name, tier?, multiblock, voltage?, amperage?, generator? }`.
 - `RecipeDb` with `producersOf(key)`, `consumersOf(key)`, `search(text, limit)`, `recipe(id)`, `map(id)`.
-- Stable recipe identity for saved chains: `recipeSignature = map id + sorted input/output keys and amounts`.
+- Stable recipe identity for saved chains: `recipeSignature = map id | EU/t | duration | special value | sorted inputs |
+  sorted outputs` (amounts, plus `~chance` for chanced outputs), so same items at a different speed or power differ.
 
 ### Loading
 The app fetches `data/recipes.json.gz`, gunzips and indexes in a Web Worker (fflate), then exposes `RecipeDb` to the
@@ -86,11 +87,13 @@ Links are implicit: every node output resource feeds every node input of the sam
 
 ### Rates
 - Recipe tier = lowest tier whose voltage ≥ EU/t (per amp of the map). Machine tier from `MachineRef`.
-- Overclock (when enabled and machine tier > recipe tier), per tier above: duration ÷ 2 (floor, minimum 1 tick),
-  EU/t × 4 (GTNH standard overclock). Multiblocks use the same rule and are flagged "approximate".
+- Overclock (when enabled), per step: duration ÷ 2 (floor, minimum 1 tick), EU/t × 4 (GTNH standard overclock).
+  Steps = machine tier − max(1, recipe tier), capped by power: EU/t (from at least 32) × 4 per step must stay
+  within V[machine tier] × map amperage. Recipes never overclock below LV. Multiblocks use the same rule and are flagged "approximate".
 - Per machine: items/fluids per second = amount × chance × 20 ÷ effectiveDuration; consumed inputs only.
 - EU: consumers use effective EU/t × 20 per second of resource `eu`; generator nodes produce
-  `euOut × ampsOut` EU/t and consume fuel litres/tick = EU/t ÷ (fuelValue × efficiency).
+  `euOut × ampsOut` EU/t and consume fuel litres/tick = EU/t ÷ floor(fuelValue × efficiency% ÷ 100) (GT truncates
+  EU per litre; a fuel that truncates to 0 is invalid for that generator).
 - A node whose machine cannot run its recipe (voltage too low) is invalid and excluded, with a red flag.
 
 ### LP formulation (solved with HiGHS)
@@ -125,7 +128,7 @@ recipe as a node at a position next to its consumer. Never auto-picks between al
 
 - **Project** = `{ version: 2, build, chain }`; autosave + Save/Load .json as today; version-1 (build-only) files load
   with an empty chain. Nodes store `recipeSig`; on load, nodes whose signature no longer exists are flagged.
-- Errors: no recipe data → instructions; GT version mismatch → warning; infeasible → shortfall named, last valid
+- Errors: no recipe data → instructions; GT version mismatch → warning; infeasible → shortfall and binding supply limits named, last valid
   numbers greyed; invalid machine tier → red node.
 - Out of scope: auto 3D layout (project 2), multiblock parallels/perfect OC/coil bonuses (approximate only), item
   icons, headless/server auto-dump.

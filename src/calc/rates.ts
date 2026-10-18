@@ -27,6 +27,18 @@ function machineTier(m: MachineRef): number | undefined {
   return undefined;
 }
 
+/**
+ * Overclocks GT 5.09.54.183 grants (OverclockCalculator): ULV recipes count as LV, the recipe tier uses the total
+ * EU/t, and the overclocked EU/t may not exceed the machine's voltage x amperage.
+ */
+export function overclockCount(recipeEut: number, machineTier: number, amperage: number): number {
+  const byTier = machineTier - Math.max(1, tierForEut(recipeEut));
+  let byPower = 0;
+  const budget = V[machineTier] * Math.max(1, amperage);
+  for (let e = Math.max(recipeEut, 32) * 4; e <= budget; e *= 4) byPower++;
+  return Math.max(0, Math.min(byTier, byPower));
+}
+
 export function nodeRates(node: ChainNode, db: RecipeDb): NodeRates {
   if (node.kind === 'generator') {
     const mapIndex = db.mapIndexById(node.fuelMap);
@@ -39,7 +51,10 @@ export function nodeRates(node: ChainNode, db: RecipeDb): NodeRates {
     const eut = machine.generator.euOut * machine.generator.ampsOut;
     const perMachine = new Map<ResourceKey, number>();
     add(perMachine, EU, eut);
-    add(perMachine, fuel.key, -(eut * 20) / (fuel.euPerLitre * (machine.generator.efficiency / 100)));
+    // GT: EU from fluid = (long) value * efficiency * litres / 100, so EU per litre rounds down.
+    const euPerLitre = Math.floor((fuel.euPerLitre * machine.generator.efficiency) / 100);
+    if (euPerLitre <= 0) return invalid('fuel too weak for this generator');
+    add(perMachine, fuel.key, -(eut * 20) / euPerLitre);
     return { valid: true, perMachine, eut, duration: 1, approximate: machine.multiblock };
   }
 
@@ -50,12 +65,11 @@ export function nodeRates(node: ChainNode, db: RecipeDb): NodeRates {
   if (!machine) return invalid('machine cannot run this recipe');
 
   const eutPerAmp = recipe.eut / Math.max(1, map.amperage);
-  const recipeTier = tierForEut(eutPerAmp);
   const mTier = machineTier(machine);
   const voltage = machine.voltage ?? (mTier !== undefined ? V[mTier] : undefined);
   if (voltage !== undefined && voltage < eutPerAmp) return invalid('machine tier too low');
 
-  const overclocks = node.overclock && mTier !== undefined && mTier > recipeTier ? mTier - recipeTier : 0;
+  const overclocks = node.overclock && mTier !== undefined ? overclockCount(recipe.eut, mTier, map.amperage) : 0;
   const { eut, duration } = overclock(recipe.eut, Math.max(1, recipe.duration), overclocks);
   const perSecond = 20 / duration;
   const perMachine = new Map<ResourceKey, number>();
