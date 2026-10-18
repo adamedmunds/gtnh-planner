@@ -5,7 +5,7 @@ import { checkLine } from './check';
 import type { GeneratedLine, LinePlan, PlanMachine } from './types';
 
 const pm = (nodeId: string, key: string, tier: string, inputs: string[], outputs: string[], generator = false): PlanMachine => ({
-  nodeId, key, machine: { key, name: key, mID: 0, tier }, tier, count: 1, inputs, outputs, generator, multiblock: false,
+  nodeId, key, machine: { key, name: key, mID: 0, tier }, tier, count: 1, eut: 0, inputs, outputs, generator, multiblock: false,
 });
 
 /** A plan describing the hand-made oil berry preset (its open pipe ends have no markers). */

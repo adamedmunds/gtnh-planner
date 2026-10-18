@@ -13,6 +13,8 @@ export interface PlanMachine {
   machine: GeneratedMachine;
   tier?: string;
   count: number;
+  /** EU/t one machine uses at full speed (generators: EU/t one makes). */
+  eut: number;
   inputs: ResourceKey[];
   outputs: ResourceKey[];
   generator: boolean;
