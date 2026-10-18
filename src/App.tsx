@@ -6,7 +6,7 @@ import { billOfMaterials } from './model/editing';
 import { parseBuild, serializeBuild } from './model/buildJson';
 import { countsForBerryRate, makeOilBerryLine } from './presets/oilBerryLine';
 import { downloadBytes, downloadText, safeFileName } from './editor/download';
-import { loadFromStorage, safeStorage, saveToStorage } from './editor/persistence';
+import { createAutosaver, loadFromStorage, safeStorage } from './editor/persistence';
 import { initialState, reducer, toBuild } from './editor/state';
 import { Scene, type Hover } from './editor/scene/Scene';
 import { InfoPanel } from './editor/ui/InfoPanel';
@@ -22,6 +22,8 @@ export function App() {
   const [hover, setHover] = useState<Hover | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
+  const [frameToken, setFrameToken] = useState(restored.build?.blocks.length ? 1 : 0);
+  const frame = useCallback(() => setFrameToken((t) => t + 1), []);
 
   const toast = useCallback((text: string, kind: Toast['kind'] = 'info') => {
     const id = nextId.current++;
@@ -33,9 +35,14 @@ export function App() {
     if (restored.error) toast(restored.error, 'error');
   }, [toast]);
 
+  const autosave = useMemo(
+    () => createAutosaver(safeStorage, (msg) => toast(msg, 'error'), { alreadyNotified: !!restored.unavailable }),
+    [toast],
+  );
+
   // Debounced autosave.
   useEffect(() => {
-    const h = setTimeout(() => saveToStorage(safeStorage(), toBuild(state)), 400);
+    const h = setTimeout(() => autosave(toBuild(state)), 400);
     return () => clearTimeout(h);
   }, [state.blocks, state.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -46,10 +53,11 @@ export function App() {
       if (e.key.toLowerCase() === 'r' && hover && !hover.ground) {
         dispatch({ type: 'rotate', pos: hover.pos, includeVertical: e.shiftKey });
       }
+      if (e.key.toLowerCase() === 'f') frame();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [hover]);
+  }, [hover, frame]);
 
   const bom = useMemo(() => billOfMaterials(state.blocks.values()), [state.blocks]);
   const maxY = useMemo(() => Math.max(0, ...[...state.blocks.values()].map((b) => b.pos[1])), [state.blocks]);
@@ -78,6 +86,7 @@ export function App() {
       if (!(rate > 0)) throw new Error('Enter a positive number of berries per second');
       const build = makeOilBerryLine(countsForBerryRate(rate));
       dispatch({ type: 'load', build });
+      frame();
       toast(`Loaded ${build.name}`);
     } catch (err) {
       toast((err as Error).message, 'error');
@@ -88,6 +97,7 @@ export function App() {
     try {
       const { build, warnings } = parseBuild(text);
       dispatch({ type: 'load', build });
+      frame();
       toast(`Loaded ${build.name}`);
       for (const w of warnings) toast(w, 'error');
     } catch (err) {
@@ -108,6 +118,7 @@ export function App() {
         onSave={() => downloadText(serializeBuild(toBuild(state)), `${safeFileName(state.name)}.json`)}
         onLoadFile={onLoadFile}
         onExport={onExport}
+        onFrame={frame}
         onLayer={(layer) => dispatch({ type: 'setLayer', layer })}
       />
       <Palette selectedKey={state.selectedKey} onSelect={(key) => dispatch({ type: 'select', key })} />
@@ -117,6 +128,7 @@ export function App() {
           layer={state.layer}
           selectedKey={state.selectedKey}
           hover={hover}
+          frameToken={frameToken}
           onHover={setHover}
           onPlace={(pos, facing) => dispatch({ type: 'place', pos, facing })}
           onRemove={(pos) => dispatch({ type: 'remove', pos })}

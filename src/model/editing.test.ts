@@ -81,3 +81,15 @@ test('billOfMaterials counts by catalog entry, skips unknown keys, groups machin
     { key: 'tin_cable_1x', name: '1x Tin Cable', group: 'Cables', count: 1 },
   ]);
 });
+
+test("toggleSide turning a side on also clears the neighbour's opposing forced-off override", () => {
+  let m = toBlockMap([
+    { pos: [0, 0, 0], key: 'bronze_pipe_normal' },
+    { pos: [1, 0, 0], key: 'bronze_pipe_normal' },
+  ]);
+  m = toggleSide(m, [0, 0, 0], 5); // A east off (both pipes disconnect)
+  m = toggleSide(m, [1, 0, 0], 4); // B west on → must reconnect both
+  const c = computeConnections([...m.values()]);
+  expect(c.get(posKey([0, 0, 0]))! & EAST).toBe(EAST);
+  expect(c.get(posKey([1, 0, 0]))! & WEST).toBe(WEST);
+});

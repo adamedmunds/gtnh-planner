@@ -21,13 +21,15 @@ export function saveToStorage(storage: Storage | undefined, build: Build): boole
   }
 }
 
-export function loadFromStorage(storage: Storage | undefined): { build: Build | null; error?: string } {
-  if (!storage) return { build: null };
+const UNAVAILABLE = "Browser storage isn't available, so your build won't autosave. Use Save .json to keep it.";
+
+export function loadFromStorage(storage: Storage | undefined): { build: Build | null; error?: string; unavailable?: boolean } {
+  if (!storage) return { build: null, error: UNAVAILABLE, unavailable: true };
   let text: string | null;
   try {
     text = storage.getItem(STORAGE_KEY);
   } catch {
-    return { build: null };
+    return { build: null, error: UNAVAILABLE, unavailable: true };
   }
   if (text === null) return { build: null };
   try {
@@ -35,4 +37,24 @@ export function loadFromStorage(storage: Storage | undefined): { build: Build | 
   } catch {
     return { build: null, error: "Couldn't restore your last build; starting empty." };
   }
+}
+
+/**
+ * Returns a save function that writes the build and calls `notify` once when saving starts failing (again
+ * after any success), so the user hears about it without a toast on every autosave.
+ */
+export function createAutosaver(
+  getStorage: () => Storage | undefined,
+  notify: (message: string) => void,
+  { alreadyNotified = false } = {},
+): (build: Build) => void {
+  let told = alreadyNotified;
+  return (build) => {
+    if (saveToStorage(getStorage(), build)) {
+      told = false;
+    } else if (!told) {
+      told = true;
+      notify("Couldn't autosave your build (storage full or blocked). Use Save .json to keep it.");
+    }
+  };
 }

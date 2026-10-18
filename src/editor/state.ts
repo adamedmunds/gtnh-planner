@@ -53,7 +53,7 @@ export function reducer(s: EditorState, a: Action): EditorState {
     case 'select':
       return CATALOG.has(a.key) ? { ...s, selectedKey: a.key } : s;
     case 'setName':
-      return { ...s, name: a.name.trim() || 'untitled' };
+      return { ...s, name: a.name };
     case 'setLayer':
       return { ...s, layer: a.layer };
     case 'load':
@@ -64,5 +64,5 @@ export function reducer(s: EditorState, a: Action): EditorState {
 }
 
 export function toBuild(s: EditorState): Build {
-  return { version: 1, name: s.name, blocks: [...s.blocks.values()] };
+  return { version: 1, name: s.name.trim() || 'untitled', blocks: [...s.blocks.values()] };
 }

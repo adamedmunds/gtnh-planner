@@ -44,7 +44,11 @@ test('load replaces blocks and name and resets the layer; new clears everything'
   expect(s.name).toBe('untitled');
 });
 
-test('setName trims to a usable name', () => {
-  expect(reducer(initialState(), { type: 'setName', name: '  my line ' }).name).toBe('my line');
-  expect(reducer(initialState(), { type: 'setName', name: '   ' }).name).toBe('untitled');
+test('setName keeps exactly what was typed (so the field can be cleared and spaced); toBuild tidies it', () => {
+  const typed = reducer(initialState(), { type: 'setName', name: 'my line ' });
+  expect(typed.name).toBe('my line ');
+  expect(toBuild(typed).name).toBe('my line');
+  const cleared = reducer(initialState(), { type: 'setName', name: '' });
+  expect(cleared.name).toBe('');
+  expect(toBuild(cleared).name).toBe('untitled');
 });

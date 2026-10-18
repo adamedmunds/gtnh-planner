@@ -11,6 +11,7 @@ export interface ToolbarProps {
   onSave(): void;
   onLoadFile(text: string): void;
   onExport(): void;
+  onFrame(): void;
   onLayer(layer: number | null): void;
 }
 
@@ -34,6 +35,7 @@ export function Toolbar(p: ToolbarProps) {
           e.target.value = '';
         }}
       />
+      <button onClick={p.onFrame} title="Fit the build in view (F)">Frame</button>
       <button data-testid="export" className="primary" disabled={!p.canExport} onClick={p.onExport}>Export .schematic</button>
       <label className="layer">
         Layer

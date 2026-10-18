@@ -1,4 +1,4 @@
-import { STORAGE_KEY, loadFromStorage, saveToStorage } from './persistence';
+import { STORAGE_KEY, createAutosaver, loadFromStorage, saveToStorage } from './persistence';
 import type { Build } from '../model/types';
 
 function memoryStorage(): Storage {
@@ -38,9 +38,30 @@ test('corrupt storage restores nothing and reports an error', () => {
   expect(r.error).toMatch(/restore/i);
 });
 
-test('unavailable or throwing storage never throws', () => {
+test('unavailable or throwing storage never throws, and says autosave is off', () => {
   expect(saveToStorage(undefined, build)).toBe(false);
   expect(saveToStorage(throwing, build)).toBe(false);
-  expect(loadFromStorage(undefined)).toEqual({ build: null });
-  expect(loadFromStorage(throwing).build).toBeNull();
+  expect(loadFromStorage(undefined)).toMatchObject({ build: null, unavailable: true });
+  expect(loadFromStorage(undefined).error).toMatch(/save \.json/i);
+  expect(loadFromStorage(throwing)).toMatchObject({ build: null, unavailable: true });
+});
+
+test('autosaver notifies once per failure streak, and not at all if already told storage is unavailable', () => {
+  const notify = vi.fn();
+  const save = createAutosaver(() => throwing, notify);
+  save(build);
+  save(build);
+  expect(notify).toHaveBeenCalledTimes(1);
+  const quiet = vi.fn();
+  createAutosaver(() => throwing, quiet, { alreadyNotified: true })(build);
+  expect(quiet).not.toHaveBeenCalled();
+  const recover = vi.fn();
+  let storage: Storage = throwing;
+  const s2 = createAutosaver(() => storage, recover);
+  s2(build);
+  storage = memoryStorage();
+  s2(build);
+  storage = throwing;
+  s2(build);
+  expect(recover).toHaveBeenCalledTimes(2);
 });

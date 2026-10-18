@@ -49,7 +49,7 @@ export function ConduitMesh({ block, entry, mask }: { block: PlacedBlock; entry:
         <mesh
           key={i}
           position={b.center}
-          userData={{ pos: block.pos }}
+          userData={{ pos: block.pos, arm: b.arm }}
           material={faceKinds(b, mask).map((k) => materials[k])}
         >
           <boxGeometry args={b.size} />

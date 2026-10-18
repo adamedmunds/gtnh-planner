@@ -1,6 +1,6 @@
 import { CATALOG, type Catalog } from '../catalog';
 import { computeConnections } from './connections';
-import { posKey } from './directions';
+import { DIRS, OPPOSITE, addVec, posKey } from './directions';
 import type { Facing, ManualMask, PlacedBlock, Vec3 } from './types';
 
 export type BlockMap = ReadonlyMap<string, PlacedBlock>;
@@ -63,16 +63,26 @@ export function toggleSide(m: BlockMap, pos: Vec3, side: number, catalog: Catalo
   const sideOn = (blocks: BlockMap) => ((computeConnections([...blocks.values()], catalog).get(k) ?? 0) & bit) !== 0;
 
   const connected = sideOn(m);
-  const auto = sideOn(replace(m, withMask(block, undefined)));
+  const wantOn = !connected;
+
+  // A neighbour's forced-off wins over our forced-on, so turning a side on also clears the neighbour's
+  // opposing override; otherwise the toggle would appear to do nothing.
+  let base = m;
+  const nb = m.get(posKey(addVec(pos, DIRS[side])));
+  const back = 1 << OPPOSITE[side];
+  if (wantOn && nb?.manualMask && nb.manualMask.forcedOff & back && catalog.get(nb.key)?.kind === kind) {
+    base = replace(base, withMask(nb, { forcedOn: nb.manualMask.forcedOn, forcedOff: nb.manualMask.forcedOff & ~back }));
+  }
+
+  const auto = sideOn(replace(base, withMask(block, undefined)));
   const mask = block.manualMask ?? { forcedOn: 0, forcedOff: 0 };
   const forcedOn = mask.forcedOn & ~bit;
   const forcedOff = mask.forcedOff & ~bit;
-  const wantOn = !connected;
   const next: ManualMask = {
     forcedOn: wantOn && !auto ? forcedOn | bit : forcedOn,
     forcedOff: !wantOn && auto ? forcedOff | bit : forcedOff,
   };
-  return replace(m, withMask(block, next));
+  return replace(base, withMask(block, next));
 }
 
 export function placementFacing(normalSide: number, cameraForward: Vec3): Facing {
