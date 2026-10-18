@@ -8,6 +8,19 @@ async function openCalculator(page: Page) {
   await expect(page.getByPlaceholder('Search items and fluids')).toBeVisible({ timeout: 30_000 });
 }
 
+/** Recipe browser → Light Fuel → Made by → the chemical reactor recipe that also makes Hydrogen Sulfide Cells. */
+async function addLightFuelReactor(page: Page) {
+  await showInBrowser(page, 'Light Fuel', 'fluid:liquid_light_fuel');
+  await page.getByTestId('browser-row').filter({ hasText: 'Chemical Reactor' }).filter({ hasText: 'Hydrogen Sulfide Cell' })
+    .first().getByTestId('add-recipe').click();
+}
+
+async function showInBrowser(page: Page, text: string, key: string) {
+  await page.getByPlaceholder('Search items and fluids').fill(text);
+  await page.locator(`[data-testid=browser-result][data-key="${key}"]`).click();
+  await expect(page.getByTestId('browser-selected')).toHaveText(text);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
@@ -22,6 +35,17 @@ test('missing recipe data shows import instructions', async ({ page }) => {
 
 test.describe('with recipe data', () => {
   test.skip(!hasRecipes, 'run npm run recipes first');
+
+  test('browse, add a recipe and set a target', async ({ page }) => {
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await page.getByTestId('browser-selected').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Make/ }).click();
+    await expect(page.getByTestId('targets-bar')).toContainText('Light Fuel');
+    await expect(page.getByTestId('overview-outputs')).toContainText('Light Fuel');
+    await page.keyboard.press('Control+z');
+    await expect(page.getByTestId('targets-bar')).not.toContainText('Light Fuel');
+  });
 
   test('the calculator tab loads recipes and is remembered', async ({ page }) => {
     await openCalculator(page);

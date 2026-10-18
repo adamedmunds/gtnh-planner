@@ -1,4 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ResourceKey } from '../../recipes/types';
+import { overview } from '../overview';
+import { useSolve } from '../useSolve';
+import { OverviewPanel } from './OverviewPanel';
+import { RecipeBrowser } from './RecipeBrowser';
+import { ResourceMenuProvider } from './ResourceMenu';
+import { TargetsBar } from './TargetsBar';
 import type { RecipeDb } from '../../recipes/db';
 import type { ChainHistory, ChainHistoryAction } from '../chainState';
 import { useRecipes } from '../useRecipes';
@@ -65,17 +72,22 @@ export function Calculator(p: CalculatorProps) {
   );
 }
 
-function Workspace({ warning }: CalculatorProps & { db: RecipeDb; warning?: string }) {
+function Workspace({ db, warning, history, dispatch, toast }: CalculatorProps & { db: RecipeDb; warning?: string }) {
+  const chain = history.present;
+  const [selected, setSelected] = useState<ResourceKey>();
+  const { result, greyed, solving } = useSolve(chain, db);
+  const o = useMemo(() => overview(chain, db, result), [chain, db, result]);
   return (
-    <>
+    <ResourceMenuProvider chain={chain} db={db} result={result} dispatch={dispatch} onShow={setSelected}>
       {warning && <div className="banner" data-testid="version-warning">{warning}</div>}
       <div className="calc">
-        <aside className="panel overview" />
-        <section className="calc-centre" />
-        <aside className="panel browser">
-          <input className="search" placeholder="Search items and fluids" aria-label="Search items and fluids" />
-        </aside>
+        <OverviewPanel o={o} greyed={greyed} solving={solving} />
+        <section className="calc-centre">
+          <TargetsBar chain={chain} db={db} dispatch={dispatch} />
+          <div className="graph" />
+        </section>
+        <RecipeBrowser db={db} chain={chain} dispatch={dispatch} selected={selected} onSelect={setSelected} toast={toast} />
       </div>
-    </>
+    </ResourceMenuProvider>
   );
 }
