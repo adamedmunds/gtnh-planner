@@ -13,7 +13,8 @@
     "schematic:inspect": "tsx scripts/inspect-schematic.ts",
     "schematic:oil": "tsx scripts/make-oil-berry-line.ts",
     "textures": "tsx scripts/extract-textures.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "recipes": "tsx scripts/import-recipes.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

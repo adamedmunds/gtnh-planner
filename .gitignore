@@ -17,3 +17,6 @@ playwright-report/
 
 # Local agent scratch space
 .superpowers/
+
+# Imported recipe data (from your own game)
+public/data/
