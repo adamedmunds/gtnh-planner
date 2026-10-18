@@ -1,0 +1,108 @@
+import { gzipSync } from 'fflate';
+import { CATALOG, GT_BLOCK_NAME, type Catalog, type CatalogEntry } from '../catalog';
+import { computeConnections } from '../model/connections';
+import { posKey } from '../model/directions';
+import type { Build, PlacedBlock } from '../model/types';
+import {
+  byte, byteArray, compound, encodeNbt, int, list, short, str, type CompoundTag,
+} from './nbt';
+
+export const DEFAULT_FACING = 3;
+const GT_LOCAL_ID = 1;
+const MAX_DIM = 32767;
+
+export interface SchematicSize { width: number; height: number; length: number }
+
+interface Resolved { block: PlacedBlock; entry: CatalogEntry }
+
+export function buildSchematicTag(
+  build: Build,
+  catalog: Catalog = CATALOG,
+): { tag: CompoundTag; warnings: string[]; size: SchematicSize } {
+  const warnings: string[] = [];
+
+  // Resolve catalog entries; last block at a position wins.
+  const byPos = new Map<string, Resolved>();
+  for (const block of build.blocks) {
+    const entry = catalog.get(block.key);
+    if (!entry) {
+      warnings.push(`Skipped unknown block "${block.key}" at ${posKey(block.pos)}`);
+      continue;
+    }
+    const key = posKey(block.pos);
+    if (byPos.has(key)) warnings.push(`Duplicate blocks at ${key}; kept the last one`);
+    byPos.set(key, { block, entry });
+  }
+  const cells = [...byPos.values()];
+  if (cells.length === 0) throw new Error('Build is empty');
+
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (const { block } of cells) {
+    for (let a = 0; a < 3; a++) {
+      min[a] = Math.min(min[a], block.pos[a]);
+      max[a] = Math.max(max[a], block.pos[a]);
+    }
+  }
+  const size: SchematicSize = {
+    width: max[0] - min[0] + 1,
+    height: max[1] - min[1] + 1,
+    length: max[2] - min[2] + 1,
+  };
+  if (size.width > MAX_DIM || size.height > MAX_DIM || size.length > MAX_DIM) {
+    throw new Error('Build is too large for a schematic');
+  }
+
+  const volume = size.width * size.height * size.length;
+  const blocks = new Uint8Array(volume);
+  const data = new Uint8Array(volume);
+  const connections = computeConnections(cells.map((c) => c.block), catalog);
+  const tileEntities: CompoundTag[] = [];
+
+  for (const { block, entry } of cells) {
+    const x = block.pos[0] - min[0];
+    const y = block.pos[1] - min[1];
+    const z = block.pos[2] - min[2];
+    const index = x + (y * size.length + z) * size.width;
+    blocks[index] = GT_LOCAL_ID;
+    data[index] = entry.meta;
+
+    const te: CompoundTag = compound({ x: int(x), y: int(y), z: int(z) });
+    if (entry.kind === 'machine') {
+      te.value.id = str('BaseMetaTileEntity');
+      te.value.mID = int(entry.mID);
+      te.value.mFacing = short(block.facing ?? DEFAULT_FACING);
+    } else {
+      const mask = connections.get(posKey(block.pos)) ?? 0;
+      te.value.id = str('BaseMetaPipeEntity');
+      te.value.mID = int(entry.mID);
+      // NBT bytes are signed; bit 7 is never set for a 6-bit mask.
+      te.value.mConnections = byte(mask);
+    }
+    tileEntities.push(te);
+  }
+
+  const tag = compound({
+    Width: short(size.width),
+    Height: short(size.height),
+    Length: short(size.length),
+    Materials: str('Alpha'),
+    Blocks: byteArray(blocks),
+    Data: byteArray(data),
+    SchematicaMapping: compound({
+      'minecraft:air': short(0),
+      [GT_BLOCK_NAME]: short(GT_LOCAL_ID),
+    }),
+    Entities: list('compound', []),
+    TileEntities: list('compound', tileEntities),
+  });
+  return { tag, warnings, size };
+}
+
+export function buildSchematic(
+  build: Build,
+  catalog: Catalog = CATALOG,
+): { bytes: Uint8Array; warnings: string[]; size: SchematicSize } {
+  const { tag, warnings, size } = buildSchematicTag(build, catalog);
+  return { bytes: gzipSync(encodeNbt(tag, 'Schematic')), warnings, size };
+}
