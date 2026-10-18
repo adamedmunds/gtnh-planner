@@ -22,7 +22,7 @@ public class DumpCommand extends CommandBase {
 
     @Override
     public String getCommandUsage(ICommandSender sender) {
-        return "/gtnhplanner dump";
+        return "/gtnhplanner dump | icons";
     }
 
     /** Read-only export, so anyone in single-player may run it (cheats need not be on). */
