@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ResourceKey } from '../../recipes/types';
 import { overview } from '../overview';
 import { useSolve } from '../useSolve';
+import { ChainGraph } from './ChainGraph';
 import { OverviewPanel } from './OverviewPanel';
 import { RecipeBrowser } from './RecipeBrowser';
 import { ResourceMenuProvider } from './ResourceMenu';
@@ -84,7 +85,17 @@ function Workspace({ db, warning, history, dispatch, toast }: CalculatorProps & 
         <OverviewPanel o={o} greyed={greyed} solving={solving} />
         <section className="calc-centre">
           <TargetsBar chain={chain} db={db} dispatch={dispatch} />
-          <div className="graph" />
+          <div className="graph">
+            <ChainGraph
+              chain={chain}
+              db={db}
+              result={result}
+              greyed={greyed}
+              canUndo={history.past.length > 0}
+              canRedo={history.future.length > 0}
+              dispatch={dispatch}
+            />
+          </div>
         </section>
         <RecipeBrowser db={db} chain={chain} dispatch={dispatch} selected={selected} onSelect={setSelected} toast={toast} />
       </div>

@@ -21,6 +21,14 @@ async function showInBrowser(page: Page, text: string, key: string) {
   await expect(page.getByTestId('browser-selected')).toHaveText(text);
 }
 
+/** Opens "suggest" on the first node row for `key` and adds the first suggestion matching every pattern. */
+async function suggest(page: Page, key: string, ...match: RegExp[]) {
+  await page.locator(`[data-testid=node-row][data-key="${key}"]`).first().getByTestId('suggest').click();
+  let row = page.getByTestId('suggestion');
+  for (const m of match) row = row.filter({ hasText: m });
+  await row.first().getByRole('button', { name: 'Add' }).click();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
@@ -45,6 +53,19 @@ test.describe('with recipe data', () => {
     await expect(page.getByTestId('overview-outputs')).toContainText('Light Fuel');
     await page.keyboard.press('Control+z');
     await expect(page.getByTestId('targets-bar')).not.toContainText('Light Fuel');
+  });
+
+  test('suggest builds the chain upstream', async ({ page }) => {
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await expect(page.getByTestId('node-card')).toHaveCount(1);
+    await suggest(page, 'fluid:liquid_sufluriclight_fuel', /Distillery/, /50 L Oil(,| →)/);
+    await expect(page.getByTestId('node-card')).toHaveCount(2);
+    await expect(page.locator('.react-flow__edge-text', { hasText: 'Sulfuric Light Fuel' })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Auto-arrange' }).click();
+    const box = async (title: string) => (await page.getByTestId('node-card').filter({ hasText: title }).boundingBox())!;
+    expect((await box('Distillery')).x).toBeLessThan((await box('Chemical Reactor')).x);
+    await expect(page.getByRole('button', { name: 'Build in 3D' })).toBeDisabled();
   });
 
   test('the calculator tab loads recipes and is remembered', async ({ page }) => {

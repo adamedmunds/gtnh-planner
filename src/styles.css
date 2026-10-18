@@ -75,3 +75,26 @@ button.primary { background: #1f4f66; border-color: var(--accent); }
 .menu-title { padding: 4px 8px; color: var(--muted); font-size: 12px; }
 .menu button { text-align: left; border: none; background: none; }
 .menu button:hover { background: #24414f; }
+.graph-toolbar { display: flex; gap: 6px; }
+.graph-empty { max-width: 420px; text-align: center; margin-top: 56px !important; }
+.node-card { width: 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 13px; }
+.node-card.selected { border-color: var(--accent); }
+.node-card.invalid { border-color: var(--error); box-shadow: 0 0 0 1px var(--error); }
+.node-card.greyed .node-stats, .node-card.greyed .num { opacity: 0.5; }
+.node-card header { display: flex; align-items: center; gap: 6px; }
+.node-card header b { flex: 1; }
+.node-card .x { border: none; background: none; padding: 0 4px; }
+.node-machine { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+.node-machine select { flex: 1; font: inherit; color: var(--text); background: #2b2f3a; border: 1px solid var(--line); border-radius: 6px; padding: 3px; }
+.node-stats { margin: 4px 0; color: var(--muted); }
+.node-invalid { margin: 4px 0; color: var(--error); }
+.node-rows { list-style: none; padding: 0; margin: 4px 0 0; }
+.node-rows.out { border-top: 1px dashed var(--line); padding-top: 4px; }
+.node-row { display: flex; gap: 6px; align-items: center; }
+.node-row > span:first-child { flex: 1; }
+.node-row button { padding: 0 6px; font-size: 12px; }
+.unmet { color: #ffb74d; }
+.tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0 5px; }
+.suggest-list { list-style: none; margin: 4px 0; padding: 4px; max-height: 260px; overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.suggest-list li { display: flex; gap: 6px; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.suggest-meta { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
