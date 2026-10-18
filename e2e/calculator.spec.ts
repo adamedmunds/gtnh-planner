@@ -175,6 +175,68 @@ test.describe('with recipe data', () => {
     await expect(page.locator('.calc-root')).not.toContainText(/target|limit|maximi[sz]e|bought in/i);
   });
 
+  test('reference: oil berry line to ≈513 L/s, self-powered', async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await addMaker(page, KEY.sulfuricLightFuel, 'Distillery', /50 L Oil/);
+    await addMaker(page, KEY.oil, 'Oil Berry', /Fluid Extractor/);
+    await addMaker(page, KEY.hydrogenCell, 'Hydrogen Sulfide', /Electrolyzer/);
+    await page.locator(`[data-testid=node-row][data-key="${KEY.oilBerry}"]`).first().getByRole('button', { name: 'I have this' }).click();
+
+    await page.getByRole('button', { name: 'Power it with a generator' }).click();
+    await expect(page.getByTestId('picker')).toContainText('Power it with a generator');
+    await page.getByTestId('picker').getByLabel('Filter').fill('Light Fuel');
+    await page.getByTestId('picker-row').filter({ hasText: /Combustion/ }).filter({ hasNotText: 'Sulfuric' }).first().getByTestId('use-recipe').click();
+    await page.getByTestId('node-card').filter({ hasText: 'Light Fuel → EU' }).getByTestId('machine-select')
+      .selectOption({ label: 'Advanced Combustion Generator' });
+
+    const have = page.getByLabel('How much Oil Berry you have');
+    await have.fill('5.57');
+    await have.press('Enter');
+    await expect(page.getByTestId('summary-get')).toContainText(/513\.\d L\/s/);
+    const machines = page.getByTestId('summary-machines');
+    for (const m of ['×6 Basic Fluid Extractor', '×17 Basic Distillery', '×1 Basic Chemical Reactor', '×1 Advanced Electrolyzer', '×5 Advanced Combustion Generator']) {
+      await expect(machines).toContainText(m);
+    }
+    await expect(page.getByTestId('summary-power').locator('dd').nth(2)).toHaveText('0 EU/t');
+    await expect(page.getByTestId('drive-line')).toHaveText('Making as much Light Fuel as 5.57 Oil Berry/s allows');
+    await expect(page.getByTestId('summary-problems')).toHaveCount(0);
+
+    // Save the project, forget everything, load it back.
+    await page.getByTestId('tab-editor').click();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Save .json' }).click();
+    const file = (await (await download).path())!;
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.locator('input[type=file]').setInputFiles({ name: 'project.json', mimeType: 'application/json', buffer: readFileSync(file) });
+    await page.getByTestId('tab-calculator').click();
+    await expect(page.getByTestId('summary-get')).toContainText(/513\.\d L\/s/, { timeout: 30_000 });
+  });
+
+  test('forward: what you have → use this in…, then pick the product', async ({ page }) => {
+    await openCalculator(page);
+    await start(page, 'have', 'Oil Berry', KEY.oilBerry);
+    await pick(page, 'Fluid Extractor', /Fluid Extractor/);
+    await expect(page.getByTestId('have-box')).toHaveAttribute('data-key', KEY.oilBerry);
+    await expect(page.getByTestId('get-box')).toHaveAttribute('data-key', KEY.oil);
+    await page.locator(`[data-testid=node-row][data-key="${KEY.oil}"]`).first().getByTestId('add-use').click();
+    await pick(page, 'Distillery', /Sulfuric Light Fuel/);
+    const get = page.getByTestId('get-box');
+    await expect(get).toHaveAttribute('data-key', KEY.sulfuricLightFuel);
+    await expect(get).toHaveClass(/provisional/);
+    await get.getByRole('button', { name: 'I want this' }).click();
+    await expect(get).not.toHaveClass(/provisional/);
+  });
+
+  test('nothing typed shows one machine', async ({ page }) => {
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await expect(page.getByTestId('drive-line')).toHaveText(/^Showing one Basic Chemical Reactor/);
+    await expect(page.getByTestId('summary-machines')).toContainText('×1 Basic Chemical Reactor');
+  });
+
   test('the calculator tab loads recipes and is remembered', async ({ page }) => {
     await openCalculator(page);
     await page.reload();
