@@ -18,12 +18,12 @@ const project: Project = {
 };
 
 test('round-trips a project', () => {
-  expect(parseProject(serializeProject(project))).toEqual({ project, warnings: [] });
+  expect(parseProject(serializeProject(project))).toEqual({ project, warnings: [], fromVersion: 2 });
 });
 
 test('a build-only (version 1) file loads with an empty chain', () => {
   const v1 = JSON.stringify(project.build);
-  expect(parseProject(v1)).toEqual({ project: { version: 2, build: project.build, chain: emptyChain() }, warnings: [] });
+  expect(parseProject(v1)).toEqual({ project: { version: 2, build: project.build, chain: emptyChain() }, warnings: [], fromVersion: 1 });
 });
 
 test('bad chain nodes and entries are skipped with warnings', () => {

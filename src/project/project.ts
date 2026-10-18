@@ -45,7 +45,8 @@ function parseLimit(v: unknown): Limit | undefined {
   return isObj(v) && isStr(v.key) && isNum(v.maxRate) && v.maxRate >= 0 ? { key: v.key, maxRate: v.maxRate } : undefined;
 }
 
-function parseChain(raw: unknown, warnings: string[]): Chain {
+/** Reads a saved chain, skipping invalid entries with warnings. */
+export function parseChain(raw: unknown, warnings: string[]): Chain {
   if (!isObj(raw)) return emptyChain();
   const list = <T>(items: unknown, parse: (v: unknown) => T | undefined, what: string): T[] => {
     const out: T[] = [];
@@ -66,7 +67,7 @@ function parseChain(raw: unknown, warnings: string[]): Chain {
 }
 
 /** Loads a project file, or a build-only (version 1) file with an empty chain. */
-export function parseProject(text: string): { project: Project; warnings: string[] } {
+export function parseProject(text: string): { project: Project; warnings: string[]; fromVersion: 1 | 2 } {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -75,10 +76,10 @@ export function parseProject(text: string): { project: Project; warnings: string
   }
   if (isObj(raw) && raw.version === 1) {
     const { build, warnings } = parseBuild(text);
-    return { project: { version: 2, build, chain: emptyChain() }, warnings };
+    return { project: { version: 2, build, chain: emptyChain() }, warnings, fromVersion: 1 };
   }
   if (!isObj(raw) || raw.version !== 2) throw new BuildParseError('Unsupported project file (expected version 1 or 2)');
   const { build, warnings } = parseBuild(JSON.stringify(raw.build ?? null));
   const chain = parseChain(raw.chain, warnings);
-  return { project: { version: 2, build, chain }, warnings };
+  return { project: { version: 2, build, chain }, warnings, fromVersion: 2 };
 }
