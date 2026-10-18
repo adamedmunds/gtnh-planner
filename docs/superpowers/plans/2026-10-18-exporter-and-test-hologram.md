@@ -1382,7 +1382,7 @@ def tag(f, t):
         while True:
             tt = r(f, 1)[0]
             if tt == 0: return ('compound', d)
-            n = struct.unpack('>H', r(f, 2))[0]; d[r(f, n).decode()] = tag(f, tt)
+            n = struct.unpack(">H", r(f, 2))[0]; key = r(f, n).decode(); d[key] = tag(f, tt)
     if t == 11: n = struct.unpack('>i', r(f, 4))[0]; return ('intArray', struct.unpack('>%di' % n, r(f, 4 * n)))
     raise ValueError(t)
 import io
