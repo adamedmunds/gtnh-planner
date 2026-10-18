@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# Textures are extracted locally from your GTNH mod jars - never commit them
+public/textures/
+
+# Local exports
+*.schematic
