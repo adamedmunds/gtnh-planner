@@ -1,7 +1,7 @@
 import { emptyChain, type Chain, type ChainNode } from '../calc/chain';
 import { K } from '../test/oilBerryDb';
 import { chainReducer } from './chainState';
-import { COLUMN, ROW, autoArrange, placeNewNode } from './layout';
+import { COLUMN, ROW, autoArrange, boxHeight, placeNewNode } from './layout';
 import { db, reference, rn } from './testChains';
 
 const at = (n: ChainNode, x: number, y: number): ChainNode => ({ ...n, position: { x, y } });
@@ -63,4 +63,13 @@ test('arrange stores box positions in chain.layout', () => {
   expect(next.layout?.[`have:${K.oilBerry}`]).toEqual({ x: 0, y: 0 });
   expect(next.layout?.[`get:${K.lightFuel}`]).toBeDefined();
   expect(chainReducer(emptyChain(), { type: 'arrange', positions: { 'get:x': { x: 1, y: 1 } } }).layout).toEqual({ 'get:x': { x: 1, y: 1 } });
+});
+
+test('boxes stacked in one column never overlap', () => {
+  const chain = reference();
+  const p = autoArrange(chain, db);
+  const el = chain.nodes.find((n) => n.id === 'el')!;
+  expect(p.gen.x).toBe(p.el.x);
+  expect(Math.abs(p.gen.y - p.el.y)).toBeGreaterThanOrEqual(boxHeight(el, db));
+  expect(boxHeight(el, db)).toBeGreaterThan(ROW);
 });

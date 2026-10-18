@@ -1,12 +1,22 @@
-import type { Chain, Position } from '../calc/chain';
+import type { Chain, ChainNode, Position } from '../calc/chain';
 import { nodeRates } from '../calc/rates';
 import type { RecipeDb } from '../recipes/db';
-import type { ResourceKey } from '../recipes/types';
+import { EU, type ResourceKey } from '../recipes/types';
 import { haveBoxes, productOf } from './drive';
 import { chainEdges, getId, haveId } from './graphModel';
 
 export const COLUMN = 360;
 export const ROW = 220;
+const GAP = 40;
+/** Rough height of a What I have / What I get box. */
+const IO_HEIGHT = 190;
+
+/** Rough rendered height of a machine box: header, machine, count, then a row (plus its buttons) per input/output. */
+export function boxHeight(node: ChainNode, db: RecipeDb): number {
+  const r = nodeRates(node, db);
+  const rows = r.valid ? [...r.perMachine.keys()].filter((k) => k !== EU).length : 1;
+  return 150 + 36 * rows;
+}
 
 /**
  * Columns by longest path from the chain's sources along producer → consumer links (loops broken where a depth-first
@@ -44,15 +54,16 @@ export function autoArrange(chain: Chain, db: RecipeDb): Record<string, Position
   // What I have boxes take the first column; the What I get box goes after the last machine.
   const haves = haveBoxes(chain);
   const shift = haves.length ? 1 : 0;
-  const rows = new Map<number, number>();
+  const nextY = new Map<number, number>(); // column -> where the next box starts
   const positions: Record<string, Position> = {};
-  haves.forEach((h, i) => (positions[haveId(h.key)] = { x: 0, y: i * ROW }));
+  haves.forEach((h, i) => (positions[haveId(h.key)] = { x: 0, y: i * (IO_HEIGHT + GAP) }));
+  const byId = new Map(chain.nodes.map((n) => [n.id, n]));
   let last = -1;
   for (const id of ids) {
     const col = depthOf(id) + shift;
-    const row = rows.get(col) ?? 0;
-    rows.set(col, row + 1);
-    positions[id] = { x: col * COLUMN, y: row * ROW };
+    const y = nextY.get(col) ?? 0;
+    nextY.set(col, y + boxHeight(byId.get(id)!, db) + GAP);
+    positions[id] = { x: col * COLUMN, y };
     last = Math.max(last, col);
   }
   const product = productOf(chain, db);

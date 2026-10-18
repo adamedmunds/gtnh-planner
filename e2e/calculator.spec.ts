@@ -237,6 +237,44 @@ test.describe('with recipe data', () => {
     await expect(page.getByTestId('summary-machines')).toContainText('×1 Basic Chemical Reactor');
   });
 
+  test('closing the picker after "What do you have?" leaves nothing behind', async ({ page }) => {
+    await openCalculator(page);
+    await start(page, 'have', 'Oil Berry', KEY.oilBerry);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('picker')).toHaveCount(0);
+    await expect(page.getByTestId('have-box')).toHaveCount(0);
+    await expect(page.getByPlaceholder('What do you want to make?')).toBeVisible();
+  });
+
+  test('deleting the product machine lets the line pick a new product', async ({ page }) => {
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await page.getByTestId('node-card').getByTitle('Remove from the line').click();
+    await start(page, 'have', 'Oil Berry', KEY.oilBerry);
+    await pick(page, 'Fluid Extractor', /Fluid Extractor/);
+    await expect(page.getByTestId('get-box')).toHaveAttribute('data-key', KEY.oil);
+    await expect(page.getByTestId('summary-problems')).toHaveCount(0);
+  });
+
+  test('the picker counts and filters every recipe, not just the first 500', async ({ page }) => {
+    await openCalculator(page);
+    await start(page, 'have', 'Water', 'fluid:water');
+    const count = Number((await page.getByTestId('picker').locator('header .hint').innerText()).split(' ')[0].replace(/,/g, ''));
+    expect(count).toBeGreaterThan(500);
+  });
+
+  test('text stays readable: the built line is not zoomed out below 0.8', async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await addMaker(page, KEY.sulfuricLightFuel, 'Distillery', /50 L Oil/);
+    await addMaker(page, KEY.oil, 'Oil Berry', /Fluid Extractor/);
+    await addMaker(page, KEY.hydrogenCell, 'Hydrogen Sulfide', /Electrolyzer/);
+    await page.waitForTimeout(500);
+    const zoom = await page.locator('.react-flow__viewport').evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).a);
+    expect(zoom).toBeGreaterThanOrEqual(0.8);
+  });
+
   test('the calculator tab loads recipes and is remembered', async ({ page }) => {
     await openCalculator(page);
     await page.reload();

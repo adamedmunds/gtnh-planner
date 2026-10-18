@@ -42,10 +42,14 @@ const perMachine = (n: ChainNode, db: RecipeDb) => {
   return r.valid ? r.perMachine : undefined;
 };
 
-/** The product: what the user wants, else (while building forward) the newest node's output nothing else uses. */
+/**
+ * The product: what the user wants (while something in the line makes it), else — e.g. while building forward — the
+ * newest node's output nothing else uses.
+ */
 export function productOf(chain: Chain, db: RecipeDb): { key: ResourceKey; provisional: boolean } | undefined {
-  if (chain.targets[0]) return { key: chain.targets[0].key, provisional: false };
   const rates = chain.nodes.map((n) => perMachine(n, db));
+  const [want] = chain.targets;
+  if (want && rates.some((r) => (r?.get(want.key) ?? 0) > 0)) return { key: want.key, provisional: false };
   for (let i = chain.nodes.length - 1; i >= 0; i--) {
     for (const [key, v] of rates[i] ?? []) {
       if (v <= 0 || key === EU) continue;
@@ -70,7 +74,7 @@ function oneMachineOf(chain: Chain, key: ResourceKey, db: RecipeDb): { chain: Ch
 export async function solveForScreen(chain: Chain, db: RecipeDb, solver: LpSolver): Promise<ScreenSolve> {
   const product = productOf(chain, db);
   if (!product) return { result: await solveChain(chain, db, solver), mode: 'max', shortfalls: [] };
-  const target: Target = chain.targets[0] ?? { key: product.key, maximise: true };
+  const target: Target = product.provisional ? { key: product.key, maximise: true } : chain.targets[0];
   const eff: Chain = { ...chain, targets: [target] };
 
   if ('maximise' in target) {

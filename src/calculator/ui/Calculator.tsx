@@ -79,7 +79,8 @@ export function Calculator(p: CalculatorProps) {
 
 function Workspace({ active, db, warning, history, dispatch, toast }: CalculatorProps & { db: RecipeDb; warning?: string }) {
   const chain = history.present;
-  const [picker, setPicker] = useState<{ mode: PickerMode; want?: ResourceKey } | null>(null);
+  // `want` / `have`: what the start screen was opened for, added together with the first machine.
+  const [picker, setPicker] = useState<{ mode: PickerMode; want?: ResourceKey; have?: ResourceKey } | null>(null);
   const { current, shown, greyed, solving } = useSolve(chain, db);
   const s = useMemo(() => {
     const out = summary(chain, db, shown);
@@ -101,7 +102,11 @@ function Workspace({ active, db, warning, history, dispatch, toast }: Calculator
   const use = (row: PickerRow) => {
     const node = row.fuel ? newGeneratorNode(row.fuel, chain, db) : newRecipeNode(row.recipe!, chain, db, row.machine.mID);
     if (!node) return toast('No machine can run this', 'error');
-    structural([{ type: 'addNode', node }, ...(picker?.want ? [{ type: 'setWant', key: picker.want } as ChainAction] : [])]);
+    structural([
+      { type: 'addNode', node },
+      ...(picker?.want ? [{ type: 'setWant', key: picker.want } as ChainAction] : []),
+      ...(picker?.have ? [{ type: 'setHave', key: picker.have } as ChainAction] : []),
+    ]);
     setPicker(null);
   };
 
@@ -123,10 +128,7 @@ function Workspace({ active, db, warning, history, dispatch, toast }: Calculator
               <StartPrompt
                 db={db}
                 onMake={(key) => setPicker({ mode: { kind: 'makes', key }, want: key })}
-                onHave={(key) => {
-                  structural([{ type: 'setHave', key }]);
-                  setPicker({ mode: { kind: 'uses', key } });
-                }}
+                onHave={(key) => setPicker({ mode: { kind: 'uses', key }, have: key })}
               />
             )}
             <ChainGraph

@@ -94,3 +94,8 @@ test('an invalid machine is listed in plain words', async () => {
   const s = await solveForScreen(chain, db, solver);
   expect(screenProblems(s, chain, db)).toContain('Basic Electrolyzer: machine tier too low');
 });
+
+test('a want nothing in the line makes falls back to the newest output', () => {
+  const chain: Chain = { ...emptyChain(), nodes: [rn('fe', 0, 511)], targets: [{ key: K.lightFuel, maximise: true }] };
+  expect(productOf(chain, db)).toEqual({ key: K.oil, provisional: true });
+});

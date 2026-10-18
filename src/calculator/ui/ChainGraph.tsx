@@ -18,7 +18,8 @@ import { HaveBox } from './HaveBox';
 import { NodeCard } from './NodeCard';
 
 const nodeTypes: NodeTypes = { recipe: NodeCard, generator: NodeCard, have: HaveBox, get: GetBox };
-const FIT = { maxZoom: 1, minZoom: 0.5 };
+/** Fitting stops at a readable zoom; a long line pans instead of shrinking. */
+const FIT = { maxZoom: 1, minZoom: 0.8 };
 
 export interface ChainGraphProps {
   /** False while another tab is showing: keys pressed there must not edit the graph. */

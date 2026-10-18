@@ -52,7 +52,7 @@ function Row({ row, best, db, onUse }: { row: PickerRow; best: boolean; db: Reci
 export function Picker({ mode, chain, db, onClose, onUse }: { mode: PickerMode; chain: Chain; db: RecipeDb; onClose(): void; onUse(row: PickerRow): void }) {
   const [text, setText] = useState('');
   const [shown, setShown] = useState(PAGE);
-  const all = useMemo(() => pickerRows(mode, chain, db, 500), [mode, chain, db]);
+  const all = useMemo(() => pickerRows(mode, chain, db, Infinity), [mode, chain, db]);
   const rows = useMemo(() => filterRows(all, text, db), [all, text, db]);
 
   useEffect(() => {
