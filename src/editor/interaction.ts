@@ -1,7 +1,7 @@
 import { CATALOG, type Catalog } from '../catalog';
 import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
 import type { BlockMap } from '../model/editing';
-import type { Vec3 } from '../model/types';
+import type { PlacedBlock, Vec3 } from '../model/types';
 
 /** What the pointer hit: a block cell, the face normal as a GT side, and for pipe arms the arm's direction. */
 export interface Hit { pos: Vec3; side: number; arm?: number }
@@ -42,4 +42,27 @@ export function frameFor(blocks: BlockMap): { target: Vec3; position: Vec3 } | n
     target,
     position: [target[0] + (dir[0] / norm) * distance, target[1] + (dir[1] / norm) * distance, target[2] + (dir[2] / norm) * distance],
   };
+}
+
+/** Blocks may not go below the ground, or above the layer cut-off (they would be placed invisibly). */
+export function placementAllowed(pos: Vec3, layer: number | null): { ok: true } | { ok: false; reason: string } {
+  if (pos[1] < 0) return { ok: false, reason: 'Blocks can only be placed at ground level (y = 0) or above.' };
+  if (layer !== null && pos[1] > layer) {
+    return { ok: false, reason: `That spot is above the layer cut-off (y ≤ ${layer}); raise the layer slider to build higher.` };
+  }
+  return { ok: true };
+}
+
+interface HoverLike { pos: readonly number[]; side: number; ground?: boolean; arm?: number }
+
+export function sameHover(a: HoverLike | null, b: HoverLike | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.side === b.side && !!a.ground === !!b.ground && a.arm === b.arm &&
+    a.pos[0] === b.pos[0] && a.pos[1] === b.pos[1] && a.pos[2] === b.pos[2];
+}
+
+export function unknownKeys(blocks: Iterable<PlacedBlock>, catalog: Catalog = CATALOG): { key: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const b of blocks) if (!catalog.has(b.key)) counts.set(b.key, (counts.get(b.key) ?? 0) + 1);
+  return [...counts].map(([key, count]) => ({ key, count }));
 }

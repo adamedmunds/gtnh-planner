@@ -13,7 +13,15 @@ const DEFAULT_INSTANCE =
 const argIdx = process.argv.indexOf('--instance');
 const instance = argIdx !== -1 ? process.argv[argIdx + 1] : process.env.GTNH_INSTANCE ?? DEFAULT_INSTANCE;
 const modsDir = join(instance, 'mods');
-const jarName = readdirSync(modsDir).find((f) => /^gregtech-.*\.jar$/i.test(f));
+let modFiles: string[];
+try {
+  modFiles = readdirSync(modsDir);
+} catch {
+  console.error(`Can't read ${modsDir}.
+Pass your instance's .minecraft folder: npm run textures -- --instance "<path>" (or set GTNH_INSTANCE).`);
+  process.exit(1);
+}
+const jarName = modFiles.find((f) => /^gregtech-.*\.jar$/i.test(f));
 if (!jarName) {
   console.error(`No gregtech-*.jar found in ${modsDir}`);
   process.exit(1);

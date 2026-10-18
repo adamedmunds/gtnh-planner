@@ -23,7 +23,7 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
   if (!Array.isArray(obj.blocks)) throw new BuildParseError('Build file has no blocks list');
 
   const warnings: string[] = [];
-  const blocks: PlacedBlock[] = [];
+  const byPos = new Map<string, PlacedBlock>();
   obj.blocks.forEach((b: unknown, i: number) => {
     const rb = (typeof b === 'object' && b !== null ? b : {}) as Record<string, unknown>;
     const pos = rb.pos;
@@ -45,8 +45,14 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
       if (m && isMaskBits(m.forcedOn) && isMaskBits(m.forcedOff)) block.manualMask = { forcedOn: m.forcedOn, forcedOff: m.forcedOff };
       else warnings.push(`Block #${i + 1}: ignored invalid connection overrides`);
     }
-    blocks.push(block);
+    const key = block.pos.join(',');
+    if (byPos.has(key)) {
+      warnings.push(`Block #${i + 1} at ${key} replaces an earlier block in the same spot`);
+      byPos.delete(key);
+    }
+    byPos.set(key, block);
   });
 
+  const blocks = [...byPos.values()];
   return { build: { version: 1, name: typeof obj.name === 'string' ? obj.name : 'untitled', blocks }, warnings };
 }

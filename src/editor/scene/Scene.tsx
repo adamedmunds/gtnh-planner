@@ -6,7 +6,7 @@ import { CATALOG } from '../../catalog';
 import { computeConnections } from '../../model/connections';
 import { DIRS, addVec, posKey } from '../../model/directions';
 import { placementFacing, type BlockMap } from '../../model/editing';
-import { frameFor, shiftClickTarget } from '../interaction';
+import { frameFor, placementAllowed, shiftClickTarget } from '../interaction';
 import type { Facing, Vec3 } from '../../model/types';
 import { ConduitMesh } from './ConduitMesh';
 import { MachineMesh } from './MachineMesh';
@@ -64,12 +64,23 @@ function Blocks(props: SceneProps) {
     }
     place(h);
   };
-  const onBlockContext = (e: ThreeEvent<MouseEvent>) => {
+  // Right-click removes on pointer-up if the pointer barely moved, so a right-drag pan never removes anything
+  // (the contextmenu event fires on mouse-down on macOS/Linux, which is too early to tell a click from a drag).
+  const rightDown = useRef<{ x: number; y: number; pos: Vec3 } | null>(null);
+  const onBlockPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    if (e.button !== 2) return;
     e.stopPropagation();
-    e.nativeEvent.preventDefault();
-    if (!isClick(e.delta)) return;
     const pos = e.object.userData.pos as Vec3 | undefined;
-    if (pos) props.onRemove(pos);
+    rightDown.current = pos ? { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, pos } : null;
+  };
+  const onBlockPointerUp = (e: ThreeEvent<PointerEvent>) => {
+    if (e.button !== 2) return;
+    e.stopPropagation();
+    const down = rightDown.current;
+    rightDown.current = null;
+    if (!down) return;
+    const moved = Math.hypot(e.nativeEvent.clientX - down.x, e.nativeEvent.clientY - down.y);
+    if (isClick(moved)) props.onRemove(down.pos);
   };
 
   return (
@@ -78,7 +89,9 @@ function Blocks(props: SceneProps) {
         onPointerMove={(e) => { e.stopPropagation(); props.onHover(hoverFromEvent(e)); }}
         onPointerOut={() => props.onHover(null)}
         onClick={onBlockClick}
-        onContextMenu={onBlockContext}
+        onPointerDown={onBlockPointerDown}
+        onPointerUp={onBlockPointerUp}
+        onContextMenu={(e) => { e.stopPropagation(); e.nativeEvent.preventDefault(); }}
       >
         {visible.map((b) => {
           const entry = CATALOG.get(b.key);
@@ -104,16 +117,16 @@ function Blocks(props: SceneProps) {
         <planeGeometry args={[4000, 4000]} />
         <meshBasicMaterial visible={false} />
       </mesh>
-      <Ghost hover={props.hover} blocks={blocks} />
+      <Ghost hover={props.hover} blocks={blocks} layer={layer} />
     </>
   );
 }
 
 /** Wireframe on the hovered block plus a translucent preview where the next block would go. */
-function Ghost({ hover, blocks }: { hover: Hover | null; blocks: BlockMap }) {
+function Ghost({ hover, blocks, layer }: { hover: Hover | null; blocks: BlockMap; layer: number | null }) {
   if (!hover) return null;
   const target = addVec(hover.pos, DIRS[hover.side]);
-  const free = !blocks.has(posKey(target));
+  const free = !blocks.has(posKey(target)) && placementAllowed(target, layer).ok;
   return (
     <>
       {!hover.ground && (

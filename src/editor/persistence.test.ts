@@ -1,4 +1,4 @@
-import { STORAGE_KEY, createAutosaver, loadFromStorage, saveToStorage } from './persistence';
+import { BACKUP_KEY, STORAGE_KEY, createAutosaver, loadFromStorage, saveToStorage } from './persistence';
 import type { Build } from '../model/types';
 
 function memoryStorage(): Storage {
@@ -36,6 +36,15 @@ test('corrupt storage restores nothing and reports an error', () => {
   const r = loadFromStorage(s);
   expect(r.build).toBeNull();
   expect(r.error).toMatch(/restore/i);
+});
+
+test('an unreadable saved build is backed up before it can be overwritten', () => {
+  const s = memoryStorage();
+  s.setItem(STORAGE_KEY, '{"version":9}');
+  const r = loadFromStorage(s);
+  expect(r.build).toBeNull();
+  expect(s.getItem(BACKUP_KEY)).toBe('{"version":9}');
+  expect(r.error).toMatch(/backed up/i);
 });
 
 test('unavailable or throwing storage never throws, and says autosave is off', () => {

@@ -63,3 +63,16 @@ test('missing or non-string name becomes "untitled"; unknown keys are kept for t
   expect(build.name).toBe('untitled');
   expect(build.blocks[0].key).toBe('future_machine');
 });
+
+test('duplicate positions keep the last block and warn', () => {
+  const { build, warnings } = parseBuild(JSON.stringify({
+    version: 1,
+    name: 'x',
+    blocks: [
+      { pos: [0, 0, 0], key: 'distillery_lv' },
+      { pos: [0, 0, 0], key: 'electrolyzer_lv' },
+    ],
+  }));
+  expect(build.blocks).toEqual([{ pos: [0, 0, 0], key: 'electrolyzer_lv' }]);
+  expect(warnings).toEqual([expect.stringMatching(/0,0,0/)]);
+});

@@ -1,0 +1,9 @@
+  Task 2: Ruling: rewrote the plan's toggleSide body more directly (same behaviour: override kept only where it differs from auto) — clearer code, all 7 plan 
+  Task 8: Ruling: added src/vite-env.d.ts (vite/client types) so TS accepts the CSS import — plan omitted it — cost if wrong: none
+  Task 8: Ruling: MachineMesh now passes a material array via material={...} (plan's attach="material-N" left machines untextured white — found in manual run)
+  Task 9: Ruling: e2e tests wait for the canvas to reach its measured size before clicking (r3f sizes it after mount; first click used the 300x150 default box) 
+  Final: Ruling: right-drag pan on macOS/Linux could remove a block (contextmenu on mousedown) — user is on Windows, local app — cost if wrong: accidental r
+  Final: Ruling: placement facing follows the camera, matching plan tests despite ambiguous spec wording — cost if wrong: one helper change
+  Final: Ruling: info panel shows hovered block only (no selection concept) — cost if wrong: add selection later
+  Final: Ruling: unknown keys warn only at export, not at load — cost if wrong: user notices late
+  Final: Ruling: large JS chunk and THREE.Clock deprecation warnings left as-is — local app / library internals — cost if wrong: none

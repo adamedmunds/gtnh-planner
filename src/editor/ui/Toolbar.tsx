@@ -3,6 +3,8 @@ import { useRef } from 'react';
 export interface ToolbarProps {
   name: string;
   canExport: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   maxY: number;
   layer: number | null;
   onName(name: string): void;
@@ -12,6 +14,8 @@ export interface ToolbarProps {
   onLoadFile(text: string): void;
   onExport(): void;
   onFrame(): void;
+  onUndo(): void;
+  onRedo(): void;
   onLayer(layer: number | null): void;
 }
 
@@ -21,6 +25,8 @@ export function Toolbar(p: ToolbarProps) {
     <header className="toolbar">
       <input className="name" value={p.name} onChange={(e) => p.onName(e.target.value)} aria-label="Build name" />
       <button onClick={p.onNew}>New</button>
+      <button onClick={p.onUndo} disabled={!p.canUndo} title="Undo (Ctrl+Z)">Undo</button>
+      <button onClick={p.onRedo} disabled={!p.canRedo} title="Redo (Ctrl+Y)">Redo</button>
       <button data-testid="example" onClick={p.onExample}>Oil berry example</button>
       <button onClick={p.onSave}>Save .json</button>
       <button onClick={() => fileRef.current?.click()}>Load .json</button>

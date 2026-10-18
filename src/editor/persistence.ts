@@ -2,6 +2,8 @@ import { parseBuild, serializeBuild } from '../model/buildJson';
 import type { Build } from '../model/types';
 
 export const STORAGE_KEY = 'gtnh-planner:build';
+/** Where an unreadable saved build is copied before autosave can overwrite it. */
+export const BACKUP_KEY = 'gtnh-planner:build:backup';
 
 export function safeStorage(): Storage | undefined {
   try {
@@ -35,7 +37,12 @@ export function loadFromStorage(storage: Storage | undefined): { build: Build | 
   try {
     return { build: parseBuild(text).build };
   } catch {
-    return { build: null, error: "Couldn't restore your last build; starting empty." };
+    try {
+      storage.setItem(BACKUP_KEY, text);
+    } catch {
+      return { build: null, error: "Couldn't restore your last build; starting empty." };
+    }
+    return { build: null, error: `Couldn't restore your last build (backed up in browser storage as "${BACKUP_KEY}"); starting empty.` };
   }
 }
 

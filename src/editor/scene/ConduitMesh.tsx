@@ -1,9 +1,9 @@
-import { useEffect, useMemo } from 'react';
-import * as THREE from 'three';
+import { useMemo } from 'react';
 import type { CatalogEntry } from '../../catalog';
 import type { PlacedBlock } from '../../model/types';
 import { textureCache, useAsync } from '../textures';
 import { conduitBoxes, faceKinds } from './geometry';
+import { boxGeometry, conduitMaterials } from './materials';
 
 /** GT's cable insulation dye (Dyes.CABLE_INSULATION, 64/64/64). */
 const INSULATION = '#404040';
@@ -29,18 +29,7 @@ export function ConduitMesh({ block, entry, mask }: { block: PlacedBlock; entry:
   const tex = useConduitTextures(entry);
   const boxes = useMemo(() => conduitBoxes(entry.thickness ?? 0.5, mask), [entry.thickness, mask]);
 
-  // Shared materials for this block: one for the length, one for the ends; flat colour if textures are missing.
-  const materials = useMemo(() => {
-    const [side, end] = tex ?? [null, null];
-    const fallback = entry.kind === 'cable' ? INSULATION : entry.color;
-    const make = (map: THREE.Texture | null) =>
-      new THREE.MeshStandardMaterial({ map, color: map ? '#ffffff' : fallback, transparent: !!map, alphaTest: 0.1 });
-    return { side: make(side), end: make(end) };
-  }, [tex, entry.kind, entry.color]);
-  useEffect(() => () => {
-    materials.side.dispose();
-    materials.end.dispose();
-  }, [materials]);
+  const materials = conduitMaterials(entry, tex, entry.kind === 'cable' ? INSULATION : entry.color);
 
   const [x, y, z] = block.pos;
   return (
@@ -50,10 +39,10 @@ export function ConduitMesh({ block, entry, mask }: { block: PlacedBlock; entry:
           key={i}
           position={b.center}
           userData={{ pos: block.pos, arm: b.arm }}
+          geometry={boxGeometry(b.size)}
           material={faceKinds(b, mask).map((k) => materials[k])}
-        >
-          <boxGeometry args={b.size} />
-        </mesh>
+          dispose={null}
+        />
       ))}
     </group>
   );

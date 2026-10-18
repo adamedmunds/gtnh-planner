@@ -32,3 +32,29 @@ test('frameFor centres the camera target on the build and backs off by its size'
   expect(dist).toBeGreaterThan(28);
   expect(frameFor(toBlockMap([]))).toBeNull();
 });
+
+import { placementAllowed, sameHover, unknownKeys } from './interaction';
+
+test('placementAllowed: never below the ground, never above the layer cut-off', () => {
+  expect(placementAllowed([0, 0, 0], null)).toEqual({ ok: true });
+  expect(placementAllowed([0, -1, 0], null).ok).toBe(false);
+  expect(placementAllowed([0, 3, 0], 2)).toEqual({ ok: false, reason: expect.stringMatching(/layer/i) });
+  expect(placementAllowed([0, 2, 0], 2)).toEqual({ ok: true });
+});
+
+test('sameHover compares by value so pointer moves within a face do not re-render', () => {
+  const a = { pos: [1, 2, 3] as const, side: 4, ground: false };
+  expect(sameHover(a, { pos: [1, 2, 3], side: 4, ground: false })).toBe(true);
+  expect(sameHover(a, { pos: [1, 2, 3], side: 5, ground: false })).toBe(false);
+  expect(sameHover(a, { ...a, arm: 0 })).toBe(false);
+  expect(sameHover(null, null)).toBe(true);
+  expect(sameHover(a, null)).toBe(false);
+});
+
+test('unknownKeys lists block types the catalog does not know, with counts', () => {
+  expect(unknownKeys([
+    { pos: [0, 0, 0], key: 'distillery_lv' },
+    { pos: [1, 0, 0], key: 'future_machine' },
+    { pos: [2, 0, 0], key: 'future_machine' },
+  ])).toEqual([{ key: 'future_machine', count: 2 }]);
+});

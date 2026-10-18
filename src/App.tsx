@@ -4,10 +4,13 @@ import { computeConnections } from './model/connections';
 import { posKey } from './model/directions';
 import { billOfMaterials } from './model/editing';
 import { parseBuild, serializeBuild } from './model/buildJson';
+import type { Build, Facing, Vec3 } from './model/types';
 import { countsForBerryRate, makeOilBerryLine } from './presets/oilBerryLine';
 import { downloadBytes, downloadText, safeFileName } from './editor/download';
+import { historyReducer, initialHistory } from './editor/history';
+import { placementAllowed, sameHover, unknownKeys } from './editor/interaction';
 import { createAutosaver, loadFromStorage, safeStorage } from './editor/persistence';
-import { initialState, reducer, toBuild } from './editor/state';
+import { toBuild } from './editor/state';
 import { Scene, type Hover } from './editor/scene/Scene';
 import { InfoPanel } from './editor/ui/InfoPanel';
 import { MaterialsPanel } from './editor/ui/MaterialsPanel';
@@ -18,12 +21,15 @@ import { Toolbar } from './editor/ui/Toolbar';
 const restored = loadFromStorage(safeStorage());
 
 export function App() {
-  const [state, dispatch] = useReducer(reducer, restored.build ?? undefined, initialState);
-  const [hover, setHover] = useState<Hover | null>(null);
+  const [history, dispatch] = useReducer(historyReducer, restored.build ?? undefined, initialHistory);
+  const state = history.present;
+  const [hover, setHoverState] = useState<Hover | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
   const [frameToken, setFrameToken] = useState(restored.build?.blocks.length ? 1 : 0);
   const frame = useCallback(() => setFrameToken((t) => t + 1), []);
+  // Pointer moves inside the same face keep the same object, so the scene doesn't re-render on every move.
+  const setHover = useCallback((h: Hover | null) => setHoverState((prev) => (sameHover(prev, h) ? prev : h)), []);
 
   const toast = useCallback((text: string, kind: Toast['kind'] = 'info') => {
     const id = nextId.current++;
@@ -31,8 +37,13 @@ export function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 6000);
   }, []);
 
+  // Restore notice once (StrictMode runs mount effects twice in development).
+  const restoreNoticeShown = useRef(false);
   useEffect(() => {
-    if (restored.error) toast(restored.error, 'error');
+    if (restored.error && !restoreNoticeShown.current) {
+      restoreNoticeShown.current = true;
+      toast(restored.error, 'error');
+    }
   }, [toast]);
 
   const autosave = useMemo(
@@ -40,24 +51,18 @@ export function App() {
     [toast],
   );
 
-  // Debounced autosave.
+  // Debounced autosave, plus an immediate save when the tab is closed or hidden.
+  const latest = useRef(state);
+  latest.current = state;
   useEffect(() => {
     const h = setTimeout(() => autosave(toBuild(state)), 400);
     return () => clearTimeout(h);
   }, [state.blocks, state.name]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // R / Shift+R rotate the hovered machine.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
-      if (e.key.toLowerCase() === 'r' && hover && !hover.ground) {
-        dispatch({ type: 'rotate', pos: hover.pos, includeVertical: e.shiftKey });
-      }
-      if (e.key.toLowerCase() === 'f') frame();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [hover, frame]);
+    const flush = () => autosave(toBuild(latest.current));
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [autosave]);
 
   const bom = useMemo(() => billOfMaterials(state.blocks.values()), [state.blocks]);
   const maxY = useMemo(() => Math.max(0, ...[...state.blocks.values()].map((b) => b.pos[1])), [state.blocks]);
@@ -66,6 +71,51 @@ export function App() {
     () => (hovered ? computeConnections([...state.blocks.values()]).get(posKey(hovered.pos)) : undefined),
     [hovered, state.blocks],
   );
+
+  // Keep the layer slider in range when the build gets shorter.
+  useEffect(() => {
+    if (state.layer !== null && state.layer > maxY) dispatch({ type: 'setLayer', layer: null });
+  }, [state.layer, maxY]);
+
+  // Keyboard: R / Shift+R rotate, F frame, Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const key = e.key.toLowerCase();
+      if (e.ctrlKey || e.metaKey) {
+        if (key === 'z') {
+          e.preventDefault();
+          dispatch({ type: e.shiftKey ? 'redo' : 'undo' });
+        } else if (key === 'y') {
+          e.preventDefault();
+          dispatch({ type: 'redo' });
+        }
+        return;
+      }
+      if (key === 'r' && hover && !hover.ground) dispatch({ type: 'rotate', pos: hover.pos, includeVertical: e.shiftKey });
+      if (key === 'f') frame();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [hover, frame]);
+
+  const confirmReplace = () => state.blocks.size === 0 || window.confirm('Replace the current build? (Ctrl+Z undoes this.)');
+
+  const loadBuild = (build: Build, warnings: string[] = []) => {
+    dispatch({ type: 'load', build });
+    frame();
+    toast(`Loaded ${build.name}`);
+    for (const w of warnings) toast(w, 'error');
+    for (const u of unknownKeys(build.blocks)) {
+      toast(`${u.count} block(s) of unknown type "${u.key}" are shown in magenta and won't be exported.`, 'error');
+    }
+  };
+
+  const onPlace = (pos: Vec3, facing: Facing) => {
+    const allowed = placementAllowed(pos, state.layer);
+    if (!allowed.ok) return toast(allowed.reason, 'error');
+    dispatch({ type: 'place', pos, facing });
+  };
 
   const onExport = () => {
     try {
@@ -79,15 +129,13 @@ export function App() {
   };
 
   const onExample = () => {
+    if (!confirmReplace()) return;
     const answer = window.prompt('Berries per second to size the line for?', '5.6');
     if (answer === null) return;
     const rate = Number(answer);
     try {
       if (!(rate > 0)) throw new Error('Enter a positive number of berries per second');
-      const build = makeOilBerryLine(countsForBerryRate(rate));
-      dispatch({ type: 'load', build });
-      frame();
-      toast(`Loaded ${build.name}`);
+      loadBuild(makeOilBerryLine(countsForBerryRate(rate)));
     } catch (err) {
       toast((err as Error).message, 'error');
     }
@@ -96,10 +144,8 @@ export function App() {
   const onLoadFile = (text: string) => {
     try {
       const { build, warnings } = parseBuild(text);
-      dispatch({ type: 'load', build });
-      frame();
-      toast(`Loaded ${build.name}`);
-      for (const w of warnings) toast(w, 'error');
+      if (!confirmReplace()) return;
+      loadBuild(build, warnings);
     } catch (err) {
       toast((err as Error).message, 'error');
     }
@@ -110,15 +156,19 @@ export function App() {
       <Toolbar
         name={state.name}
         canExport={state.blocks.size > 0}
+        canUndo={history.past.length > 0}
+        canRedo={history.future.length > 0}
         maxY={maxY}
         layer={state.layer}
         onName={(name) => dispatch({ type: 'setName', name })}
-        onNew={() => window.confirm('Clear the current build?') && dispatch({ type: 'new' })}
+        onNew={() => window.confirm('Clear the current build? (Ctrl+Z undoes this.)') && dispatch({ type: 'new' })}
         onExample={onExample}
         onSave={() => downloadText(serializeBuild(toBuild(state)), `${safeFileName(state.name)}.json`)}
         onLoadFile={onLoadFile}
         onExport={onExport}
         onFrame={frame}
+        onUndo={() => dispatch({ type: 'undo' })}
+        onRedo={() => dispatch({ type: 'redo' })}
         onLayer={(layer) => dispatch({ type: 'setLayer', layer })}
       />
       <Palette selectedKey={state.selectedKey} onSelect={(key) => dispatch({ type: 'select', key })} />
@@ -130,8 +180,11 @@ export function App() {
           hover={hover}
           frameToken={frameToken}
           onHover={setHover}
-          onPlace={(pos, facing) => dispatch({ type: 'place', pos, facing })}
-          onRemove={(pos) => dispatch({ type: 'remove', pos })}
+          onPlace={onPlace}
+          onRemove={(pos) => {
+            dispatch({ type: 'remove', pos });
+            setHover(null); // drop the outline/preview on the removed cell
+          }}
           onToggleSide={(pos, side) => dispatch({ type: 'toggleSide', pos, side })}
         />
       </main>
