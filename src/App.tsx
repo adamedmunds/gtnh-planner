@@ -19,6 +19,7 @@ import { Toasts, type Toast } from './editor/ui/Toasts';
 import { Toolbar } from './editor/ui/Toolbar';
 import { chainHistoryReducer, initialChainHistory } from './calculator/chainState';
 import { loadChain, saveChain } from './calculator/chainStorage';
+import { normalizeChain } from './calculator/drive';
 import { Calculator } from './calculator/ui/Calculator';
 
 const restored = loadFromStorage(safeStorage());
@@ -37,7 +38,7 @@ function readTab(): Tab {
 export function App() {
   const [history, dispatch] = useReducer(historyReducer, restored.build ?? undefined, initialHistory);
   const state = history.present;
-  const [chainHistory, chainDispatch] = useReducer(chainHistoryReducer, restoredChain.chain, initialChainHistory);
+  const [chainHistory, chainDispatch] = useReducer(chainHistoryReducer, normalizeChain(restoredChain.chain), initialChainHistory);
   const chain = chainHistory.present;
   const [tab, setTabState] = useState<Tab>(readTab);
   const [calcOpened, setCalcOpened] = useState(tab === 'calculator');
@@ -199,7 +200,7 @@ export function App() {
       const empty = state.blocks.size === 0 && (!replacesChain || chain.nodes.length === 0);
       if (!empty && !window.confirm('Replace the current project? (Ctrl+Z undoes this.)')) return;
       loadBuild(project.build, warnings);
-      if (replacesChain) chainDispatch({ type: 'load', chain: project.chain });
+      if (replacesChain) chainDispatch({ type: 'load', chain: normalizeChain(project.chain) });
     } catch (err) {
       toast((err as Error).message, 'error');
     }

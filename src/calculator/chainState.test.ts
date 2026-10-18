@@ -78,3 +78,39 @@ test('load is undoable', () => {
   expect(h.present).toBe(b);
   expect(chainHistoryReducer(h, { type: 'undo' }).present).toBe(a);
 });
+
+describe('typed numbers', () => {
+  const oil = 'fluid:oil';
+  const berry = 'item:cropsnh:materialLeaf@10';
+
+  test('setHave adds the input and its amount; blank amount means as much as needed', () => {
+    let c = chainReducer(emptyChain(), { type: 'setHave', key: berry, amount: 5.57 });
+    expect(c.externals).toEqual([berry]);
+    expect(c.limits).toEqual([{ key: berry, maxRate: 5.57 }]);
+    c = chainReducer(c, { type: 'setHave', key: berry });
+    expect(c.externals).toEqual([berry]);
+    expect(c.limits).toEqual([]);
+    expect(chainReducer(c, { type: 'removeHave', key: berry }).externals).toEqual([]);
+  });
+
+  test('typing a have amount turns "make exactly" into "as much as possible"', () => {
+    const c = chainReducer({ ...emptyChain(), targets: [{ key: lf, rate: 1000 }] }, { type: 'setHave', key: berry, amount: 5.57 });
+    expect(c.targets).toEqual([{ key: lf, maximise: true }]);
+  });
+
+  test('setWant keeps exactly one want', () => {
+    let c = chainReducer({ ...emptyChain(), targets: [{ key: oil, rate: 1 }, { key: 'x', maximise: true }] }, { type: 'setWant', key: lf, rate: 10 });
+    expect(c.targets).toEqual([{ key: lf, rate: 10 }]);
+    c = chainReducer(c, { type: 'setWant', key: lf });
+    expect(c.targets).toEqual([{ key: lf, maximise: true }]);
+  });
+
+  test('setMachineCap: 0 is ignored, undefined clears, a cap switches to as much as possible', () => {
+    const base: Chain = { ...withNodes({ ...recipe(), id: 'n1' } as ChainNode), targets: [{ key: lf, rate: 5 }] };
+    expect(chainReducer(base, { type: 'setMachineCap', id: 'n1', max: 0 })).toBe(base);
+    const capped = chainReducer(base, { type: 'setMachineCap', id: 'n1', max: 4 });
+    expect(capped.nodes[0].maxMachines).toBe(4);
+    expect(capped.targets).toEqual([{ key: lf, maximise: true }]);
+    expect(chainReducer(capped, { type: 'setMachineCap', id: 'n1' }).nodes[0].maxMachines).toBeUndefined();
+  });
+});
