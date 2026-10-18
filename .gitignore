@@ -9,3 +9,5 @@ public/textures/
 
 # Local exports
 *.schematic
+
+out/
