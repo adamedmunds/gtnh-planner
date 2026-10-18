@@ -32,3 +32,19 @@ button.primary { background: #1f4f66; border-color: var(--accent); }
 .toasts { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: grid; gap: 6px; z-index: 10; }
 .toast { background: #2b2f3a; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; cursor: pointer; }
 .toast.error { border-color: var(--error); }
+[hidden] { display: none !important; }
+.shell { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+.shell > .app { height: auto; min-height: 0; }
+.tabbar { display: flex; gap: 4px; padding: 6px 12px 0; background: var(--bg); border-bottom: 1px solid var(--line); }
+.tabbar button { border-radius: 6px 6px 0 0; border-bottom: none; }
+.tabbar button.on { border-color: var(--accent); background: var(--panel); }
+.calc-root { min-height: 0; display: flex; flex-direction: column; }
+.calc-status { padding: 24px; max-width: 640px; line-height: 1.6; }
+.calc-status.error h2 { color: var(--error); }
+.calc-status code { background: #2b2f3a; padding: 1px 5px; border-radius: 4px; }
+.banner { padding: 6px 12px; background: #4a3b12; border-bottom: 1px solid #a58424; }
+.calc { flex: 1; display: grid; grid-template-columns: 260px 1fr 340px; min-height: 0; }
+.calc .overview { border-right: 1px solid var(--line); }
+.calc .browser { border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.calc-centre { position: relative; min-width: 0; display: grid; grid-template-rows: auto 1fr; }
+.search { width: 100%; }

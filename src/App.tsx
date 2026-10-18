@@ -3,7 +3,7 @@ import { buildSchematic } from './export/schematic';
 import { computeConnections } from './model/connections';
 import { posKey } from './model/directions';
 import { billOfMaterials } from './model/editing';
-import { parseBuild, serializeBuild } from './model/buildJson';
+import { parseProject, serializeProject } from './project/project';
 import type { Build, Facing, Vec3 } from './model/types';
 import { countsForBerryRate, makeOilBerryLine } from './presets/oilBerryLine';
 import { downloadBytes, downloadText, safeFileName } from './editor/download';
@@ -17,12 +17,39 @@ import { MaterialsPanel } from './editor/ui/MaterialsPanel';
 import { Palette } from './editor/ui/Palette';
 import { Toasts, type Toast } from './editor/ui/Toasts';
 import { Toolbar } from './editor/ui/Toolbar';
+import { chainHistoryReducer, initialChainHistory } from './calculator/chainState';
+import { loadChain, saveChain } from './calculator/chainStorage';
+import { Calculator } from './calculator/ui/Calculator';
 
 const restored = loadFromStorage(safeStorage());
+const restoredChain = loadChain(safeStorage());
+
+type Tab = 'editor' | 'calculator';
+const TAB_KEY = 'gtnh-planner:tab';
+function readTab(): Tab {
+  try {
+    return safeStorage()?.getItem(TAB_KEY) === 'calculator' ? 'calculator' : 'editor';
+  } catch {
+    return 'editor';
+  }
+}
 
 export function App() {
   const [history, dispatch] = useReducer(historyReducer, restored.build ?? undefined, initialHistory);
   const state = history.present;
+  const [chainHistory, chainDispatch] = useReducer(chainHistoryReducer, restoredChain.chain, initialChainHistory);
+  const chain = chainHistory.present;
+  const [tab, setTabState] = useState<Tab>(readTab);
+  const [calcOpened, setCalcOpened] = useState(tab === 'calculator');
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    if (t === 'calculator') setCalcOpened(true);
+    try {
+      safeStorage()?.setItem(TAB_KEY, t);
+    } catch {
+      // remembering the tab is only a convenience
+    }
+  };
   const [hover, setHoverState] = useState<Hover | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
@@ -40,10 +67,10 @@ export function App() {
   // Restore notice once (StrictMode runs mount effects twice in development).
   const restoreNoticeShown = useRef(false);
   useEffect(() => {
-    if (restored.error && !restoreNoticeShown.current) {
-      restoreNoticeShown.current = true;
-      toast(restored.error, 'error');
-    }
+    if (restoreNoticeShown.current) return;
+    restoreNoticeShown.current = true;
+    if (restored.error) toast(restored.error, 'error');
+    if (restoredChain.error) toast(restoredChain.error, 'error');
   }, [toast]);
 
   const autosave = useMemo(
@@ -51,18 +78,40 @@ export function App() {
     [toast],
   );
 
+  // The chain autosaves the same way, telling the user once when saving starts failing.
+  const chainSaveFailed = useRef(!!restored.unavailable);
+  const autosaveChain = useCallback(
+    (c: typeof chain) => {
+      if (saveChain(safeStorage(), c)) chainSaveFailed.current = false;
+      else if (!chainSaveFailed.current) {
+        chainSaveFailed.current = true;
+        toast("Couldn't autosave your calculator chain (storage full or blocked). Use Save .json to keep it.", 'error');
+      }
+    },
+    [toast],
+  );
+
   // Debounced autosave, plus an immediate save when the tab is closed or hidden.
   const latest = useRef(state);
   latest.current = state;
+  const latestChain = useRef(chain);
+  latestChain.current = chain;
   useEffect(() => {
     const h = setTimeout(() => autosave(toBuild(state)), 400);
     return () => clearTimeout(h);
   }, [state.blocks, state.name]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const flush = () => autosave(toBuild(latest.current));
+    const h = setTimeout(() => autosaveChain(chain), 400);
+    return () => clearTimeout(h);
+  }, [chain, autosaveChain]);
+  useEffect(() => {
+    const flush = () => {
+      autosave(toBuild(latest.current));
+      autosaveChain(latestChain.current);
+    };
     window.addEventListener('pagehide', flush);
     return () => window.removeEventListener('pagehide', flush);
-  }, [autosave]);
+  }, [autosave, autosaveChain]);
 
   const bom = useMemo(() => billOfMaterials(state.blocks.values()), [state.blocks]);
   const maxY = useMemo(() => Math.max(0, ...[...state.blocks.values()].map((b) => b.pos[1])), [state.blocks]);
@@ -79,6 +128,7 @@ export function App() {
 
   // Keyboard: R / Shift+R rotate, F frame, Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo.
   useEffect(() => {
+    if (tab !== 'editor') return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
       const key = e.key.toLowerCase();
@@ -97,7 +147,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [hover, frame]);
+  }, [hover, frame, tab]);
 
   const confirmReplace = () => state.blocks.size === 0 || window.confirm('Replace the current build? (Ctrl+Z undoes this.)');
 
@@ -143,16 +193,25 @@ export function App() {
 
   const onLoadFile = (text: string) => {
     try {
-      const { build, warnings } = parseBuild(text);
-      if (!confirmReplace()) return;
-      loadBuild(build, warnings);
+      const { project, warnings, fromVersion } = parseProject(text);
+      // A build-only (version 1) file replaces the build and keeps the chain.
+      const replacesChain = fromVersion === 2;
+      const empty = state.blocks.size === 0 && (!replacesChain || chain.nodes.length === 0);
+      if (!empty && !window.confirm('Replace the current project? (Ctrl+Z undoes this.)')) return;
+      loadBuild(project.build, warnings);
+      if (replacesChain) chainDispatch({ type: 'load', chain: project.chain });
     } catch (err) {
       toast((err as Error).message, 'error');
     }
   };
 
   return (
-    <div className="app">
+    <div className="shell">
+      <nav className="tabbar">
+        <button data-testid="tab-calculator" className={tab === 'calculator' ? 'on' : ''} onClick={() => setTab('calculator')}>Calculator</button>
+        <button data-testid="tab-editor" className={tab === 'editor' ? 'on' : ''} onClick={() => setTab('editor')}>3D Editor</button>
+      </nav>
+    <div className="app" hidden={tab !== 'editor'}>
       <Toolbar
         name={state.name}
         canExport={state.blocks.size > 0}
@@ -163,7 +222,7 @@ export function App() {
         onName={(name) => dispatch({ type: 'setName', name })}
         onNew={() => window.confirm('Clear the current build? (Ctrl+Z undoes this.)') && dispatch({ type: 'new' })}
         onExample={onExample}
-        onSave={() => downloadText(serializeBuild(toBuild(state)), `${safeFileName(state.name)}.json`)}
+        onSave={() => downloadText(serializeProject({ version: 2, build: toBuild(state), chain }), `${safeFileName(state.name)}.json`)}
         onLoadFile={onLoadFile}
         onExport={onExport}
         onFrame={frame}
@@ -192,6 +251,8 @@ export function App() {
         <InfoPanel block={hovered} mask={hoveredMask} />
         <MaterialsPanel lines={bom} />
       </div>
+    </div>
+      {calcOpened && <Calculator active={tab === 'calculator'} history={chainHistory} dispatch={chainDispatch} toast={toast} />}
       <Toasts toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
     </div>
   );
