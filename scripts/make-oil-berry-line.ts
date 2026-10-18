@@ -36,8 +36,14 @@ const { extractors: e, distilleries: d } = opts;
 const oil = 100 * e;
 const distillCap = (50 / 1.5) * d;
 const fuelOut = Math.min(oil, distillCap);
-const modules = Math.ceil(e / 3) + Math.ceil(d / 3) + 1;
-const euPerTick = 30 * e * Math.min(1, distillCap / oil) + 24 * d * Math.min(1, oil / distillCap) + 60;
+// One generator per module, plus the MV electrolyzer's own generator.
+const generators = Math.ceil(e / 3) + Math.ceil(d / 3) + 1 + 1;
+// Chemical reactor: 12,000 L per 160 t (30 EU/t). MV electrolyzer: one H2S cell per reactor batch, 72 t at 120 EU/t.
+const batchesPerSecond = fuelOut / 12000;
+const reactorEu = 30 * Math.min(1, batchesPerSecond * 8);
+const electrolyzerEu = 120 * Math.min(1, batchesPerSecond * 3.6);
+const euPerTick =
+  30 * e * Math.min(1, distillCap / oil) + 24 * d * Math.min(1, oil / distillCap) + reactorEu + electrolyzerEu;
 const burn = (euPerTick / (305 * 0.9)) * 20;
 
 const counts = new Map<string, number>();
@@ -49,4 +55,4 @@ console.log(`\nExtractors keep up with ${e} berries/s; distilleries keep up with
 if (distillBerries < e - 1e-6) {
   console.log(`  Above ${distillBerries.toFixed(2)} berries/s the distilleries limit output (${e * 3 - d} more would match the extractors).`);
 } else if (distillCap - oil >= 50 / 1.5) console.log(`  ${Math.floor((distillCap - oil) / (50 / 1.5))} distilleries will sit idle.`);
-console.log(`Light fuel: ${fuelOut.toFixed(0)} L/s made, ~${burn.toFixed(0)} L/s burned by ${modules} MV generators (~${euPerTick.toFixed(0)} EU/t), ~${(fuelOut - burn).toFixed(0)} L/s net.`);
+console.log(`Light fuel: ${fuelOut.toFixed(0)} L/s made, ~${burn.toFixed(0)} L/s burned by ${generators} MV generators (~${euPerTick.toFixed(0)} EU/t), ~${(fuelOut - burn).toFixed(0)} L/s net.`);

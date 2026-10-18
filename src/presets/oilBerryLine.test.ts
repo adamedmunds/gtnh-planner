@@ -9,8 +9,9 @@ const EU_PER_TICK: Record<string, number> = {
   fluid_extractor_lv: 30,
   distillery_lv: 24,
   chemical_reactor_lv: 30,
-  electrolyzer_lv: 30,
 };
+/** MV machines: powered straight from an MV generator, never through a transformer. */
+const MV_EU_PER_TICK: Record<string, number> = { electrolyzer_mv: 120 };
 
 interface Cell { block: PlacedBlock; entry: CatalogEntry }
 
@@ -81,8 +82,9 @@ describe.each([
     expect(ofKey('fluid_extractor_lv')).toHaveLength(extractors);
     expect(ofKey('distillery_lv')).toHaveLength(distilleries);
     expect(ofKey('chemical_reactor_lv')).toHaveLength(1);
-    expect(ofKey('electrolyzer_lv')).toHaveLength(1);
-    expect(ofKey('combustion_generator_mv')).toHaveLength(modules);
+    expect(ofKey('electrolyzer_lv')).toHaveLength(0);
+    expect(ofKey('electrolyzer_mv')).toHaveLength(1);
+    expect(ofKey('combustion_generator_mv')).toHaveLength(modules + 1); // + the electrolyzer's own generator
     expect(ofKey('transformer_mv_lv')).toHaveLength(modules);
     expect(buildSchematic(build).warnings).toEqual([]);
   });
@@ -94,6 +96,18 @@ describe.each([
       expect(count(near, 'transformer_mv_lv'), `${c.block.key} at ${posKey(c.block.pos)}`).toBe(1);
       expect(near).not.toContain('combustion_generator_mv');
     }
+  });
+
+  test('the MV electrolyzer runs off its own MV generator (120 of 128 EU/t) and touches no transformer', () => {
+    const [el] = ofKey('electrolyzer_mv');
+    const near = neighbours(el).map((x) => x.n);
+    expect(near.filter((n) => n.block.key === 'transformer_mv_lv')).toHaveLength(0);
+    const gens = near.filter((n) => n.block.key === 'combustion_generator_mv');
+    expect(gens).toHaveLength(1);
+    // That generator powers only the electrolyzer: no other machine may take its MV output.
+    const others = neighbours(gens[0]).filter(({ n }) => n.block.key in EU_PER_TICK || n.block.key in MV_EU_PER_TICK);
+    expect(others.map(({ n }) => n.block.key)).toEqual(['electrolyzer_mv']);
+    expect(MV_EU_PER_TICK.electrolyzer_mv).toBeLessThanOrEqual(128);
   });
 
   test('each transformer is fed on its front by an MV generator and powers at most 128 EU/t', () => {
@@ -128,7 +142,7 @@ describe.each([
       ({ n, side }) => isConduit(n) && conns.get(posKey(n.block.pos))! & (1 << OPPOSITE[side]),
     )!.n;
     const fuel = network(pipe);
-    expect(count(fuel.machines, 'combustion_generator_mv')).toBe(modules);
+    expect(count(fuel.machines, 'combustion_generator_mv')).toBe(modules + 1);
     expect(count(fuel.machines, 'chemical_reactor_lv')).toBe(1);
     expect(only(fuel.machines, ['combustion_generator_mv', 'chemical_reactor_lv'])).toEqual([]);
   });
@@ -144,9 +158,9 @@ describe.each([
 
   test('chemical reactor and electrolyzer share a cell loop item pipe', () => {
     const pipe = [...cells.values()].find(
-      (c) => c.entry.kind === 'itemPipe' && neighbours(c).some(({ n }) => n.block.key === 'electrolyzer_lv'),
+      (c) => c.entry.kind === 'itemPipe' && neighbours(c).some(({ n }) => n.block.key === 'electrolyzer_mv'),
     )!;
-    expect(network(pipe).machines.sort()).toEqual(['chemical_reactor_lv', 'electrolyzer_lv']);
+    expect(network(pipe).machines.sort()).toEqual(['chemical_reactor_lv', 'electrolyzer_mv']);
   });
 
   test('every pipe connects to something, and same-kind pipes never touch unconnected', () => {
@@ -165,7 +179,7 @@ test('the default line is the 6 extractor / 17 distillery build with a lean pipe
   const { ofKey, isConduit, cells } = inspect(OIL_BERRY_LINE);
   expect(ofKey('fluid_extractor_lv')).toHaveLength(6);
   expect(ofKey('distillery_lv')).toHaveLength(17);
-  expect([...cells.values()].filter(isConduit).length).toBeLessThanOrEqual(100);
+  expect([...cells.values()].filter(isConduit).length).toBeLessThanOrEqual(105); // 102 incl. the MV electrolyzer column
 });
 
 test('expanding is append-only: a bigger line contains every block of a smaller one at the same spot', () => {

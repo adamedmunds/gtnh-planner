@@ -10,7 +10,8 @@
  *   y=1   . G .  . G .  . G .      G = MV combustion generator       front (z=+1): berries / sulfuric line
  *   y=0   ═════════════════════    light fuel line under every generator
  *
- * The chemical reactor + electrolyzer module sits at x = 0. Extractor modules grow west and distillery modules
+ * The chemical reactor module sits at x = 0, with the MV electrolyzer and its own MV generator in the column east of
+ * it (the H2S electrolysis recipe needs 120 EU/t, more than an LV machine can take). Extractor modules grow west and distillery modules
  * grow east, so a bigger line contains a smaller one block-for-block: expand in-game by extending the three
  * lines and adding modules at either end. The light fuel tank connects behind the reactor module.
  */
@@ -42,7 +43,7 @@ const FACING: Record<string, Facing> = {
   fluid_extractor_lv: 2,
   distillery_lv: 3,
   chemical_reactor_lv: 1,
-  electrolyzer_lv: 4,
+  electrolyzer_mv: 4,
 };
 
 const PIPES = {
@@ -60,7 +61,7 @@ const SERVES: Record<Net, readonly string[]> = {
   sulfuric: ['distillery_lv', 'chemical_reactor_lv'],
   berries: ['fluid_extractor_lv'],
   fuel: ['combustion_generator_mv', 'chemical_reactor_lv'],
-  cells: ['chemical_reactor_lv', 'electrolyzer_lv'],
+  cells: ['chemical_reactor_lv', 'electrolyzer_mv'],
 };
 
 interface Module {
@@ -68,12 +69,15 @@ interface Module {
   slots: Partial<Record<Slot, string>>;
 }
 
-/** Fills modules of 3 outward from the reactor module: `direction` -1 = west, +1 = east. */
-function machineModules(key: string, count: number, direction: 1 | -1): Module[] {
+/**
+ * Fills modules of 3 outward from the reactor module: `direction` -1 = west, +1 = east. `gap` extra blocks are left
+ * between the reactor module and the first module on that side.
+ */
+function machineModules(key: string, count: number, direction: 1 | -1, gap = 0): Module[] {
   const modules: Module[] = [];
   for (let n = 0; n < count; n++) {
     const m = Math.floor(n / 3);
-    modules[m] ??= { tx: direction * 3 * (m + 1), slots: {} };
+    modules[m] ??= { tx: direction * (3 * (m + 1) + gap), slots: {} };
     modules[m].slots[SLOT_ORDER[n % 3]] = key;
   }
   return modules;
@@ -93,8 +97,10 @@ export function makeOilBerryLine({ extractors, distilleries }: OilBerryLineOptio
   }
 
   const extractorModules = machineModules('fluid_extractor_lv', extractors, -1);
-  const distilleryModules = machineModules('distillery_lv', distilleries, 1);
-  const reactorModule: Module = { tx: 0, slots: { W: 'chemical_reactor_lv', U: 'electrolyzer_lv' } };
+  // One spare column east of the reactor module holds the MV electrolyzer and its own generator, so that
+  // generator's MV output never reaches an LV distillery.
+  const distilleryModules = machineModules('distillery_lv', distilleries, 1, 1);
+  const reactorModule: Module = { tx: 0, slots: { W: 'chemical_reactor_lv' } };
   const modules = [...extractorModules, reactorModule, ...distilleryModules];
   const westTx = extractorModules.at(-1)!.tx;
   const eastTx = distilleryModules.at(-1)!.tx;
@@ -111,6 +117,11 @@ export function makeOilBerryLine({ extractors, distilleries }: OilBerryLineOptio
       put({ pos: addVec([tx, 0, 0], SLOT_OFFSET[s]), key, facing: FACING[key] });
     }
   }
+
+  // The H2S electrolysis recipe is MV (120 EU/t), so the electrolyzer is an MV machine powered straight from its
+  // own MV generator (128 EU/t) below it, clear of the transformer's LV output.
+  put({ pos: [1, 2, 0], key: 'combustion_generator_mv', facing: 1 });
+  put({ pos: [1, 3, 0], key: 'electrolyzer_mv', facing: FACING.electrolyzer_mv });
 
   // Oil: straight line along the back of the whole row, plus a stub behind each top machine.
   for (const x of range(westTx - 1, eastTx + 1)) pipe('oil', [x, 2, -1]);
@@ -129,11 +140,13 @@ export function makeOilBerryLine({ extractors, distilleries }: OilBerryLineOptio
   // connects to an open stub behind the reactor module so both ends stay free for expansion.
   for (const x of range(westTx, eastTx)) pipe('fuel', [x, 0, 0]);
   pipe('fuel', [-1, 1, 0]);
+  pipe('fuel', [1, 1, 0]); // feeds the electrolyzer's generator
   const fuelOutlet: Vec3 = [0, 0, -1];
   pipe('fuel', fuelOutlet);
 
-  // Cell loop: one pipe touching the reactor's top and the electrolyzer's west face.
+  // Cell loop: reactor top → over the transformer → electrolyzer's west face.
   pipe('cells', [-1, 3, 0]);
+  pipe('cells', [0, 3, 0]);
 
   // Explicit connections: same-network neighbours, machines this network serves, and the two open ends.
   const openEnds = new Map<string, number>([
