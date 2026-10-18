@@ -1,0 +1,54 @@
+import { useRef } from 'react';
+
+export interface ToolbarProps {
+  name: string;
+  canExport: boolean;
+  maxY: number;
+  layer: number | null;
+  onName(name: string): void;
+  onNew(): void;
+  onExample(): void;
+  onSave(): void;
+  onLoadFile(text: string): void;
+  onExport(): void;
+  onLayer(layer: number | null): void;
+}
+
+export function Toolbar(p: ToolbarProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  return (
+    <header className="toolbar">
+      <input className="name" value={p.name} onChange={(e) => p.onName(e.target.value)} aria-label="Build name" />
+      <button onClick={p.onNew}>New</button>
+      <button data-testid="example" onClick={p.onExample}>Oil berry example</button>
+      <button onClick={p.onSave}>Save .json</button>
+      <button onClick={() => fileRef.current?.click()}>Load .json</button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".json,application/json"
+        hidden
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file) p.onLoadFile(await file.text());
+          e.target.value = '';
+        }}
+      />
+      <button data-testid="export" className="primary" disabled={!p.canExport} onClick={p.onExport}>Export .schematic</button>
+      <label className="layer">
+        Layer
+        <input
+          type="range"
+          min={0}
+          max={p.maxY + 1}
+          value={p.layer === null ? p.maxY + 1 : p.layer}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            p.onLayer(v > p.maxY ? null : v);
+          }}
+        />
+        <span>{p.layer === null ? 'all' : `≤ ${p.layer}`}</span>
+      </label>
+    </header>
+  );
+}
