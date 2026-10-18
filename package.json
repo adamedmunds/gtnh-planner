@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "schematic:test": "tsx scripts/make-test-schematic.ts",
-    "schematic:inspect": "tsx scripts/inspect-schematic.ts"
+    "schematic:inspect": "tsx scripts/inspect-schematic.ts",
+    "schematic:oil": "tsx scripts/make-oil-berry-line.ts"
   },
   "dependencies": {
     "fflate": "^0.8.3",
