@@ -22,7 +22,7 @@ button.primary { background: #1f4f66; border-color: var(--accent); }
 .tabs { display: flex; gap: 4px; margin-bottom: 6px; }
 .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 .viewport { position: relative; min-width: 0; }
-.side { display: grid; grid-template-rows: auto 1fr; border-left: 1px solid var(--line); min-height: 0; }
+.side { display: grid; grid-template-rows: auto auto 1fr; border-left: 1px solid var(--line); min-height: 0; }
 .info dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; }
 .info dt { color: var(--muted); }
 .hint { color: var(--muted); }
@@ -127,3 +127,5 @@ button.primary { background: #1f4f66; border-color: var(--accent); }
 .power-btn { margin-top: 8px; width: 100%; border-color: var(--accent); }
 .react-flow__edge.edge-fluid path { stroke: #fdd835; }
 .react-flow__edge.edge-item path { stroke: #9e9e9e; }
+.line-notes ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.5; max-height: 30vh; overflow-y: auto; }
+.straight-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); background: var(--panel); padding: 4px 8px; border-radius: 6px; }

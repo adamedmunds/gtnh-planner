@@ -13,6 +13,7 @@ import { createAutosaver, loadFromStorage, safeStorage } from './editor/persiste
 import { toBuild } from './editor/state';
 import { Scene, type Hover } from './editor/scene/Scene';
 import { InfoPanel } from './editor/ui/InfoPanel';
+import { LineNotes } from './editor/ui/LineNotes';
 import { MaterialsPanel } from './editor/ui/MaterialsPanel';
 import { Palette } from './editor/ui/Palette';
 import { Toasts, type Toast } from './editor/ui/Toasts';
@@ -250,10 +251,23 @@ export function App() {
       </main>
       <div className="side">
         <InfoPanel block={hovered} mask={hoveredMask} />
+        <LineNotes notes={state.extras.notes} />
         <MaterialsPanel lines={bom} />
       </div>
     </div>
-      {calcOpened && <Calculator active={tab === 'calculator'} history={chainHistory} dispatch={chainDispatch} toast={toast} />}
+      {calcOpened && (
+        <Calculator
+          active={tab === 'calculator'}
+          history={chainHistory}
+          dispatch={chainDispatch}
+          toast={toast}
+          onBuild3d={(build) => {
+            if (state.blocks.size > 0 && !window.confirm('Replace your 3D build with this line? (Ctrl+Z undoes this.)')) return;
+            loadBuild(build);
+            setTab('editor');
+          }}
+        />
+      )}
       <Toasts toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
     </div>
   );

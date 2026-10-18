@@ -14,9 +14,17 @@ import { StartPrompt } from './StartPrompt';
 import type { RecipeDb } from '../../recipes/db';
 import type { ChainHistory, ChainHistoryAction } from '../chainState';
 import { useRecipes } from '../useRecipes';
+import type { Build } from '../../model/types';
+import { buildLine } from '../../layout/build';
+import { planLine } from '../../layout/plan';
+import { resourceInfo } from '../graphModel';
+
+const STRAIGHT_KEY = 'gtnh-planner:straight';
 
 export interface CalculatorProps {
   active: boolean;
+  /** Puts a laid-out line into the 3D Editor. */
+  onBuild3d(build: Build): void;
   history: ChainHistory;
   dispatch: (a: ChainHistoryAction) => void;
   toast(text: string, kind?: 'info' | 'error'): void;
@@ -77,7 +85,7 @@ export function Calculator(p: CalculatorProps) {
   );
 }
 
-function Workspace({ active, db, warning, history, dispatch, toast }: CalculatorProps & { db: RecipeDb; warning?: string }) {
+function Workspace({ active, db, warning, history, dispatch, toast, onBuild3d }: CalculatorProps & { db: RecipeDb; warning?: string }) {
   const chain = history.present;
   // `want` / `have`: what the start screen was opened for, added together with the first machine.
   const [picker, setPicker] = useState<{ mode: PickerMode; want?: ResourceKey; have?: ResourceKey } | null>(null);
@@ -98,6 +106,36 @@ function Workspace({ active, db, warning, history, dispatch, toast }: Calculator
     [chain, db, dispatch],
   );
   const openPicker = useCallback((mode: PickerMode) => setPicker({ mode }), []);
+
+  // Build in 3D: plan the line as shown, lay it out, hand it to the 3D Editor.
+  const [straight, setStraightState] = useState(() => {
+    try {
+      return localStorage.getItem(STRAIGHT_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setStraight = (on: boolean) => {
+    setStraightState(on);
+    try {
+      localStorage.setItem(STRAIGHT_KEY, on ? '1' : '0');
+    } catch {
+      // remembering the choice is only a convenience
+    }
+  };
+  const canBuild = !!shown?.result.nodes.some((n) => !n.invalid && n.build > 0);
+  const build3d = () => {
+    if (!shown) return;
+    const p = planLine(chain, db, shown, straight ? 'straight' : 'modular');
+    if ('error' in p) return toast(p.error, 'error');
+    try {
+      const product = shown.product ? resourceInfo(shown.product.key, db).name : 'Production';
+      const { build } = buildLine(p, `${product} line`);
+      onBuild3d(build);
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    }
+  };
   const closePicker = useCallback(() => setPicker(null), []);
   const use = (row: PickerRow) => {
     const node = row.fuel ? newGeneratorNode(row.fuel, chain, db) : newRecipeNode(row.recipe!, chain, db, row.machine.mID);
@@ -132,6 +170,9 @@ function Workspace({ active, db, warning, history, dispatch, toast }: Calculator
               />
             )}
             <ChainGraph
+              onBuild3d={canBuild ? build3d : undefined}
+              straight={straight}
+              onStraight={setStraight}
               openPicker={openPicker}
               structural={structural}
               active={active}

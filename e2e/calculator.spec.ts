@@ -43,6 +43,25 @@ async function addLightFuelReactor(page: Page) {
   await pick(page, 'Hydrogen Sulfide', /Chemical Reactor/);
 }
 
+/** The self-powered oil berry line at 5.57 Oil Berry/s (MV combustion generators). */
+async function buildOilLine(page: Page) {
+  await openCalculator(page);
+  await addLightFuelReactor(page);
+  await addMaker(page, KEY.sulfuricLightFuel, 'Distillery', /50 L Oil/);
+  await addMaker(page, KEY.oil, 'Oil Berry', /Fluid Extractor/);
+  await addMaker(page, KEY.hydrogenCell, 'Hydrogen Sulfide', /Electrolyzer/);
+  await page.locator(`[data-testid=node-row][data-key="${KEY.oilBerry}"]`).first().getByRole('button', { name: 'I have this' }).click();
+  await page.getByRole('button', { name: 'Power it with a generator' }).click();
+  await page.getByTestId('picker').getByLabel('Filter').fill('Light Fuel');
+  await page.getByTestId('picker-row').filter({ hasText: /Combustion/ }).filter({ hasNotText: 'Sulfuric' }).first().getByTestId('use-recipe').click();
+  await page.getByTestId('node-card').filter({ hasText: 'Light Fuel → EU' }).getByTestId('machine-select')
+    .selectOption({ label: 'Advanced Combustion Generator' });
+  const have = page.getByLabel('How much Oil Berry you have');
+  await have.fill('5.57');
+  await have.press('Enter');
+  await expect(page.getByTestId('summary-get')).toContainText(/513\.\d L\/s/);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
@@ -273,6 +292,27 @@ test.describe('with recipe data', () => {
     await page.waitForTimeout(500);
     const zoom = await page.locator('.react-flow__viewport').evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).a);
     expect(zoom).toBeGreaterThanOrEqual(0.8);
+  });
+
+  test('Build in 3D lays out the oil line as a core and slices', async ({ page }) => {
+    test.setTimeout(120_000);
+    await buildOilLine(page);
+    await page.getByRole('button', { name: 'Build in 3D' }).click();
+    await expect(page.getByTestId('tab-editor')).toHaveClass(/on/);
+    const materials = page.getByTestId('materials');
+    await expect(materials).toContainText('6× LV Fluid Extractor');
+    await expect(materials).toContainText('18× LV Distillery');
+    await expect(page.getByTestId('line-notes')).toContainText('6 slices');
+    await page.keyboard.press('Control+z');
+    await expect(page.getByTestId('materials')).toHaveCount(0);
+  });
+
+  test('Build in 3D as a straight line keeps the exact counts', async ({ page }) => {
+    test.setTimeout(120_000);
+    await buildOilLine(page);
+    await page.getByLabel('Straight line (no copy-paste slices)').check();
+    await page.getByRole('button', { name: 'Build in 3D' }).click();
+    await expect(page.getByTestId('materials')).toContainText('17× LV Distillery');
   });
 
   test('the calculator tab loads recipes and is remembered', async ({ page }) => {

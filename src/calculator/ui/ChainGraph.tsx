@@ -34,9 +34,13 @@ export interface ChainGraphProps {
   dispatch: (a: ChainHistoryAction) => void;
   structural(actions: ChainAction[]): void;
   openPicker(mode: PickerMode): void;
+  /** Lays the line out in the 3D Editor; undefined while there's nothing to build. */
+  onBuild3d?: () => void;
+  straight: boolean;
+  onStraight(on: boolean): void;
 }
 
-function Graph({ active, chain, db, screen, greyed, canUndo, canRedo, dispatch, structural, openPicker }: ChainGraphProps) {
+function Graph({ active, chain, db, screen, greyed, canUndo, canRedo, dispatch, structural, openPicker, onBuild3d, straight, onStraight }: ChainGraphProps) {
   const flow = useReactFlow();
   const result = screen?.result;
   const product = screen?.product?.key;
@@ -122,7 +126,10 @@ function Graph({ active, chain, db, screen, greyed, canUndo, canRedo, dispatch, 
           <button onClick={() => flow.fitView({ duration: 200, ...FIT })}>Fit</button>
           <button onClick={() => dispatch({ type: 'undo' })} disabled={!canUndo} title="Undo (Ctrl+Z)">Undo</button>
           <button onClick={() => dispatch({ type: 'redo' })} disabled={!canRedo} title="Redo (Ctrl+Y)">Redo</button>
-          <button disabled title="Coming next: turn this line into a 3D layout and schematic (project 2)">Build in 3D</button>
+          <button className="primary" disabled={!onBuild3d} onClick={onBuild3d} title="Lay this line out in the 3D Editor, ready to export">Build in 3D</button>
+          <label className="straight-toggle" title="Off: a core with copy-paste slices you can grow. On: every machine in one row.">
+            <input type="checkbox" checked={straight} onChange={(e) => onStraight(e.target.checked)} /> Straight line (no copy-paste slices)
+          </label>
         </Panel>
       </ReactFlow>
     </GraphContext.Provider>
