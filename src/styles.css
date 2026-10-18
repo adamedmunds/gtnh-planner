@@ -102,3 +102,5 @@ button.primary { background: #1f4f66; border-color: var(--accent); }
 .browser-actions button { padding: 2px 8px; font-size: 12px; }
 .node-row .more { border: none; background: none; padding: 0 4px; color: var(--muted); }
 .node-row .more:hover { color: var(--text); }
+.icon { display: inline-block; flex: none; vertical-align: middle; image-rendering: pixelated; background-repeat: no-repeat; }
+.icon.fallback { border-radius: 3px; color: #fff; text-align: center; font-weight: 700; line-height: 1.6; overflow: hidden; }

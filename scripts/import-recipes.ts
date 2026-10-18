@@ -2,8 +2,8 @@
  * Imports a `/gtnhplanner dump` file into the planner.
  * Usage: npm run recipes [-- --dump "<path to recipes.json.gz>"]
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import { importDump } from '../src/recipes/importDump';
 
@@ -28,3 +28,16 @@ writeFileSync(
 console.log(`Imported dump format ${data.dumpFormat} (GregTech ${data.gregtech}) into public/data/`);
 console.log(`  ${JSON.stringify(counts)}`);
 if (warnings.length) console.warn(`  ${warnings.length} recipes skipped (first: ${warnings[0]})`);
+
+// Icons from /gtnhplanner icons live next to the dump.
+const iconsIn = join(dirname(dumpPath), 'icons');
+const iconsOut = resolve(outDir, 'icons');
+if (existsSync(join(iconsIn, 'icons.json'))) {
+  rmSync(iconsOut, { recursive: true, force: true });
+  mkdirSync(iconsOut, { recursive: true });
+  const files = readdirSync(iconsIn).filter((f) => f.endsWith('.png') || f === 'icons.json');
+  for (const f of files) copyFileSync(join(iconsIn, f), join(iconsOut, f));
+  console.log(`  copied ${files.filter((f) => f.endsWith('.png')).length} icon sheets`);
+} else {
+  console.log('  no icons yet — run /gtnhplanner icons in game, then npm run recipes again');
+}
