@@ -113,7 +113,7 @@ test.describe('with recipe data', () => {
     await expect(page.locator('.react-flow__edge-text', { hasText: 'Sulfuric Light Fuel' })).toHaveCount(1);
     const box = async (title: string) => (await page.getByTestId('node-card').filter({ hasText: title }).boundingBox())!;
     expect((await box('Distillery')).x).toBeLessThan((await box('Chemical Reactor')).x);
-    await expect(page.getByRole('button', { name: 'Build in 3D' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Build in 3D' })).toBeEnabled(); // machines to build: ready to lay out
   });
 
   test('use this in… builds forward', async ({ page }) => {
