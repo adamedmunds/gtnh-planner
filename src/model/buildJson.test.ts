@@ -1,0 +1,65 @@
+import { BuildParseError, parseBuild, serializeBuild } from './buildJson';
+import type { Build } from './types';
+
+const good: Build = {
+  version: 1,
+  name: 'line',
+  blocks: [
+    { pos: [0, 0, 0], key: 'distillery_lv', facing: 3 },
+    { pos: [-1, 2, 5], key: 'tin_cable_1x', manualMask: { forcedOn: 1, forcedOff: 32 } },
+  ],
+};
+
+test('round-trips a valid build with no warnings', () => {
+  expect(parseBuild(serializeBuild(good))).toEqual({ build: good, warnings: [] });
+});
+
+test.each([
+  ['not json', /valid JSON/],
+  ['[]', /version 1/],
+  ['{"version":2,"blocks":[]}', /version 1/],
+  ['{"version":1,"blocks":"nope"}', /blocks/],
+])('rejects %s', (text, msg) => {
+  expect(() => parseBuild(text)).toThrow(BuildParseError);
+  expect(() => parseBuild(text)).toThrow(msg);
+});
+
+test('skips blocks with bad positions or keys, with a warning each', () => {
+  const { build, warnings } = parseBuild(JSON.stringify({
+    version: 1,
+    name: 'x',
+    blocks: [
+      { pos: ['1', 0, 0], key: 'distillery_lv' },
+      { pos: [0, 0], key: 'distillery_lv' },
+      { pos: [0, 0.5, 0], key: 'distillery_lv' },
+      { pos: [0, 0, 0], key: '' },
+      { pos: [1, 1, 1], key: 'distillery_lv' },
+    ],
+  }));
+  expect(build.blocks).toEqual([{ pos: [1, 1, 1], key: 'distillery_lv' }]);
+  expect(warnings).toHaveLength(4);
+});
+
+test('drops invalid facing and masks but keeps the block', () => {
+  const { build, warnings } = parseBuild(JSON.stringify({
+    version: 1,
+    name: 'x',
+    blocks: [
+      { pos: [0, 0, 0], key: 'distillery_lv', facing: 7 },
+      { pos: [1, 0, 0], key: 'tin_cable_1x', manualMask: { forcedOn: 'a', forcedOff: 0 } },
+      { pos: [2, 0, 0], key: 'tin_cable_1x', manualMask: { forcedOn: 64, forcedOff: 0 } },
+    ],
+  }));
+  expect(build.blocks).toEqual([
+    { pos: [0, 0, 0], key: 'distillery_lv' },
+    { pos: [1, 0, 0], key: 'tin_cable_1x' },
+    { pos: [2, 0, 0], key: 'tin_cable_1x' },
+  ]);
+  expect(warnings).toHaveLength(3);
+});
+
+test('missing or non-string name becomes "untitled"; unknown keys are kept for the exporter to report', () => {
+  const { build } = parseBuild('{"version":1,"blocks":[{"pos":[0,0,0],"key":"future_machine"}]}');
+  expect(build.name).toBe('untitled');
+  expect(build.blocks[0].key).toBe('future_machine');
+});
