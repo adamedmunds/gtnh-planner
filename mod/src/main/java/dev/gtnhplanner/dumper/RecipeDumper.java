@@ -27,12 +27,15 @@ import com.google.gson.stream.JsonWriter;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.ModContainer;
 import gregtech.api.GregTechAPI;
+import gregtech.api.enums.GTValues;
 import gregtech.api.interfaces.metatileentity.IMetaTileEntity;
 import gregtech.api.interfaces.tileentity.RecipeMapWorkable;
+import gregtech.api.metatileentity.implementations.MTEBasicGenerator;
 import gregtech.api.metatileentity.implementations.MTEMultiBlockBase;
 import gregtech.api.metatileentity.implementations.MTETieredMachineBlock;
 import gregtech.api.recipe.RecipeMap;
 import gregtech.api.util.GTRecipe;
+import gregtech.api.util.GTUtility;
 
 /**
  * Streams every visible GregTech recipe to gzipped JSON. Items, fluids and recipe maps are written once in lookup
@@ -40,12 +43,14 @@ import gregtech.api.util.GTRecipe;
  *
  * <pre>
  * {
- *   "format": 1, "gregtech": "5.09.54.183",
+ *   "format": 2, "gregtech": "5.09.54.183",
  *   "recipes":    [{ "m": mapIdx, "eut": 30, "dur": 20, "sv": 0,
  *                    "ii": [[itemIdx, count]], "fi": [[fluidIdx, amount]],
  *                    "io": [[itemIdx, count, chance/10000]], "fo": [[fluidIdx, amount]] }],
  *   "recipeMaps": [{ "id": "gt.recipe.distillery", "name": "Distillery", "amperage": 1 }],
- *   "machines":   [{ "mID": 531, "name": "Basic Distillery", "tier": 1, "maps": [mapIdx] }],
+ *   "machines":   [{ "mID": 531, "name": "Basic Distillery", "tier": 1, "voltage": 32, "maps": [mapIdx],
+ *                    "generator": { "efficiency": 95, "euOut": 32, "ampsOut": 1 } (generators only) }],
+ *   "containers": [[itemIdx, fluidIdx, amount]],
  *   "items":      [{ "id": "gregtech:gt.metaitem.01", "meta": 2032, "name": "Tin Dust" }],
  *   "fluids":     [{ "id": "oil", "name": "Oil" }]
  * }
@@ -56,15 +61,16 @@ import gregtech.api.util.GTRecipe;
 public class RecipeDumper {
 
     private static final Logger LOG = LogManager.getLogger(DumperMod.MODID);
-    public static final int FORMAT = 1;
+    public static final int FORMAT = 2;
 
     public static class Summary {
 
-        public int recipes, recipeMaps, machines, items, fluids, skippedRecipes;
+        public int recipes, recipeMaps, machines, items, fluids, containers, skippedRecipes;
     }
 
     private final Map<String, Integer> itemIndex = new LinkedHashMap<>();
     private final List<String[]> items = new ArrayList<>(); // id, meta, name
+    private final List<ItemStack> itemStacks = new ArrayList<>(); // same order as items, for container lookups
     private final Map<String, Integer> fluidIndex = new LinkedHashMap<>();
     private final List<String[]> fluids = new ArrayList<>(); // id, name
     private final Map<RecipeMap<?>, Integer> mapIndex = new LinkedHashMap<>();
@@ -127,6 +133,12 @@ public class RecipeDumper {
             w.name("machines")
                 .beginArray();
             summary.machines = writeMachines(w);
+            w.endArray();
+
+            // Before items/fluids: may add fluids that only appear inside containers.
+            w.name("containers")
+                .beginArray();
+            summary.containers = writeContainers(w);
             w.endArray();
 
             w.name("items")
@@ -248,6 +260,7 @@ public class RecipeDumper {
         if (idx != null) return idx;
         idx = items.size();
         items.add(new String[] { id, String.valueOf(meta), itemName(s, id, meta) });
+        itemStacks.add(new ItemStack(s.getItem(), 1, meta));
         itemIndex.put(key, idx);
         return idx;
     }
@@ -322,13 +335,39 @@ public class RecipeDumper {
             } catch (RuntimeException e) {
                 name = mte.getMetaName();
             }
+            Integer generatorEfficiency = null;
+            if (mte instanceof MTEBasicGenerator) {
+                try {
+                    generatorEfficiency = ((MTEBasicGenerator) mte).getEfficiency();
+                } catch (RuntimeException e) {
+                    LOG.warn("Cannot read generator efficiency of machine {}: {}", id, e.toString());
+                }
+            }
             w.beginObject();
             w.name("mID")
                 .value(id);
             w.name("name")
                 .value(name);
-            if (mte instanceof MTETieredMachineBlock) w.name("tier")
-                .value(((MTETieredMachineBlock) mte).mTier);
+            if (mte instanceof MTETieredMachineBlock) {
+                byte tier = ((MTETieredMachineBlock) mte).mTier;
+                w.name("tier")
+                    .value(tier);
+                // V[tier] directly: maxEUInput()/maxEUOutput() dereference the base tile entity, null on prototypes.
+                if (tier >= 0 && tier < GTValues.V.length) w.name("voltage")
+                    .value(GTValues.V[tier]);
+            }
+            if (generatorEfficiency != null && mte instanceof MTETieredMachineBlock) {
+                byte tier = ((MTETieredMachineBlock) mte).mTier;
+                w.name("generator")
+                    .beginObject();
+                w.name("efficiency")
+                    .value(generatorEfficiency);
+                w.name("euOut")
+                    .value(GTValues.V[tier]);
+                w.name("ampsOut")
+                    .value(1);
+                w.endObject();
+            }
             w.name("multiblock")
                 .value(mte instanceof MTEMultiBlockBase);
             w.name("maps")
@@ -336,6 +375,28 @@ public class RecipeDumper {
             for (int idx : maps) w.value(idx);
             w.endArray();
             w.endObject();
+            count++;
+        }
+        return count;
+    }
+
+    /** For every item seen in a recipe that holds a fluid (cells, buckets, ...): which fluid and how much. */
+    private int writeContainers(JsonWriter w) throws IOException {
+        int count = 0;
+        int known = itemStacks.size(); // only items already referenced; fluid() may grow the fluid table
+        for (int idx = 0; idx < known; idx++) {
+            FluidStack f;
+            try {
+                f = GTUtility.getFluidForFilledItem(itemStacks.get(idx), true);
+            } catch (RuntimeException e) {
+                continue;
+            }
+            if (f == null || f.getFluid() == null || f.amount <= 0) continue;
+            w.beginArray()
+                .value(idx)
+                .value(fluid(f))
+                .value(f.amount)
+                .endArray();
             count++;
         }
         return count;

@@ -54,12 +54,13 @@ public class DumpCommand extends CommandBase {
                 sender,
                 EnumChatFormatting.GREEN,
                 String.format(
-                    "Dumped %d recipes in %d maps, %d machines, %d items, %d fluids in %.1fs",
+                    "Dumped %d recipes in %d maps, %d machines, %d items, %d fluids, %d containers in %.1fs",
                     s.recipes,
                     s.recipeMaps,
                     s.machines,
                     s.items,
                     s.fluids,
+                    s.containers,
                     (System.currentTimeMillis() - start) / 1000.0));
             say(sender, EnumChatFormatting.GREEN, "Saved to " + out.getAbsolutePath());
             if (s.skippedRecipes > 0) {
