@@ -1,0 +1,21 @@
+{
+	"modListVersion": 2,
+	"modList": [{
+		"modid": "${modId}",
+		"name": "${modName}",
+		"description": "Dumps GregTech recipe maps, machines, items and fluids to JSON for the GTNH Planner. Run /gtnhplanner dump.",
+		"version": "${modVersion}",
+		"mcversion": "${minecraftVersion}",
+		"url": "",
+		"updateUrl": "",
+		"authorList": ["gtnh-planner"],
+		"credits": "Setup modelled on NESQL Exporter by D-Cysteine",
+		"logoFile": "",
+		"screenshots": [],
+		"parent": "",
+		"requiredMods": ["gregtech"],
+		"dependencies": ["gregtech"],
+		"dependants": [],
+		"useDependencyInformation": true
+	}]
+}
