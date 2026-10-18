@@ -24,6 +24,8 @@ test.each([
   ['steel_pipe_large', 5133, 7, 'fluidPipe'],
   ['tin_item_pipe_small', 5590, 7, 'itemPipe'],
   ['electrum_item_pipe_normal', 5612, 6, 'itemPipe'],
+  ['combustion_generator_mv', 1111, 1, 'machine'],
+  ['transformer_mv_lv', 21, 1, 'machine'],
 ] as const)('%s has mID %i, meta %i, kind %s', (key, mID, meta, kind) => {
   const e = getEntry(key);
   expect(e).toBeDefined();
@@ -37,7 +39,7 @@ test('machines have tier casing + front overlay textures; conduits have thicknes
     if (e.kind === 'machine') {
       expect(e.tier).toBeDefined();
       expect(e.textures.side).toBe(`blocks/iconsets/MACHINE_${e.tier}_SIDE.png`);
-      expect(e.textures.front).toMatch(/^blocks\/basicmachines\/[a-z_]+\/OVERLAY_FRONT\.png$/);
+      expect(e.textures.front).toMatch(/^blocks\/(basicmachines\/[a-z_]+|iconsets)\/OVERLAY_[A-Z_]+\.png$/);
     } else {
       expect(e.thickness).toBeGreaterThan(0);
       expect(e.thickness).toBeLessThanOrEqual(1);

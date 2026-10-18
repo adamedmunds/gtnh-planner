@@ -9,8 +9,8 @@ test('test layout only uses catalog keys and exports without warnings', () => {
   expect(size).toEqual({ width: 15, height: 2, length: 6 });
 });
 
-test('test layout includes every catalog machine at least once', () => {
+test('test layout includes every processing machine at least once', () => {
   const used = new Set(TEST_LAYOUT.blocks.map((b) => b.key));
-  const missing = CATALOG_ENTRIES.filter((e) => e.kind === 'machine' && !used.has(e.key)).map((e) => e.key);
+  const missing = CATALOG_ENTRIES.filter((e) => e.group === 'Machines' && !used.has(e.key)).map((e) => e.key);
   expect(missing).toEqual([]);
 });

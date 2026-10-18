@@ -107,8 +107,46 @@ function itemPipeEntries(): CatalogEntry[] {
   })));
 }
 
+// Power blocks. MV combustion generator: COMBUSTION_GENERATOR_MV; MV→LV transformer: transformer_MV_LV (tier LV).
+// Both are tiered machine blocks with meta 1 (verified in the user's world save).
+const POWER: CatalogEntry[] = [
+  {
+    key: 'combustion_generator_mv',
+    name: 'MV Combustion Generator',
+    kind: 'machine',
+    mID: 1111,
+    meta: 1,
+    tier: 'MV',
+    group: 'Power',
+    color: '#b35a3c',
+    textures: {
+      top: 'blocks/iconsets/DIESEL_GENERATOR_TOP.png',
+      side: 'blocks/iconsets/MACHINE_MV_SIDE.png',
+      bottom: 'blocks/iconsets/MACHINE_MV_BOTTOM.png',
+      front: 'blocks/iconsets/OVERLAY_ENERGY_OUT.png',
+    },
+  },
+  {
+    key: 'transformer_mv_lv',
+    name: 'MV→LV Transformer',
+    kind: 'machine',
+    mID: 21,
+    meta: 1,
+    tier: 'LV',
+    group: 'Power',
+    color: '#5a7fb3',
+    textures: {
+      top: 'blocks/iconsets/MACHINE_LV_TOP.png',
+      side: 'blocks/iconsets/MACHINE_LV_SIDE.png',
+      bottom: 'blocks/iconsets/MACHINE_LV_BOTTOM.png',
+      front: 'blocks/iconsets/OVERLAY_ENERGY_IN.png',
+    },
+  },
+];
+
 export const CATALOG_ENTRIES: readonly CatalogEntry[] = [
   ...machineEntries(),
+  ...POWER,
   ...cableEntries(),
   ...fluidPipeEntries(),
   ...itemPipeEntries(),
