@@ -16,6 +16,7 @@ function Row({ row, input }: { row: ResourceRow; input: boolean }) {
       <div className="node-row">
         <span className={row.unmet && !row.external ? 'unmet' : ''}>{row.name}</span>
         <span className="num">{formatRate(row.rate, row.kind)}</span>
+        <button className="more nodrag" aria-label={`Options for ${row.name}`} title="Target, supply limit, bought in" onClick={(e) => openMenu(e, row.key)}>⋯</button>
         {input && row.unmet && (
           row.external
             ? <span className="tag">bought in</span>

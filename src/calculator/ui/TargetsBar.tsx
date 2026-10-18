@@ -11,7 +11,7 @@ export function TargetsBar({ chain, db, dispatch }: { chain: Chain; db: RecipeDb
   const empty = !chain.targets.length && !chain.limits.length && !chain.externals.length;
   return (
     <div className="targets" data-testid="targets-bar">
-      {empty && <span className="hint">Right-click any item or fluid to set a target, a supply limit, or mark it bought in.</span>}
+      {empty && <span className="hint">Set a target with the buttons under an item in the recipe browser, or with ⋯ (or right-click) on any item or fluid.</span>}
       {chain.targets.map((t) => (
         <span key={`t:${t.key}`} className="chip target" onContextMenu={(e) => openMenu(e, t.key)}>
           <b>Make</b> {name(t.key)}{' '}

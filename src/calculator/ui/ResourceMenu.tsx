@@ -8,10 +8,13 @@ import { formatRate } from '../format';
 import { resourceInfo } from '../graphModel';
 
 type Open = (e: React.MouseEvent, key: ResourceKey) => void;
-const MenuContext = createContext<Open>(() => {});
+export interface ResourceAction { label: string; run(): void }
+const MenuContext = createContext<{ open: Open; actionsFor(key: ResourceKey): ResourceAction[] }>({ open: () => {}, actionsFor: () => [] });
 
-/** Right-click handler for anything that shows a resource. */
-export const useResourceMenu = () => useContext(MenuContext);
+/** Opens the resource menu: on right-click at the pointer, or from a button just below it. */
+export const useResourceMenu = () => useContext(MenuContext).open;
+/** The menu's actions for a resource, for showing them as buttons. */
+export const useResourceActions = () => useContext(MenuContext).actionsFor;
 
 const nice = (n: number | undefined) => (n !== undefined && n > 0 ? Number(n.toPrecision(4)) : 1);
 
@@ -28,7 +31,23 @@ export function ResourceMenuProvider({ chain, db, result, dispatch, onShow, chil
   const [menu, setMenu] = useState<{ x: number; y: number; key: ResourceKey } | null>(null);
   const open: Open = (e, key) => {
     e.preventDefault();
-    setMenu({ x: e.clientX, y: e.clientY, key });
+    if (e.type === 'click') {
+      const r = e.currentTarget.getBoundingClientRect();
+      setMenu({ x: r.left, y: r.bottom, key });
+    } else setMenu({ x: e.clientX, y: e.clientY, key });
+  };
+
+  const actionsFor = (key: ResourceKey): ResourceAction[] => {
+    const { kind } = resourceInfo(key, db);
+    const made = nice(result?.outputs.get(key) ?? result?.byproducts.get(key));
+    const used = nice(result?.inputs.get(key));
+    const external = chain.externals.includes(key);
+    return [
+      { label: `Make ${formatRate(made, kind)}`, run: () => dispatch({ type: 'setTarget', target: { key, rate: made } }) },
+      { label: 'Maximise', run: () => dispatch({ type: 'setTarget', target: { key, maximise: true } }) },
+      { label: `Supply limit ${formatRate(used, kind)}`, run: () => dispatch({ type: 'setLimit', key, maxRate: used }) },
+      { label: external ? 'Unmark bought in' : 'Mark bought in', run: () => dispatch({ type: 'setExternal', key, on: !external }) },
+    ];
   };
 
   useEffect(() => {
@@ -45,24 +64,12 @@ export function ResourceMenuProvider({ chain, db, result, dispatch, onShow, chil
     };
   }, [menu]);
 
-  let items: { label: string; run(): void }[] = [];
-  if (menu) {
-    const { key } = menu;
-    const { kind } = resourceInfo(key, db);
-    const made = nice(result?.outputs.get(key) ?? result?.byproducts.get(key));
-    const used = nice(result?.inputs.get(key));
-    const external = chain.externals.includes(key);
-    items = [
-      { label: `Make ${formatRate(made, kind)}`, run: () => dispatch({ type: 'setTarget', target: { key, rate: made } }) },
-      { label: 'Maximise', run: () => dispatch({ type: 'setTarget', target: { key, maximise: true } }) },
-      { label: `Supply limit ${formatRate(used, kind)}`, run: () => dispatch({ type: 'setLimit', key, maxRate: used }) },
-      { label: external ? 'Unmark bought in' : 'Mark bought in', run: () => dispatch({ type: 'setExternal', key, on: !external }) },
-      { label: 'Show in recipe browser', run: () => onShow(key) },
-    ];
-  }
+  const items: ResourceAction[] = menu
+    ? [...actionsFor(menu.key), { label: 'Show in recipe browser', run: () => onShow(menu.key) }]
+    : [];
 
   return (
-    <MenuContext.Provider value={open}>
+    <MenuContext.Provider value={{ open, actionsFor }}>
       {children}
       {menu && (
         <div className="menu" role="menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>

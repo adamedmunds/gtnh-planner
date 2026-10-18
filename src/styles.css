@@ -98,3 +98,7 @@ button.primary { background: #1f4f66; border-color: var(--accent); }
 .suggest-list { list-style: none; margin: 4px 0; padding: 4px; max-height: 260px; overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
 .suggest-list li { display: flex; gap: 6px; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .suggest-meta { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.browser-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.browser-actions button { padding: 2px 8px; font-size: 12px; }
+.node-row .more { border: none; background: none; padding: 0 4px; color: var(--muted); }
+.node-row .more:hover { color: var(--text); }

@@ -143,6 +143,16 @@ test.describe('with recipe data', () => {
     await expect(page.getByTestId('suggestion')).toHaveCount(0);
   });
 
+  test('targets and limits can be set with visible buttons, no right-click', async ({ page }) => {
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await page.getByTestId('browser-actions').getByRole('button', { name: 'Maximise' }).click();
+    await expect(page.getByTestId('targets-bar')).toContainText('as much as possible');
+    await page.locator('[data-testid=node-row][data-key="item:gregtech:gt.metaitem.01@30001"]').getByRole('button', { name: 'Options for Hydrogen Cell' }).click();
+    await page.getByRole('menuitem', { name: /^Supply limit/ }).click();
+    await expect(page.getByLabel('Supply limit for Hydrogen Cell')).toBeVisible();
+  });
+
   test('the calculator tab loads recipes and is remembered', async ({ page }) => {
     await openCalculator(page);
     await page.reload();

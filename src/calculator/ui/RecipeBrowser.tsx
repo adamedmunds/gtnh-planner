@@ -7,7 +7,7 @@ import type { ChainAction } from '../chainState';
 import { formatNumber } from '../format';
 import { resourceInfo } from '../graphModel';
 import { newGeneratorNode, newRecipeNode } from '../newNodes';
-import { useResourceMenu } from './ResourceMenu';
+import { useResourceActions, useResourceMenu } from './ResourceMenu';
 
 const PAGE = 50;
 type Tab = 'made' | 'used' | 'burned';
@@ -48,6 +48,7 @@ export interface RecipeBrowserProps {
 
 export function RecipeBrowser({ db, chain, dispatch, selected, onSelect, toast }: RecipeBrowserProps) {
   const openMenu = useResourceMenu();
+  const actionsFor = useResourceActions();
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<Tab>('made');
   const [shown, setShown] = useState(PAGE);
@@ -96,6 +97,9 @@ export function RecipeBrowser({ db, chain, dispatch, selected, onSelect, toast }
           <h2 data-testid="browser-selected" onContextMenu={(e) => openMenu(e, selected)} title="Right-click for targets and limits">
             {resourceInfo(selected, db).name}
           </h2>
+          <div className="browser-actions" data-testid="browser-actions">
+            {actionsFor(selected).map((a) => <button key={a.label} onClick={a.run}>{a.label}</button>)}
+          </div>
           <div className="tabs">
             <button className={current === 'made' ? 'on' : ''} onClick={() => { setTab('made'); setShown(PAGE); }}>Made by ({made.length})</button>
             <button className={current === 'used' ? 'on' : ''} onClick={() => { setTab('used'); setShown(PAGE); }}>Used in ({used.length})</button>
