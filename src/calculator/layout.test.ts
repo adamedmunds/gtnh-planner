@@ -1,5 +1,6 @@
 import { emptyChain, type Chain, type ChainNode } from '../calc/chain';
 import { K } from '../test/oilBerryDb';
+import { chainReducer } from './chainState';
 import { COLUMN, ROW, autoArrange, placeNewNode } from './layout';
 import { db, reference, rn } from './testChains';
 
@@ -13,13 +14,15 @@ test('oil line arranges left to right', () => {
   expect(p.cr.x).toBeLessThan(p.el.x);
   expect(p.gen.x).toBe(p.el.x);
   expect(p.gen.y).not.toBe(p.el.y);
-  expect(p.fe).toEqual({ x: 0, y: 0 });
-  expect(p.dist.x).toBe(COLUMN);
+  // The Oil Berry have box takes the first column.
+  expect(p.fe).toEqual({ x: COLUMN, y: 0 });
+  expect(p.dist.x).toBe(2 * COLUMN);
 });
 
 test('a cycle does not hang and every node gets a position', () => {
   const p = autoArrange(chainOf(rn('cr', 3, 421), rn('el', 4, 372)), db);
-  expect(Object.keys(p).sort()).toEqual(['cr', 'el']);
+  expect(p.cr).toBeDefined();
+  expect(p.el).toBeDefined();
   expect(p.cr.x).not.toBe(p.el.x);
 });
 
@@ -44,4 +47,20 @@ test('placement avoids sitting on a node', () => {
   const p = placeNewNode(chain, db, { inputs: [K.oilBerry], outputs: [K.oil] });
   expect(p.x).toBe(500 - COLUMN);
   for (const n of chain.nodes) expect(Math.hypot(n.position.x - p.x, n.position.y - p.y)).toBeGreaterThanOrEqual(100);
+});
+
+test('layout: have boxes left of every machine, the get box right of every machine', () => {
+  const chain: Chain = { ...reference(), externals: [K.oilBerry] };
+  const p = autoArrange(chain, db);
+  const machineXs = chain.nodes.map((n) => p[n.id].x);
+  expect(p[`have:${K.oilBerry}`].x).toBeLessThan(Math.min(...machineXs));
+  expect(p[`get:${K.lightFuel}`].x).toBeGreaterThan(Math.max(...machineXs));
+});
+
+test('arrange stores box positions in chain.layout', () => {
+  const chain: Chain = { ...reference(), externals: [K.oilBerry] };
+  const next = chainReducer(chain, { type: 'arrange', positions: autoArrange(chain, db) });
+  expect(next.layout?.[`have:${K.oilBerry}`]).toEqual({ x: 0, y: 0 });
+  expect(next.layout?.[`get:${K.lightFuel}`]).toBeDefined();
+  expect(chainReducer(emptyChain(), { type: 'arrange', positions: { 'get:x': { x: 1, y: 1 } } }).layout).toEqual({ 'get:x': { x: 1, y: 1 } });
 });

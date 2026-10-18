@@ -57,8 +57,14 @@ export function chainReducer(chain: Chain, a: ChainAction): Chain {
     case 'moveNode':
       return updateNode(chain, a.id, (n) => (n.position.x === a.position.x && n.position.y === a.position.y ? n : { ...n, position: a.position }));
     case 'arrange': {
-      if (!chain.nodes.some((n) => a.positions[n.id])) return chain;
-      return { ...chain, nodes: chain.nodes.map((n) => (a.positions[n.id] ? { ...n, position: a.positions[n.id] } : n)) };
+      // Machine positions live on the nodes; have/get box positions in `layout`.
+      const boxes = Object.entries(a.positions).filter(([k]) => k.startsWith('have:') || k.startsWith('get:'));
+      if (!chain.nodes.some((n) => a.positions[n.id]) && !boxes.length) return chain;
+      return {
+        ...chain,
+        nodes: chain.nodes.map((n) => (a.positions[n.id] ? { ...n, position: a.positions[n.id] } : n)),
+        ...(boxes.length ? { layout: { ...chain.layout, ...Object.fromEntries(boxes) } } : {}),
+      };
     }
     case 'setMachine':
       return updateNode(chain, a.id, (n) => (n.machineMID === a.machineMID ? n : { ...n, machineMID: a.machineMID }));

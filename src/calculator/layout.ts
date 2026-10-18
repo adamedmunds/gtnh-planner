@@ -2,7 +2,8 @@ import type { Chain, Position } from '../calc/chain';
 import { nodeRates } from '../calc/rates';
 import type { RecipeDb } from '../recipes/db';
 import type { ResourceKey } from '../recipes/types';
-import { chainEdges } from './graphModel';
+import { haveBoxes, productOf } from './drive';
+import { chainEdges, getId, haveId } from './graphModel';
 
 export const COLUMN = 360;
 export const ROW = 220;
@@ -40,13 +41,27 @@ export function autoArrange(chain: Chain, db: RecipeDb): Record<string, Position
     }
     return d;
   };
+  // What I have boxes take the first column; the What I get box goes after the last machine.
+  const haves = haveBoxes(chain);
+  const shift = haves.length ? 1 : 0;
   const rows = new Map<number, number>();
   const positions: Record<string, Position> = {};
+  haves.forEach((h, i) => (positions[haveId(h.key)] = { x: 0, y: i * ROW }));
+  let last = -1;
   for (const id of ids) {
-    const col = depthOf(id);
+    const col = depthOf(id) + shift;
     const row = rows.get(col) ?? 0;
     rows.set(col, row + 1);
     positions[id] = { x: col * COLUMN, y: row * ROW };
+    last = Math.max(last, col);
+  }
+  const product = productOf(chain, db);
+  if (product) {
+    const maker = chain.nodes.find((n) => {
+      const r = nodeRates(n, db);
+      return r.valid && (r.perMachine.get(product.key) ?? 0) > 0;
+    });
+    positions[getId(product.key)] = { x: (last + 1) * COLUMN, y: maker ? positions[maker.id].y : 0 };
   }
   return positions;
 }

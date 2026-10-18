@@ -1,9 +1,12 @@
 import type { Chain, ChainNode } from '../calc/chain';
 import { generatorOptions, machineOptions } from '../calc/machines';
+import { tierName } from '../calc/tiers';
 import { nodeRates } from '../calc/rates';
 import type { ChainResult, NodeResult } from '../calc/solve';
 import type { RecipeDb } from '../recipes/db';
 import { EU, type MachineRef, type Resource, type ResourceKey } from '../recipes/types';
+import { haveBoxes, type ScreenSolve } from './drive';
+import type { RateRow } from './overview';
 
 export interface ResourceRow {
   key: ResourceKey;
@@ -14,6 +17,8 @@ export interface ResourceRow {
   /** An input nothing in the chain makes. */
   unmet: boolean;
   external: boolean;
+  /** Buttons on the row: add what makes it, I have it, use it in something, I want it. */
+  actions: ('make' | 'have' | 'use' | 'want')[];
 }
 
 export interface NodeView {
@@ -30,7 +35,19 @@ export interface NodeView {
   outputs: ResourceRow[];
   invalid?: string;
   approximate: boolean;
+  tier?: string;
+  maxMachines?: number;
+  /** Icon key of the machine block. */
+  machineIcon: ResourceKey;
 }
+
+/** A "What I have" box on the graph. */
+export interface HaveView { id: string; key: ResourceKey; name: string; kind: Resource['kind']; amount?: number; used: number }
+/** The "What I get" box on the graph. */
+export interface GetView { id: string; key: ResourceKey; name: string; kind: Resource['kind']; rate: number; typed?: number; provisional: boolean }
+
+export const haveId = (key: ResourceKey) => `have:${key}`;
+export const getId = (key: ResourceKey) => `get:${key}`;
 
 export interface EdgeView { id: string; source: string; target: string; key: ResourceKey; flow: number }
 
@@ -79,18 +96,19 @@ export function producedKeys(chain: Chain, db: RecipeDb): Set<ResourceKey> {
   return out;
 }
 
-export function nodeView(node: ChainNode, chain: Chain, db: RecipeDb, result?: NodeResult): NodeView {
+export function nodeView(node: ChainNode, chain: Chain, db: RecipeDb, result?: NodeResult, product?: ResourceKey): NodeView {
   const rates = nodeRates(node, db);
   const produced = producedKeys(chain, db);
   const externals = new Set(chain.externals);
   const solved = rates.valid && result !== undefined && !result.invalid;
-  const row = (key: ResourceKey, perMachine: number, input: boolean): ResourceRow => ({
-    key,
-    ...resourceInfo(key, db),
-    rate: Math.abs(solved ? result!.rates.get(key) ?? 0 : perMachine),
-    unmet: input && !produced.has(key),
-    external: externals.has(key),
-  });
+  const row = (key: ResourceKey, perMachine: number, input: boolean): ResourceRow => {
+    const unmet = input && !produced.has(key);
+    const external = externals.has(key);
+    const actions: ResourceRow['actions'] = input
+      ? (unmet && !external ? ['make', 'have'] : [])
+      : (key === product ? ['use'] : ['use', 'want']);
+    return { key, ...resourceInfo(key, db), rate: Math.abs(solved ? result!.rates.get(key) ?? 0 : perMachine), unmet, external, actions };
+  };
 
   let title: string;
   const inputs: ResourceRow[] = [];
@@ -120,10 +138,14 @@ export function nodeView(node: ChainNode, chain: Chain, db: RecipeDb, result?: N
     inputs.push(row(node.fuelKey, rates.valid ? rates.perMachine.get(node.fuelKey) ?? 0 : 0, true));
   }
 
+  const current = options(node, db).find((m) => m.mID === node.machineMID);
   return {
     id: node.id,
     kind: node.kind,
     title,
+    ...(current && tierName(current) ? { tier: tierName(current) } : {}),
+    ...(node.maxMachines !== undefined ? { maxMachines: node.maxMachines } : {}),
+    machineIcon: `item:gregtech:gt.blockmachines@${node.machineMID}`,
     machineMID: node.machineMID,
     machineOptions: options(node, db).map((m) => ({ mID: m.mID, name: m.name })),
     ...(node.kind === 'recipe' ? { overclock: node.overclock } : {}),
@@ -166,6 +188,67 @@ export function chainEdges(chain: Chain, db: RecipeDb, result?: ChainResult): Ed
         const flow = made > 0 ? -rate(c) * covered * (rate(p) / made) : 0;
         edges.push({ id: `${p}>${c}:${key}`, source: p, target: c, key, flow });
       }
+    }
+  }
+  return edges;
+}
+
+/** The What I have boxes, the What I get box and the other things the line makes. */
+export function boxViews(chain: Chain, db: RecipeDb, screen?: ScreenSolve): { haves: HaveView[]; get?: GetView; alsoMade: RateRow[] } {
+  const result = screen?.result;
+  const haves = haveBoxes(chain).map((h): HaveView => ({
+    id: haveId(h.key),
+    key: h.key,
+    ...resourceInfo(h.key, db),
+    ...(h.amount !== undefined ? { amount: h.amount } : {}),
+    used: result?.inputs.get(h.key) ?? 0,
+  }));
+  const product = screen?.product;
+  const [t] = chain.targets;
+  const get: GetView | undefined = product && {
+    id: getId(product.key),
+    key: product.key,
+    ...resourceInfo(product.key, db),
+    rate: result?.outputs.get(product.key) ?? result?.byproducts.get(product.key) ?? 0,
+    ...(t && t.key === product.key && 'rate' in t ? { typed: t.rate } : {}),
+    provisional: product.provisional,
+  };
+  const alsoMade = [...(result?.byproducts ?? [])]
+    .filter(([k]) => k !== product?.key)
+    .map(([key, rate]) => ({ key, ...resourceInfo(key, db), rate }))
+    .sort((a, b) => b.rate - a.rate);
+  return { haves, ...(get ? { get } : {}), alsoMade };
+}
+
+/** Machine-to-machine edges plus what flows out of the have boxes and into the get box. */
+export function screenEdges(chain: Chain, db: RecipeDb, screen?: ScreenSolve): EdgeView[] {
+  const result = screen?.result;
+  const edges = chainEdges(chain, db, result);
+  const rates = new Map(chain.nodes.map((n) => [n.id, nodeRates(n, db)]));
+  const total = (id: string, key: ResourceKey) => result?.nodes.find((r) => r.id === id)?.rates.get(key) ?? 0;
+  const touching = (key: ResourceKey, sign: 1 | -1) =>
+    chain.nodes.filter((n) => {
+      const r = rates.get(n.id)!;
+      return r.valid && sign * (r.perMachine.get(key) ?? 0) > 0;
+    }).map((n) => n.id);
+
+  for (const h of haveBoxes(chain)) {
+    const consumers = touching(h.key, -1);
+    const used = consumers.reduce((s, id) => s - total(id, h.key), 0);
+    const fromOutside = result?.inputs.get(h.key) ?? 0;
+    for (const c of consumers) {
+      const flow = used > 0 ? fromOutside * (-total(c, h.key) / used) : 0;
+      edges.push({ id: `${haveId(h.key)}>${c}`, source: haveId(h.key), target: c, key: h.key, flow });
+    }
+  }
+  const product = screen?.product;
+  if (product) {
+    const producers = touching(product.key, 1);
+    const made = producers.reduce((s, id) => s + total(id, product.key), 0);
+    const out = result?.outputs.get(product.key) ?? result?.byproducts.get(product.key) ?? 0;
+    for (const p of producers) {
+      const flow = made > 0 ? out * (total(p, product.key) / made) : 0;
+      edges.push({ id: `${p}>${getId(product.key)}`, source: p, target: getId(product.key), key: product.key, flow });
     }
   }
   return edges;

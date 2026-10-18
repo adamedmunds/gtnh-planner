@@ -1,6 +1,8 @@
 import { emptyChain, type Chain } from '../calc/chain';
 import { K } from '../test/oilBerryDb';
-import { chainEdges, nodeView } from './graphModel';
+import { createHighsSolver } from '../calc/solver/highs';
+import { solveForScreen } from './drive';
+import { boxViews, chainEdges, nodeView, screenEdges } from './graphModel';
 import { db, gen, line, reference, rn, solve } from './testChains';
 
 const within = (actual: number, expected: number, pct = 0.5) =>
@@ -23,7 +25,7 @@ test('distillery card shows solved totals', async () => {
 test('an unsolved card shows per-machine rates and flags unmet inputs', () => {
   const chain: Chain = { ...emptyChain(), nodes: [rn('fe', 0, 511)] };
   const v = nodeView(chain.nodes[0], chain, db);
-  expect(v.inputs).toEqual([{ key: K.oilBerry, name: 'Oil Berry', kind: 'item', rate: 1, unmet: true, external: false }]);
+  expect(v.inputs).toEqual([{ key: K.oilBerry, name: 'Oil Berry', kind: 'item', rate: 1, unmet: true, external: false, actions: ['make', 'have'] }]);
   expect(v.outputs[0]).toMatchObject({ key: K.oil, rate: 100, unmet: false });
   expect(v.eut).toBe(30);
 });
@@ -73,4 +75,46 @@ test('edges exist with zero flow before a solve', () => {
 
 test('a lone generator has no edges', () => {
   expect(chainEdges({ ...emptyChain(), nodes: [gen] }, db)).toEqual([]);
+});
+
+describe('screen boxes', () => {
+  const screen = async (chain: Chain) => solveForScreen(chain, db, await createHighsSolver());
+
+  test('reference: one have box and a get box', async () => {
+    const chain = { ...reference(), externals: [K.oilBerry] };
+    const b = boxViews(chain, db, await screen(chain));
+    expect(b.haves).toEqual([expect.objectContaining({ id: `have:${K.oilBerry}`, key: K.oilBerry, name: 'Oil Berry', amount: 5.57 })]);
+    within(b.haves[0].used, 5.57);
+    expect(b.get).toMatchObject({ id: `get:${K.lightFuel}`, key: K.lightFuel, provisional: false });
+    within(b.get!.rate, 513.25);
+    expect(b.get!.typed).toBeUndefined();
+  });
+
+  test('Also made lists Sulfur Dust, not the product', async () => {
+    const chain = reference();
+    const b = boxViews(chain, db, await screen(chain));
+    expect(b.alsoMade.map((r) => r.key)).toEqual([K.sulfur]);
+  });
+
+  test('row actions: unmet input → make/have; outputs → use/want, no want on the product', () => {
+    const chain: Chain = { ...emptyChain(), nodes: [rn('cr', 3, 421)], targets: [{ key: K.lightFuel, maximise: true }] };
+    const v = nodeView(chain.nodes[0], chain, db, undefined, K.lightFuel);
+    expect(v.inputs.find((r) => r.key === K.hydrogenCell)!.actions).toEqual(['make', 'have']);
+    expect(v.outputs.find((r) => r.key === K.lightFuel)!.actions).toEqual(['use']);
+    expect(v.outputs.find((r) => r.key === K.h2sCell)!.actions).toEqual(['use', 'want']);
+    expect(v.tier).toBe('LV');
+    expect(v.machineIcon).toBe('item:gregtech:gt.blockmachines@421');
+  });
+
+  test('an input you have shows no make/have buttons', () => {
+    const chain: Chain = { ...emptyChain(), nodes: [rn('fe', 0, 511)], externals: [K.oilBerry] };
+    expect(nodeView(chain.nodes[0], chain, db).inputs[0].actions).toEqual([]);
+  });
+
+  test('edges from the have box and into the get box', async () => {
+    const chain = { ...reference(), externals: [K.oilBerry] };
+    const edges = screenEdges(chain, db, await screen(chain));
+    within(edges.find((e) => e.source === `have:${K.oilBerry}` && e.target === 'fe')!.flow, 5.57);
+    within(edges.find((e) => e.source === 'cr' && e.target === `get:${K.lightFuel}`)!.flow, 513.25);
+  });
 });
