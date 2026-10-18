@@ -116,7 +116,7 @@ interface Build { version: 1; name: string; blocks: PlacedBlock[] }
 ```
 
 - Blocks are stored in a `Map<string, PlacedBlock>` keyed `"x,y,z"` in the editor; serialized as an array.
-- **Auto-connect rule:** a cable/pipe connects on side *n* if the neighbour on that side is (a) a cable/pipe of the same `kind` and same material family, or (b) any machine. Then apply `forcedOn` / `forcedOff`. Connection is computed symmetrically for cable↔cable.
+- **Auto-connect rule:** a cable/pipe connects on side *n* if the neighbour on that side is (a) a cable/pipe of the same `kind` (any material — GT connects e.g. tin cable to copper cable, bronze pipe to steel pipe), or (b) any machine. Then apply `forcedOn` / `forcedOff`. Cable↔cable connections are made symmetric: if either side forces off, both sides are off.
 - Pure functions: `placeBlock`, `removeBlock`, `rotateFacing`, `toggleSide`, `computeConnections(build)`, `billOfMaterials(build)`.
 - Facing on placement: machine front faces the camera-side face that was clicked (i.e. opposite the placement direction), horizontal only by default.
 
