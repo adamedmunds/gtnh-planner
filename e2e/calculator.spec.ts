@@ -141,6 +141,40 @@ test.describe('with recipe data', () => {
     await expect(page.getByTestId('node-card')).toHaveCount(4, { timeout: 30_000 });
   });
 
+  test('type what you have, what you want, and a machine count', async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await addMaker(page, KEY.sulfuricLightFuel, 'Distillery', /50 L Oil/);
+    await addMaker(page, KEY.oil, 'Oil Berry', /Fluid Extractor/);
+    await addMaker(page, KEY.hydrogenCell, 'Hydrogen Sulfide', /Electrolyzer/);
+    await page.locator(`[data-testid=node-row][data-key="${KEY.oilBerry}"]`).first().getByRole('button', { name: 'I have this' }).click();
+
+    const have = page.getByLabel('How much Oil Berry you have');
+    await have.fill('5.57');
+    await have.press('Enter');
+    await expect(page.getByTestId('summary-get')).toContainText('557 L/s'); // 5.57 berries × 100 L; no generator yet, so power comes from outside
+
+    const count = page.getByLabel('Machines of Basic Distillery');
+    await count.fill('4');
+    await count.press('Enter');
+    await expect(page.getByTestId('summary-get')).toContainText('133.3 L/s');
+    await count.fill('');
+    await count.press('Enter');
+
+    const want = page.getByLabel('How much Light Fuel you want');
+    await want.fill('1000');
+    await want.press('Enter');
+    await expect(page.getByTestId('summary-problems')).toContainText('Needs');
+    await expect(page.getByTestId('summary-problems')).toContainText('Oil Berry');
+    await expect(page.getByTestId('drive-line')).toHaveText('Making 1,000 L/s Light Fuel');
+
+    await page.getByTestId('drive-line').click(); // leave the field so Ctrl+Z reaches the calculator
+    await page.keyboard.press('Control+z');
+    await expect(page.getByTestId('summary-problems')).toHaveCount(0);
+    await expect(page.locator('.calc-root')).not.toContainText(/target|limit|maximi[sz]e|bought in/i);
+  });
+
   test('the calculator tab loads recipes and is remembered', async ({ page }) => {
     await openCalculator(page);
     await page.reload();

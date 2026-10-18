@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ResourceKey } from '../../recipes/types';
-import { overview } from '../overview';
+import { driveText, screenProblems } from '../drive';
+import { summary } from '../overview';
 import { useSolve } from '../useSolve';
 import { ChainGraph } from './ChainGraph';
-import { OverviewPanel } from './OverviewPanel';
+import { SummaryPanel } from './SummaryPanel';
 import { chainReducer, type ChainAction } from '../chainState';
 import { autoArrange } from '../layout';
 import { newGeneratorNode, newRecipeNode } from '../newNodes';
 import type { PickerMode, PickerRow } from '../picker';
 import { Picker } from './Picker';
 import { StartPrompt } from './StartPrompt';
-import { ResourceMenuProvider } from './ResourceMenu';
-import { TargetsBar } from './TargetsBar';
 import type { RecipeDb } from '../../recipes/db';
 import type { ChainHistory, ChainHistoryAction } from '../chainState';
 import { useRecipes } from '../useRecipes';
@@ -81,15 +80,22 @@ export function Calculator(p: CalculatorProps) {
 function Workspace({ active, db, warning, history, dispatch, toast }: CalculatorProps & { db: RecipeDb; warning?: string }) {
   const chain = history.present;
   const [picker, setPicker] = useState<{ mode: PickerMode; want?: ResourceKey } | null>(null);
-  const { result, greyed, problem, solving } = useSolve(chain, db);
-  const o = useMemo(() => overview(chain, db, result, problem), [chain, db, result, problem]);
+  const { current, shown, greyed, solving } = useSolve(chain, db);
+  const s = useMemo(() => {
+    const out = summary(chain, db, shown);
+    // Numbers may come from the last good solve; problems always describe the latest one.
+    return { ...out, problems: current ? screenProblems(current, chain, db) : [] };
+  }, [chain, db, shown, current]);
 
   // Adding or removing boxes re-tidies the graph, as one undo step.
-  const structural = (actions: ChainAction[]) => {
-    let next = actions.reduce(chainReducer, chain);
-    next = chainReducer(next, { type: 'arrange', positions: autoArrange(next, db) });
-    if (next !== chain) dispatch({ type: 'load', chain: next });
-  };
+  const structural = useCallback(
+    (actions: ChainAction[]) => {
+      let next = actions.reduce(chainReducer, chain);
+      next = chainReducer(next, { type: 'arrange', positions: autoArrange(next, db) });
+      if (next !== chain) dispatch({ type: 'load', chain: next });
+    },
+    [chain, db, dispatch],
+  );
   const openPicker = useCallback((mode: PickerMode) => setPicker({ mode }), []);
   const closePicker = useCallback(() => setPicker(null), []);
   const use = (row: PickerRow) => {
@@ -100,12 +106,18 @@ function Workspace({ active, db, warning, history, dispatch, toast }: Calculator
   };
 
   return (
-    <ResourceMenuProvider chain={chain} db={db} result={result} dispatch={dispatch} onShow={(key) => openPicker({ kind: 'makes', key })}>
+    <>
       {warning && <div className="banner" data-testid="version-warning">{warning}</div>}
       <div className="calc">
-        <OverviewPanel o={o} greyed={greyed} solving={solving} />
+        <SummaryPanel
+          s={s}
+          greyed={greyed}
+          solving={solving}
+          canAddPower={!chain.nodes.some((n) => n.kind === 'generator')}
+          onPower={() => openPicker({ kind: 'power' })}
+        />
         <section className="calc-centre">
-          <TargetsBar chain={chain} db={db} dispatch={dispatch} />
+          <div className="drive-line" data-testid="drive-line">{current ? driveText(current, chain, db) : 'Working it out…'}</div>
           <div className="graph">
             {chain.nodes.length === 0 && (
               <StartPrompt
@@ -119,10 +131,11 @@ function Workspace({ active, db, warning, history, dispatch, toast }: Calculator
             )}
             <ChainGraph
               openPicker={openPicker}
+              structural={structural}
               active={active}
               chain={chain}
               db={db}
-              result={result}
+              screen={shown}
               greyed={greyed}
               canUndo={history.past.length > 0}
               canRedo={history.future.length > 0}
@@ -132,6 +145,6 @@ function Workspace({ active, db, warning, history, dispatch, toast }: Calculator
         </section>
       </div>
       {picker && <Picker mode={picker.mode} chain={chain} db={db} onClose={closePicker} onUse={use} />}
-    </ResourceMenuProvider>
+    </>
   );
 }

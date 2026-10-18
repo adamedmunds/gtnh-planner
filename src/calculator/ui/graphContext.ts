@@ -4,11 +4,13 @@ import type { RecipeDb } from '../../recipes/db';
 import type { ChainAction } from '../chainState';
 import type { PickerMode } from '../picker';
 
-/** What node cards need besides their own view: the chain, the recipes and a way to change the chain. */
+/** What the graph's boxes need besides their own view: the chain, the recipes and ways to change the chain. */
 export interface GraphContextValue {
   chain: Chain;
   db: RecipeDb;
   dispatch: (a: ChainAction) => void;
+  /** Changes that add or remove boxes; the graph re-tidies as one undo step. */
+  structural(actions: ChainAction[]): void;
   greyed: boolean;
   /** Opens the recipe picker. */
   openPicker(mode: PickerMode): void;
