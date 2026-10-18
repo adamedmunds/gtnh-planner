@@ -11,17 +11,22 @@
     "test:watch": "vitest",
     "schematic:test": "tsx scripts/make-test-schematic.ts",
     "schematic:inspect": "tsx scripts/inspect-schematic.ts",
-    "schematic:oil": "tsx scripts/make-oil-berry-line.ts"
+    "schematic:oil": "tsx scripts/make-oil-berry-line.ts",
+    "textures": "tsx scripts/extract-textures.ts"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
     "fflate": "^0.8.3",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
