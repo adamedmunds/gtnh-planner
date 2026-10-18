@@ -1,0 +1,68 @@
+import { CATALOG } from '../catalog';
+import { placeBlock, removeBlock, rotateBlock, toBlockMap, toggleSide, type BlockMap } from '../model/editing';
+import type { Build, Facing, Vec3 } from '../model/types';
+
+export const DEFAULT_KEY = 'distillery_lv';
+
+export interface EditorState {
+  name: string;
+  blocks: BlockMap;
+  selectedKey: string;
+  /** Highest visible Y level; null shows everything. */
+  layer: number | null;
+}
+
+export type Action =
+  | { type: 'place'; pos: Vec3; facing?: Facing }
+  | { type: 'remove'; pos: Vec3 }
+  | { type: 'rotate'; pos: Vec3; includeVertical: boolean }
+  | { type: 'toggleSide'; pos: Vec3; side: number }
+  | { type: 'select'; key: string }
+  | { type: 'setName'; name: string }
+  | { type: 'setLayer'; layer: number | null }
+  | { type: 'load'; build: Build }
+  | { type: 'new' };
+
+export function initialState(build?: Build): EditorState {
+  return {
+    name: build?.name ?? 'untitled',
+    blocks: toBlockMap(build?.blocks ?? []),
+    selectedKey: DEFAULT_KEY,
+    layer: null,
+  };
+}
+
+const withBlocks = (s: EditorState, blocks: BlockMap) => (blocks === s.blocks ? s : { ...s, blocks });
+
+export function reducer(s: EditorState, a: Action): EditorState {
+  switch (a.type) {
+    case 'place': {
+      const entry = CATALOG.get(s.selectedKey);
+      if (!entry) return s;
+      const block = entry.kind === 'machine'
+        ? { pos: a.pos, key: entry.key, facing: a.facing ?? 3 }
+        : { pos: a.pos, key: entry.key };
+      return withBlocks(s, placeBlock(s.blocks, block));
+    }
+    case 'remove':
+      return withBlocks(s, removeBlock(s.blocks, a.pos));
+    case 'rotate':
+      return withBlocks(s, rotateBlock(s.blocks, a.pos, a.includeVertical));
+    case 'toggleSide':
+      return withBlocks(s, toggleSide(s.blocks, a.pos, a.side));
+    case 'select':
+      return CATALOG.has(a.key) ? { ...s, selectedKey: a.key } : s;
+    case 'setName':
+      return { ...s, name: a.name.trim() || 'untitled' };
+    case 'setLayer':
+      return { ...s, layer: a.layer };
+    case 'load':
+      return { ...initialState(a.build), selectedKey: s.selectedKey };
+    case 'new':
+      return { ...initialState(), selectedKey: s.selectedKey };
+  }
+}
+
+export function toBuild(s: EditorState): Build {
+  return { version: 1, name: s.name, blocks: [...s.blocks.values()] };
+}
