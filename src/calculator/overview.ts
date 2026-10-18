@@ -15,7 +15,8 @@ export interface Overview {
   problems: string[];
 }
 
-export function overview(chain: Chain, db: RecipeDb, result?: ChainResult): Overview {
+/** `problem`: a reason from a newer solve than `result` (unbounded or failed), listed first. */
+export function overview(chain: Chain, db: RecipeDb, result?: ChainResult, problem?: string): Overview {
   const rows = (m: Map<ResourceKey, number> | undefined): RateRow[] =>
     [...(m ?? [])].map(([key, rate]) => ({ key, ...resourceInfo(key, db), rate })).sort((a, b) => b.rate - a.rate);
 
@@ -30,7 +31,7 @@ export function overview(chain: Chain, db: RecipeDb, result?: ChainResult): Over
     groups.set(name, g);
   }
 
-  const problems: string[] = [];
+  const problems: string[] = problem ? [problem] : [];
   if (result && result.status !== 'ok') problems.push(result.message ?? `The chain can't be solved (${result.status}).`);
   for (const node of chain.nodes) {
     const v = nodeView(node, chain, db);

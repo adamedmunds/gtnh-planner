@@ -11,7 +11,7 @@ const failed = (message: string): ChainResult => ({
 });
 
 /** Re-solves on every chain change; an older solve never overwrites a newer one. */
-export function useSolve(chain: Chain, db: RecipeDb | undefined): { result?: ChainResult; greyed: boolean; solving: boolean } {
+export function useSolve(chain: Chain, db: RecipeDb | undefined): { result?: ChainResult; greyed: boolean; problem?: string; solving: boolean } {
   const latest = useMemo(createLatest, []);
   const [current, setCurrent] = useState<ChainResult>();
   const lastOk = useRef<ChainResult>(undefined);

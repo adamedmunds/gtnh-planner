@@ -114,6 +114,35 @@ test.describe('with recipe data', () => {
     await expect(page.getByTestId('overview-outputs')).toContainText(/513\.\d L\/s/, { timeout: 30_000 });
   });
 
+  test('maximise without a limit says why nothing is shown', async ({ page }) => {
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await page.getByTestId('browser-selected').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Maximise' }).click();
+    await expect(page.getByTestId('overview-problems')).toContainText('Set a supply limit');
+  });
+
+  test('Delete on the 3D Editor tab does not touch the calculator graph', async ({ page }) => {
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await page.getByTestId('node-card').locator('header b').click();
+    await page.getByTestId('tab-editor').click();
+    await page.keyboard.press('Delete');
+    await page.getByTestId('tab-calculator').click();
+    await expect(page.getByTestId('node-card')).toHaveCount(1);
+  });
+
+  test('a suggest list closes when its input is marked bought in', async ({ page }) => {
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    const row = page.locator('[data-testid=node-row][data-key="item:gregtech:gt.metaitem.01@30001"]');
+    await row.getByTestId('suggest').click();
+    await expect(page.getByTestId('suggestion').first()).toBeVisible();
+    await row.locator('.node-row > span').first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Mark bought in' }).click();
+    await expect(page.getByTestId('suggestion')).toHaveCount(0);
+  });
+
   test('the calculator tab loads recipes and is remembered', async ({ page }) => {
     await openCalculator(page);
     await page.reload();

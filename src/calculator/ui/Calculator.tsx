@@ -73,11 +73,11 @@ export function Calculator(p: CalculatorProps) {
   );
 }
 
-function Workspace({ db, warning, history, dispatch, toast }: CalculatorProps & { db: RecipeDb; warning?: string }) {
+function Workspace({ active, db, warning, history, dispatch, toast }: CalculatorProps & { db: RecipeDb; warning?: string }) {
   const chain = history.present;
   const [selected, setSelected] = useState<ResourceKey>();
-  const { result, greyed, solving } = useSolve(chain, db);
-  const o = useMemo(() => overview(chain, db, result), [chain, db, result]);
+  const { result, greyed, problem, solving } = useSolve(chain, db);
+  const o = useMemo(() => overview(chain, db, result, problem), [chain, db, result, problem]);
   return (
     <ResourceMenuProvider chain={chain} db={db} result={result} dispatch={dispatch} onShow={setSelected}>
       {warning && <div className="banner" data-testid="version-warning">{warning}</div>}
@@ -87,6 +87,7 @@ function Workspace({ db, warning, history, dispatch, toast }: CalculatorProps & 
           <TargetsBar chain={chain} db={db} dispatch={dispatch} />
           <div className="graph">
             <ChainGraph
+              active={active}
               chain={chain}
               db={db}
               result={result}

@@ -17,6 +17,8 @@ import { NodeCard, type CardNode } from './NodeCard';
 const nodeTypes: NodeTypes = { recipe: NodeCard, generator: NodeCard };
 
 export interface ChainGraphProps {
+  /** False while another tab is showing: keys pressed there must not edit the graph. */
+  active: boolean;
   chain: Chain;
   db: RecipeDb;
   result?: ChainResult;
@@ -26,7 +28,7 @@ export interface ChainGraphProps {
   dispatch: (a: ChainHistoryAction) => void;
 }
 
-function Graph({ chain, db, result, greyed, canUndo, canRedo, dispatch }: ChainGraphProps) {
+function Graph({ active, chain, db, result, greyed, canUndo, canRedo, dispatch }: ChainGraphProps) {
   const flow = useReactFlow();
   const views = useMemo(
     () => chain.nodes.map((n) => nodeView(n, chain, db, result?.nodes.find((r) => r.id === n.id))),
@@ -78,7 +80,7 @@ function Graph({ chain, db, result, greyed, canUndo, canRedo, dispatch }: ChainG
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onNodeDragStop={onNodeDragStop}
-        deleteKeyCode={['Backspace', 'Delete']}
+        deleteKeyCode={active ? ['Backspace', 'Delete'] : null}
         colorMode="dark"
         fitView
         minZoom={0.1}

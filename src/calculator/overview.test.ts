@@ -47,3 +47,9 @@ test('no result: empty rows, invalid nodes still listed', () => {
   expect(o.power).toEqual({ used: 0, made: 0, net: 0 });
   expect(o.problems).toHaveLength(1);
 });
+
+test('an extra problem from the solve is listed first', async () => {
+  const chain = reference();
+  const o = overview(chain, db, await solve(chain), 'Set a supply limit for Oil Berry to maximise Light Fuel.');
+  expect(o.problems).toEqual(['Set a supply limit for Oil Berry to maximise Light Fuel.']);
+});

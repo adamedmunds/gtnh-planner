@@ -22,7 +22,7 @@ function Row({ row, input }: { row: ResourceRow; input: boolean }) {
             : <button className="nodrag" data-testid="suggest" title="Recipes that make this" onClick={() => setOpen((o) => !o)}>suggest</button>
         )}
       </div>
-      {open && <SuggestList resource={row.key} onDone={() => setOpen(false)} />}
+      {open && input && row.unmet && !row.external && <SuggestList resource={row.key} onDone={() => setOpen(false)} />}
     </li>
   );
 }
