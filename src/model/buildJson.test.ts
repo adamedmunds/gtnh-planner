@@ -1,3 +1,4 @@
+import { getEntry } from '../catalog';
 import { BuildParseError, parseBuild, serializeBuild } from './buildJson';
 import type { Build } from './types';
 
@@ -75,4 +76,19 @@ test('duplicate positions keep the last block and warn', () => {
   }));
   expect(build.blocks).toEqual([{ pos: [0, 0, 0], key: 'electrolyzer_lv' }]);
   expect(warnings).toEqual([expect.stringMatching(/0,0,0/)]);
+});
+
+test('recipe machines carried by the build round-trip and register', () => {
+  const b: Build = { ...good, machines: [{ key: 'gt_1112', name: 'Turbo Combustion Generator', mID: 1112, tier: 'HV' }], notes: ['Add a pump cover'] };
+  const { build, warnings } = parseBuild(serializeBuild(b));
+  expect(warnings).toEqual([]);
+  expect(build.machines).toEqual(b.machines);
+  expect(build.notes).toEqual(['Add a pump cover']);
+  expect(getEntry('gt_1112')?.name).toBe('Turbo Combustion Generator');
+});
+
+test('a malformed recipe machine is skipped with a warning', () => {
+  const { build, warnings } = parseBuild(JSON.stringify({ ...good, machines: [{ key: 'gt_1', mID: 'x' }] }));
+  expect(build.machines).toBeUndefined();
+  expect(warnings).toEqual([expect.stringMatching(/machine/i)]);
 });

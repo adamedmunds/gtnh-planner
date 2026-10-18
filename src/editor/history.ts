@@ -14,6 +14,7 @@ const restore = (snapshot: EditorState, current: EditorState): EditorState => ({
   ...current,
   blocks: snapshot.blocks,
   name: snapshot.name,
+  extras: snapshot.extras,
 });
 
 export function historyReducer(h: History, a: HistoryAction): History {

@@ -52,3 +52,12 @@ test('setName keeps exactly what was typed (so the field can be cleared and spac
   expect(cleared.name).toBe('');
   expect(toBuild(cleared).name).toBe('untitled');
 });
+
+test('a loaded build keeps its recipe machines and notes; new clears them', () => {
+  const machines = [{ key: 'gt_1112', name: 'Turbo Combustion Generator', mID: 1112, tier: 'HV' }];
+  const s = reducer(initialState(), { type: 'load', build: { version: 1, name: 'line', blocks: [], machines, notes: ['Add a pump cover'] } });
+  expect(toBuild(s)).toMatchObject({ machines, notes: ['Add a pump cover'] });
+  const cleared = toBuild(reducer(s, { type: 'new' }));
+  expect(cleared.machines).toBeUndefined();
+  expect(cleared.notes).toBeUndefined();
+});

@@ -1,3 +1,4 @@
+import { registerMachines, type GeneratedMachine } from '../catalog';
 import type { Build, Facing, ManualMask, PlacedBlock } from './types';
 
 export class BuildParseError extends Error {}
@@ -19,7 +20,7 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw) || (raw as { version?: unknown }).version !== 1) {
     throw new BuildParseError('Unsupported build file (expected version 1)');
   }
-  const obj = raw as { name?: unknown; blocks?: unknown };
+  const obj = raw as { name?: unknown; blocks?: unknown; machines?: unknown; notes?: unknown };
   if (!Array.isArray(obj.blocks)) throw new BuildParseError('Build file has no blocks list');
 
   const warnings: string[] = [];
@@ -54,5 +55,19 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
   });
 
   const blocks = [...byPos.values()];
-  return { build: { version: 1, name: typeof obj.name === 'string' ? obj.name : 'untitled', blocks }, warnings };
+  const build: Build = { version: 1, name: typeof obj.name === 'string' ? obj.name : 'untitled', blocks };
+
+  const machines: GeneratedMachine[] = [];
+  (Array.isArray(obj.machines) ? obj.machines : []).forEach((m: unknown, i: number) => {
+    const r = (typeof m === 'object' && m !== null ? m : {}) as Record<string, unknown>;
+    if (typeof r.key === 'string' && typeof r.name === 'string' && isInt(r.mID) && (r.tier === undefined || typeof r.tier === 'string')) {
+      machines.push({ key: r.key, name: r.name, mID: r.mID, ...(typeof r.tier === 'string' ? { tier: r.tier } : {}) });
+    } else warnings.push(`Skipped recipe machine #${i + 1}: invalid entry`);
+  });
+  if (machines.length) {
+    build.machines = machines;
+    registerMachines(machines);
+  }
+  if (Array.isArray(obj.notes) && obj.notes.every((n) => typeof n === 'string') && obj.notes.length) build.notes = obj.notes as string[];
+  return { build, warnings };
 }

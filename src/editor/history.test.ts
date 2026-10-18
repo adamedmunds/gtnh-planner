@@ -1,4 +1,5 @@
 import { initialHistory, historyReducer } from './history';
+import { toBuild } from './state';
 
 const place = (x: number) => ({ type: 'place', pos: [x, 0, 0] } as const);
 
@@ -41,4 +42,12 @@ test('history is capped', () => {
   let h = initialHistory();
   for (let i = 0; i < 150; i++) h = historyReducer(h, place(i));
   expect(h.past.length).toBe(100);
+});
+
+test('undoing a load brings back the previous notes too', () => {
+  let h = initialHistory({ version: 1, name: 'a', blocks: [{ pos: [0, 0, 0], key: 'distillery_lv' }], notes: ['old'] });
+  h = historyReducer(h, { type: 'load', build: { version: 1, name: 'b', blocks: [], notes: ['new'] } });
+  expect(toBuild(h.present).notes).toEqual(['new']);
+  h = historyReducer(h, { type: 'undo' });
+  expect(toBuild(h.present).notes).toEqual(['old']);
 });

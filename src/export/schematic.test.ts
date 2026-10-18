@@ -1,3 +1,4 @@
+import { registerMachines } from '../catalog';
 import { buildSchematic, buildSchematicTag } from './schematic';
 import { decodeNbt } from './nbtRead';
 import type { CompoundTag, Tag } from './nbt';
@@ -130,4 +131,16 @@ test('refuses builds whose bounding box volume is too large, naming the bounds',
     { pos: [0, 0, 0], key: 'distillery_lv' },
     { pos: [3000, 200, 3000], key: 'distillery_lv' },
   ]))).toThrow(/too large.*0,0,0.*3000,200,3000/);
+});
+
+test('recipe machines export with their mID; markers export as plain vanilla blocks', () => {
+  registerMachines([{ key: 'gt_1112', name: 'Turbo Combustion Generator', mID: 1112, tier: 'HV' }]);
+  const { tag } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'gt_1112', facing: 1 }, { pos: [1, 0, 0], key: 'marker_item_in' }]));
+  const [te] = tes(tag);
+  expect(num(te, 'mID')).toBe(1112);
+  expect(tes(tag)).toHaveLength(1);
+  const mapping = (v(tag, 'SchematicaMapping') as CompoundTag).value;
+  expect(Object.keys(mapping)).toContain('minecraft:chest');
+  const ids = Array.from((v(tag, 'Blocks') as { value: Uint8Array }).value);
+  expect(ids[1]).toBe((mapping['minecraft:chest'] as { value: number }).value);
 });

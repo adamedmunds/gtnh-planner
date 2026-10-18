@@ -77,3 +77,11 @@ test('unknown catalog keys are ignored (neither connected to nor given an entry)
   expect(at(m, 0, 0, 0)).toBe(0);
   expect(at(m, 1, 0, 0)).toBeUndefined();
 });
+
+test('a pipe next to a marker connects to it', () => {
+  const masks = computeConnections([
+    { pos: [0, 0, 0], key: 'marker_fluid_out' },
+    { pos: [1, 0, 0], key: 'bronze_pipe_small' },
+  ]);
+  expect(masks.get(posKey([1, 0, 0]))).toBe(1 << 4);
+});

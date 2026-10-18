@@ -1,4 +1,5 @@
-export type Kind = 'machine' | 'cable' | 'fluidPipe' | 'itemPipe';
+/** `marker`: a stand-in for where something comes in or goes out; exported as a plain vanilla block. */
+export type Kind = 'machine' | 'cable' | 'fluidPipe' | 'itemPipe' | 'marker';
 export type Tier = 'LV' | 'MV' | 'HV';
 
 export interface CatalogEntry {
@@ -20,6 +21,23 @@ export interface CatalogEntry {
    * the length, `end` on the open end, `core` (cables) the wire under the insulation; tinted by `color`.
    */
   textures: { top?: string; side?: string; bottom?: string; front?: string; end?: string; core?: string };
+  /** Cables: voltage tier and amps per 1x of thickness; `size` is the 1x/4x multiplier. */
+  cable?: { tier: Tier; ampsPerSize: number; size: number };
+  /** Fluid pipes: litres per second one pipe carries. */
+  pipeCapacity?: number;
+  /** Item pipes: items per second one pipe carries. */
+  itemCapacity?: number;
+  /** Markers: the vanilla block written to the schematic instead of a GregTech block. */
+  vanilla?: string;
+}
+
+/** A machine from the recipe data that isn't in the hand-made catalog; saved with the build that uses it. */
+export interface GeneratedMachine {
+  key: string;
+  name: string;
+  mID: number;
+  /** GT tier name, e.g. "HV" (may be above HV; textures use the HV casing then). */
+  tier?: string;
 }
 
 export type Catalog = ReadonlyMap<string, CatalogEntry>;

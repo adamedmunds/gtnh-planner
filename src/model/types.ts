@@ -1,3 +1,5 @@
+import type { GeneratedMachine } from '../catalog/types';
+
 export type Vec3 = readonly [number, number, number];
 
 /** GT/Forge side order: 0 down, 1 up, 2 north (-Z), 3 south (+Z), 4 west (-X), 5 east (+X). */
@@ -22,4 +24,8 @@ export interface Build {
   version: 1;
   name: string;
   blocks: PlacedBlock[];
+  /** Recipe machines the blocks use that aren't in the hand-made catalog. */
+  machines?: GeneratedMachine[];
+  /** Plain notes for building it (covers to add, what slices handle, warnings). */
+  notes?: string[];
 }

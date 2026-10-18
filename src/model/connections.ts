@@ -26,7 +26,7 @@ export function computeConnections(
 
   const result = new Map<string, number>();
   for (const [key, { block, entry }] of cells) {
-    if (entry.kind === 'machine') continue;
+    if (entry.kind === 'machine' || entry.kind === 'marker') continue;
     const own = block.manualMask ?? { forcedOn: 0, forcedOff: 0 };
     let mask = 0;
     for (let side = 0; side < 6; side++) {
@@ -35,7 +35,7 @@ export function computeConnections(
       const nbMask = sameKindConduit ? (nb.block.manualMask ?? { forcedOn: 0, forcedOff: 0 }) : undefined;
       const back = bit(OPPOSITE[side]);
 
-      let on = nb !== undefined && (nb.entry.kind === 'machine' || sameKindConduit);
+      let on = nb !== undefined && (nb.entry.kind === 'machine' || nb.entry.kind === 'marker' || sameKindConduit);
       if (own.forcedOn & bit(side) || (nbMask && nbMask.forcedOn & back)) on = true;
       if (own.forcedOff & bit(side) || (nbMask && nbMask.forcedOff & back)) on = false;
       if (on) mask |= bit(side);

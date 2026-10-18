@@ -103,6 +103,14 @@ function Blocks(props: SceneProps) {
               </mesh>
             );
           }
+          if (entry.kind === 'marker') {
+            return (
+              <mesh key={posKey(b.pos)} position={[b.pos[0] + 0.5, b.pos[1] + 0.5, b.pos[2] + 0.5]} userData={{ pos: b.pos }}>
+                <boxGeometry args={[0.8, 0.8, 0.8]} />
+                <meshStandardMaterial color={entry.color} transparent opacity={0.75} />
+              </mesh>
+            );
+          }
           return entry.kind === 'machine'
             ? <MachineMesh key={posKey(b.pos)} block={b} entry={entry} />
             : <ConduitMesh key={posKey(b.pos)} block={b} entry={entry} mask={masks.get(posKey(b.pos)) ?? 0} />;

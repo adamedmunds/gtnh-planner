@@ -1,8 +1,9 @@
-import { CATALOG, CATALOG_ENTRIES, getEntry } from './index';
+import { CATALOG, CATALOG_ENTRIES, getEntry, machineKey, registerMachines } from './index';
 
 test('keys and mIDs are unique', () => {
   const keys = CATALOG_ENTRIES.map((e) => e.key);
-  const ids = CATALOG_ENTRIES.map((e) => e.mID);
+  // Markers are vanilla stand-ins with no GregTech id.
+  const ids = CATALOG_ENTRIES.filter((e) => e.kind !== 'marker').map((e) => e.mID);
   expect(new Set(keys).size).toBe(keys.length);
   expect(new Set(ids).size).toBe(ids.length);
   expect(CATALOG.size).toBe(CATALOG_ENTRIES.length);
@@ -36,6 +37,7 @@ test.each([
 
 test('machines have tier casing + front overlay textures; conduits have thickness', () => {
   for (const e of CATALOG_ENTRIES) {
+    if (e.kind === 'marker') continue;
     if (e.kind === 'machine') {
       expect(e.tier).toBeDefined();
       expect(e.textures.side).toBe(`blocks/iconsets/MACHINE_${e.tier}_SIDE.png`);
@@ -52,4 +54,30 @@ test('machines have tier casing + front overlay textures; conduits have thicknes
 
 test('getEntry returns undefined for unknown keys', () => {
   expect(getEntry('nope')).toBeUndefined();
+});
+
+test('HV power parts and new pipes', () => {
+  const gold = getEntry('gold_cable_4x')!;
+  expect(gold).toMatchObject({ mID: 1428, kind: 'cable', cable: { tier: 'HV', ampsPerSize: 3, size: 4 } });
+  expect(getEntry('tin_cable_1x')!.cable).toEqual({ tier: 'LV', ampsPerSize: 1, size: 1 });
+  expect(getEntry('annealed_copper_cable_4x')!.cable).toEqual({ tier: 'MV', ampsPerSize: 1, size: 4 });
+  expect(getEntry('transformer_hv_mv')).toMatchObject({ mID: 22, kind: 'machine', tier: 'MV' });
+  expect(getEntry('stainless_steel_pipe_normal')).toMatchObject({ mID: 5142, kind: 'fluidPipe' });
+  expect(getEntry('titanium_pipe_large')).toMatchObject({ mID: 5153, kind: 'fluidPipe' });
+  expect(getEntry('bronze_pipe_small')!.pipeCapacity).toBe(120 * 2 * 20);
+  expect(getEntry('tin_item_pipe_small')!.itemCapacity).toBeGreaterThan(0);
+});
+
+test('markers', () => {
+  for (const k of ['marker_item_in', 'marker_item_out', 'marker_fluid_in', 'marker_fluid_out', 'marker_power_in', 'marker_multiblock']) {
+    expect(getEntry(k)).toMatchObject({ kind: 'marker', group: 'Markers' });
+    expect(getEntry(k)!.vanilla).toMatch(/^minecraft:/);
+  }
+});
+
+test('machines from recipe data are registered under gt_<mID>', () => {
+  expect(machineKey(1112)).toBe('gt_1112');
+  registerMachines([{ key: 'gt_1112', name: 'Turbo Combustion Generator', mID: 1112, tier: 'HV' }]);
+  expect(getEntry('gt_1112')).toMatchObject({ kind: 'machine', mID: 1112, name: 'Turbo Combustion Generator', tier: 'HV', group: 'Recipe machines' });
+  expect(getEntry('gt_1112')!.textures.side).toBe('blocks/iconsets/MACHINE_HV_SIDE.png');
 });

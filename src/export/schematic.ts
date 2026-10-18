@@ -63,12 +63,19 @@ export function buildSchematicTag(
   const data = new Uint8Array(volume);
   const connections = computeConnections(cells.map((c) => c.block), catalog);
   const tileEntities: CompoundTag[] = [];
+  // Markers are plain vanilla blocks with their own local ids after GregTech's.
+  const vanillaIds = new Map<string, number>();
+  for (const { entry } of cells) if (entry.vanilla && !vanillaIds.has(entry.vanilla)) vanillaIds.set(entry.vanilla, GT_LOCAL_ID + 1 + vanillaIds.size);
 
   for (const { block, entry } of cells) {
     const x = block.pos[0] - min[0];
     const y = block.pos[1] - min[1];
     const z = block.pos[2] - min[2];
     const index = x + (y * size.length + z) * size.width;
+    if (entry.vanilla) {
+      blocks[index] = vanillaIds.get(entry.vanilla)!;
+      continue;
+    }
     blocks[index] = GT_LOCAL_ID;
     data[index] = entry.meta;
 
@@ -97,6 +104,7 @@ export function buildSchematicTag(
     SchematicaMapping: compound({
       'minecraft:air': short(0),
       [GT_BLOCK_NAME]: short(GT_LOCAL_ID),
+      ...Object.fromEntries([...vanillaIds].map(([name, id]) => [name, short(id)])),
     }),
     Entities: list('compound', []),
     TileEntities: list('compound', tileEntities),

@@ -10,6 +10,8 @@ export interface EditorState {
   selectedKey: string;
   /** Highest visible Y level; null shows everything. */
   layer: number | null;
+  /** Build-level data carried along with the blocks (recipe machines, notes). */
+  extras: Pick<Build, 'machines' | 'notes'>;
 }
 
 export type Action =
@@ -29,7 +31,12 @@ export function initialState(build?: Build): EditorState {
     blocks: toBlockMap(build?.blocks ?? []),
     selectedKey: DEFAULT_KEY,
     layer: null,
+    extras: extrasOf(build),
   };
+}
+
+function extrasOf(build?: Build): EditorState['extras'] {
+  return { ...(build?.machines ? { machines: build.machines } : {}), ...(build?.notes ? { notes: build.notes } : {}) };
 }
 
 const withBlocks = (s: EditorState, blocks: BlockMap) => (blocks === s.blocks ? s : { ...s, blocks });
@@ -64,5 +71,5 @@ export function reducer(s: EditorState, a: Action): EditorState {
 }
 
 export function toBuild(s: EditorState): Build {
-  return { version: 1, name: s.name.trim() || 'untitled', blocks: [...s.blocks.values()] };
+  return { version: 1, name: s.name.trim() || 'untitled', blocks: [...s.blocks.values()], ...s.extras };
 }
