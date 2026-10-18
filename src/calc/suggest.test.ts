@@ -1,4 +1,4 @@
-import { suggestFor } from './suggest';
+import { suggestFor, usesFor } from './suggest';
 import { emptyChain, type Chain, type ChainNode } from './chain';
 import { RecipeDb, recipeSignature } from '../recipes/db';
 import { K, oilBerryData } from '../test/oilBerryDb';
@@ -57,4 +57,13 @@ test('recipes that use more of what the chain makes rank first', () => {
   const withWater = new RecipeDb(data);
   const chain: Chain = { ...emptyChain(), nodes: [{ ...rn('cr', 3, 421) }] };
   expect(suggestFor(K.hydrogenCell, chain, withWater).map((s) => s.recipe.id)).toEqual([4, data.recipes.length - 1]);
+});
+
+test('usesFor: oil berries go to the fluid extractor', () => {
+  expect(usesFor(K.oilBerry, emptyChain(), db)[0].recipe.id).toBe(0);
+});
+
+test('usesFor skips recipes already in the chain', () => {
+  const chain: Chain = { ...emptyChain(), nodes: [rn('fe', 0, 511)] };
+  expect(usesFor(K.oilBerry, chain, db)).toEqual([]);
 });

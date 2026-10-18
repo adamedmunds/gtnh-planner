@@ -6,7 +6,7 @@ import { getSolver } from './solver';
 import { createLatest, displayResult } from './solveState';
 
 const failed = (message: string): ChainResult => ({
-  status: 'error', message, shortfalls: [], bindingLimits: [], nodes: [],
+  status: 'error', message, shortfalls: [], bindingLimits: [], bindingMachines: [], nodes: [],
   inputs: new Map(), outputs: new Map(), byproducts: new Map(), euUsed: 0, euMade: 0,
 });
 

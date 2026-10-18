@@ -89,6 +89,10 @@ export class RecipeDb {
     return this.containers.get(item);
   }
 
+  allFuels(): Fuel[] {
+    return [...this.fuels.values()].flat();
+  }
+
   /** Every generator map that burns this resource, in map order. */
   fuelUsesOf(key: ResourceKey): Fuel[] {
     return this.fuelUses.get(key) ?? [];

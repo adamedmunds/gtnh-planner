@@ -47,3 +47,21 @@ test('garbage is rejected with BuildParseError', () => {
   expect(() => parseProject('{oops')).toThrow(BuildParseError);
   expect(() => parseProject('{"version":3}')).toThrow(BuildParseError);
 });
+
+test('maxMachines and layout round-trip; bad ones are dropped', () => {
+  const text = JSON.stringify({
+    version: 2,
+    build: project.build,
+    chain: {
+      nodes: [
+        { id: 'a', kind: 'recipe', recipeSig: 's', machineMID: 1, overclock: false, position: { x: 0, y: 0 }, maxMachines: 4 },
+        { id: 'b', kind: 'recipe', recipeSig: 's', machineMID: 1, overclock: false, position: { x: 0, y: 0 }, maxMachines: 0 },
+        { id: 'c', kind: 'recipe', recipeSig: 's', machineMID: 1, overclock: false, position: { x: 0, y: 0 }, maxMachines: 'x' },
+      ],
+      layout: { 'have:fluid:oil': { x: 1, y: 2 }, 'get:x': { x: 'no' } },
+    },
+  });
+  const { project: p } = parseProject(text);
+  expect(p.chain.nodes.map((n) => n.maxMachines)).toEqual([4, undefined, undefined]);
+  expect(p.chain.layout).toEqual({ 'have:fluid:oil': { x: 1, y: 2 } });
+});

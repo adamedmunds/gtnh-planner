@@ -53,3 +53,7 @@ test('fuelUsesOf lists the generator maps that burn a fluid', () => {
   expect(db.fuelUsesOf(K.lightFuel)).toEqual([{ map: 4, key: K.lightFuel, euPerLitre: 305 }]);
   expect(db.fuelUsesOf(K.oil)).toEqual([]);
 });
+
+test('allFuels lists every fuel', () => {
+  expect(db.allFuels()).toEqual([{ map: 4, key: K.lightFuel, euPerLitre: 305 }]);
+});

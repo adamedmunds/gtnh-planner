@@ -25,13 +25,21 @@ function position(v: unknown): { x: number; y: number } {
 
 function parseNode(v: unknown): ChainNode | undefined {
   if (!isObj(v) || !isStr(v.id) || !isInt(v.machineMID)) return undefined;
+  const cap = isNum(v.maxMachines) && v.maxMachines > 0 ? { maxMachines: v.maxMachines } : {};
   if (v.kind === 'recipe' && isStr(v.recipeSig)) {
-    return { id: v.id, kind: 'recipe', recipeSig: v.recipeSig, machineMID: v.machineMID, overclock: v.overclock === true, position: position(v.position) };
+    return { id: v.id, kind: 'recipe', recipeSig: v.recipeSig, machineMID: v.machineMID, overclock: v.overclock === true, position: position(v.position), ...cap };
   }
   if (v.kind === 'generator' && isStr(v.fuelMap) && isStr(v.fuelKey)) {
-    return { id: v.id, kind: 'generator', fuelMap: v.fuelMap, fuelKey: v.fuelKey, machineMID: v.machineMID, position: position(v.position) };
+    return { id: v.id, kind: 'generator', fuelMap: v.fuelMap, fuelKey: v.fuelKey, machineMID: v.machineMID, position: position(v.position), ...cap };
   }
   return undefined;
+}
+
+function parseLayout(v: unknown): Record<string, { x: number; y: number }> | undefined {
+  if (!isObj(v)) return undefined;
+  const out: Record<string, { x: number; y: number }> = {};
+  for (const [k, p] of Object.entries(v)) if (isObj(p) && isNum(p.x) && isNum(p.y)) out[k] = { x: p.x, y: p.y };
+  return Object.keys(out).length ? out : undefined;
 }
 
 function parseTarget(v: unknown): Target | undefined {
@@ -57,12 +65,14 @@ export function parseChain(raw: unknown, warnings: string[]): Chain {
     });
     return out;
   };
+  const layout = parseLayout(raw.layout);
   return {
     version: 1,
     nodes: list(raw.nodes, parseNode, 'chain node'),
     targets: list(raw.targets, parseTarget, 'target'),
     limits: list(raw.limits, parseLimit, 'supply limit'),
     externals: Array.isArray(raw.externals) ? raw.externals.filter(isStr) : [],
+    ...(layout ? { layout } : {}),
   };
 }
 

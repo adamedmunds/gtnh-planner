@@ -113,3 +113,18 @@ test('an LV electrolyzer is invalid, so hydrogen becomes an external input', asy
   expect(r.nodes.find((n) => n.id === 'el')!.invalid).toBe('machine tier too low');
   expect(r.inputs.get(K.hydrogenCell)).toBeGreaterThan(0);
 });
+
+test('machine cap: 4 distilleries scale the reference line', async () => {
+  const chain: Chain = {
+    ...emptyChain(),
+    nodes: [rn('fe', 0, 511), { ...rn('dist', 1, 531), maxMachines: 4 }, rn('cr', 3, 421), rn('el', 4, 372), gen],
+    targets: [{ key: K.lightFuel, maximise: true }],
+    limits: [{ key: K.oilBerry, maxRate: 5.57 }],
+  };
+  const r = await solveChain(chain, db, solver);
+  expect(r.status).toBe('ok');
+  within(machines(r, 'dist'), 4);
+  within(r.outputs.get(K.lightFuel)!, (513.25 * 4) / 16.71);
+  expect(r.bindingMachines).toEqual([{ id: 'dist', maxMachines: 4 }]);
+  expect(r.bindingLimits).toEqual([]);
+});

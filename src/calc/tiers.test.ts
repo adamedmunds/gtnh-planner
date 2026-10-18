@@ -1,4 +1,4 @@
-import { V, overclock, tierForEut } from './tiers';
+import { V, overclock, tierForEut, tierName } from './tiers';
 
 test('tierForEut picks the lowest tier whose voltage covers the EU/t', () => {
   expect(tierForEut(8)).toBe(0);
@@ -14,4 +14,10 @@ test('overclock: duration halves (min 1 tick), EU/t quadruples, per overclock', 
   expect(overclock(30, 20, 1)).toEqual({ eut: 120, duration: 10 });
   expect(overclock(30, 20, 2)).toEqual({ eut: 480, duration: 5 });
   expect(overclock(30, 1, 3)).toEqual({ eut: 1920, duration: 1 });
+});
+
+test('tierName names a machine tier', () => {
+  expect(tierName({ mID: 511, name: 'x', tier: 1, multiblock: false })).toBe('LV');
+  expect(tierName({ mID: 372, name: 'x', voltage: 128, multiblock: false })).toBe('MV');
+  expect(tierName({ mID: 1, name: 'x', multiblock: true })).toBeUndefined();
 });
