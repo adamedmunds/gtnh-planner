@@ -398,6 +398,7 @@ function buildModular(plan: LinePlan, name: string, warnings: string[]): Build |
     const perMarker = per && plan.markers.find((m) => m.key === per.key);
     const generated: GeneratedLine = {
       style: 'modular', sliceLength: L, sliceCount: plan.sliceCount, left, right, leftStart, rightStart: 0, template,
+      ...(sliceRouted.covers.length ? { templateCovers: sliceRouted.covers } : {}),
       ...(plan.coreServes !== undefined ? { coreServes: plan.coreServes } : {}),
       ...(per && perNet ? { inputsPerSlice: { key: per.key, name: perNet.name, kind: perMarker?.kind === 'fluid' ? 'fluid' : 'item', amount: per.amount } } : {}),
     };

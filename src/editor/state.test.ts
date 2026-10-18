@@ -61,3 +61,11 @@ test('a loaded build keeps its recipe machines and notes; new clears them', () =
   expect(cleared.machines).toBeUndefined();
   expect(cleared.notes).toBeUndefined();
 });
+
+test('hand edits drop the generated line (it is no longer the generated layout)', () => {
+  const generated = { style: 'modular' as const, sliceLength: 5, sliceCount: 1, left: 0, right: 1, leftStart: 0, rightStart: 0, template: [] };
+  let s = reducer(initialState(), { type: 'load', build: { version: 1, name: 'line', blocks: [], generated } });
+  expect(toBuild(s).generated).toEqual(generated);
+  s = reducer(s, { type: 'place', pos: [9, 0, 9] });
+  expect(toBuild(s).generated).toBeUndefined();
+});

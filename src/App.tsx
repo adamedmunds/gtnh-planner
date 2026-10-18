@@ -14,6 +14,7 @@ import { toBuild } from './editor/state';
 import { Scene, type Hover } from './editor/scene/Scene';
 import { InfoPanel } from './editor/ui/InfoPanel';
 import { LineNotes } from './editor/ui/LineNotes';
+import { ALIGN_HINT, sliceBuild } from './layout/grow';
 import { MaterialsPanel } from './editor/ui/MaterialsPanel';
 import { Palette } from './editor/ui/Palette';
 import { Toasts, type Toast } from './editor/ui/Toasts';
@@ -180,6 +181,17 @@ export function App() {
     }
   };
 
+  const onExportSlice = () => {
+    try {
+      const slice = sliceBuild(toBuild(state));
+      const { bytes } = buildSchematic(slice);
+      downloadBytes(bytes, `${safeFileName(slice.name)}.schematic`);
+      toast(`Exported ${safeFileName(slice.name)}.schematic. ${ALIGN_HINT}`);
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  };
+
   const onExample = () => {
     if (!confirmReplace()) return;
     const answer = window.prompt('Berries per second to size the line for?', '5.6');
@@ -251,7 +263,13 @@ export function App() {
       </main>
       <div className="side">
         <InfoPanel block={hovered} mask={hoveredMask} />
-        <LineNotes notes={state.extras.notes} />
+        <LineNotes
+          notes={state.extras.notes}
+          generated={state.extras.generated}
+          onAddSlice={(end) => dispatch({ type: 'addSlice', end })}
+          onRemoveSlice={(end) => dispatch({ type: 'removeSlice', end })}
+          onExportSlice={onExportSlice}
+        />
         <MaterialsPanel lines={bom} />
       </div>
     </div>

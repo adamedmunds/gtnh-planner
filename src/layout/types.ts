@@ -1,5 +1,5 @@
 import type { GeneratedMachine } from '../catalog/types';
-import type { Build, PlacedBlock } from '../model/types';
+import type { Build, FaceSetting, PlacedBlock } from '../model/types';
 import type { ResourceKey } from '../recipes/types';
 
 export type LayoutStyle = 'modular' | 'straight';
@@ -79,6 +79,8 @@ export interface GeneratedLine {
   rightStart: number;
   /** Slice 0's blocks, relative to its own x = 0. */
   template: PlacedBlock[];
+  /** Slice 0's covers and face settings, relative to its own x = 0. */
+  templateCovers?: FaceSetting[];
   coreServes?: number;
   inputsPerSlice?: { key: ResourceKey; name: string; kind: 'item' | 'fluid'; amount: number };
 }

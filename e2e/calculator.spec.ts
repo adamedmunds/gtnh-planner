@@ -307,6 +307,24 @@ test.describe('with recipe data', () => {
     await expect(page.getByTestId('materials')).toHaveCount(0);
   });
 
+  test('grow the line by a slice and export one slice', async ({ page }) => {
+    test.setTimeout(120_000);
+    await buildOilLine(page);
+    await page.getByRole('button', { name: 'Build in 3D' }).click();
+    await page.getByRole('button', { name: '+ slice on the right' }).click();
+    await expect(page.getByTestId('materials')).toContainText('7× LV Fluid Extractor');
+    await expect(page.getByTestId('materials')).toContainText('21× LV Distillery');
+    await expect(page.getByTestId('line-notes')).toContainText('7 slices · handles 7 Oil Berry/s');
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export one slice' }).click();
+    const file = await (await download).path();
+    const bytes = readFileSync(file!);
+    expect(bytes[0]).toBe(0x1f);
+    expect(bytes[1]).toBe(0x8b);
+    await page.keyboard.press('Control+z');
+    await expect(page.getByTestId('materials')).toContainText('6× LV Fluid Extractor');
+  });
+
   test('Build in 3D as a straight line keeps the exact counts', async ({ page }) => {
     test.setTimeout(120_000);
     await buildOilLine(page);

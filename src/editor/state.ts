@@ -1,3 +1,4 @@
+import { addSlice, removeSlice } from '../layout/grow';
 import { CATALOG } from '../catalog';
 import { placeBlock, removeBlock, rotateBlock, toBlockMap, toggleSide, type BlockMap } from '../model/editing';
 import type { Build, Facing, Vec3 } from '../model/types';
@@ -23,6 +24,9 @@ export type Action =
   | { type: 'setName'; name: string }
   | { type: 'setLayer'; layer: number | null }
   | { type: 'load'; build: Build }
+  /** Generated modular lines: one slice more or less on an end. */
+  | { type: 'addSlice'; end: 'left' | 'right' }
+  | { type: 'removeSlice'; end: 'left' | 'right' }
   | { type: 'new' };
 
 export function initialState(build?: Build): EditorState {
@@ -41,7 +45,12 @@ function extrasOf(build?: Build): EditorState['extras'] {
   return out;
 }
 
-const withBlocks = (s: EditorState, blocks: BlockMap) => (blocks === s.blocks ? s : { ...s, blocks });
+/** A hand edit: the build is no longer the generated line, so growing by slices no longer applies. */
+const withBlocks = (s: EditorState, blocks: BlockMap): EditorState => {
+  if (blocks === s.blocks) return s;
+  const { generated: _, ...extras } = s.extras;
+  return { ...s, blocks, extras };
+};
 
 export function reducer(s: EditorState, a: Action): EditorState {
   switch (a.type) {
@@ -67,6 +76,12 @@ export function reducer(s: EditorState, a: Action): EditorState {
       return { ...s, layer: a.layer };
     case 'load':
       return { ...initialState(a.build), selectedKey: s.selectedKey };
+    case 'addSlice':
+    case 'removeSlice': {
+      const built = toBuild(s);
+      const next = a.type === 'addSlice' ? addSlice(built, a.end) : removeSlice(built, a.end);
+      return next === built ? s : { ...s, blocks: toBlockMap(next.blocks), extras: extrasOf(next) };
+    }
     case 'new':
       return { ...initialState(), selectedKey: s.selectedKey };
   }
