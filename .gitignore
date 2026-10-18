@@ -11,3 +11,6 @@ public/textures/
 *.schematic
 
 out/
+
+test-results/
+playwright-report/

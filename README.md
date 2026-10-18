@@ -29,3 +29,19 @@ The chemical reactor + electrolyzer module sits in the middle; extractor modules
 modules grow east. A bigger line contains a smaller one block-for-block, so you can expand an existing
 build by extending the back (oil), front (berries/sulfuric) and bottom (light fuel) lines and adding modules
 at either end. Up to 15 extractors per chemical reactor.
+
+## Editor
+
+```bash
+npm install
+npm run textures      # once: copies textures from your GTNH GregTech jar into public/textures (not committed)
+npm run dev           # open the printed URL
+```
+
+Left-click to place against the face you point at, right-click to remove, **R** to rotate (Shift+R includes
+up/down), Shift+click a pipe face to connect/disconnect that side. Drag to orbit, right/middle-drag to pan,
+scroll to zoom. The layer slider hides everything above a Y level. Builds autosave in the browser; use
+Save/Load .json to keep several. "Oil berry example" loads the generated line for a berry rate. Export
+downloads a `.schematic` for Schematica.
+
+Tests: `npm test` (unit), `npm run e2e` (drives the real app in Chromium; first run `npx playwright install chromium`).
