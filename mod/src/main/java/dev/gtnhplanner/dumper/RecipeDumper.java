@@ -17,6 +17,7 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.StatCollector;
 import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.oredict.OreDictionary;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -94,13 +95,16 @@ public class RecipeDumper {
                 int m = mapIndex.get(map);
                 for (GTRecipe r : safeRecipes(map)) {
                     if (r.mHidden || r.mFakeRecipe || !r.mEnabled) continue;
+                    Resolved resolved;
                     try {
-                        writeRecipe(w, m, r);
-                        summary.recipes++;
+                        resolved = resolve(m, r);
                     } catch (RuntimeException e) {
                         summary.skippedRecipes++;
                         LOG.warn("Skipping unreadable recipe in {}: {}", map.unlocalizedName, e.toString());
+                        continue;
                     }
+                    writeRecipe(w, resolved);
+                    summary.recipes++;
                 }
             }
             w.endArray();
@@ -169,68 +173,71 @@ public class RecipeDumper {
         }
     }
 
-    private void writeRecipe(JsonWriter w, int m, GTRecipe r) throws IOException {
+    /** A recipe with every item/fluid already resolved to an index, so writing it cannot fail halfway. */
+    private static final class Resolved {
+
+        int m, eut, dur, sv;
+        final List<int[]> ii = new ArrayList<>(), fi = new ArrayList<>(), io = new ArrayList<>(),
+            fo = new ArrayList<>();
+    }
+
+    private Resolved resolve(int m, GTRecipe r) {
+        Resolved x = new Resolved();
+        x.m = m;
+        x.eut = r.mEUt;
+        x.dur = r.mDuration;
+        x.sv = r.mSpecialValue;
+        if (r.mInputs != null) for (ItemStack s : r.mInputs) {
+            if (s != null && s.getItem() != null) x.ii.add(new int[] { item(s), s.stackSize });
+        }
+        if (r.mFluidInputs != null) for (FluidStack f : r.mFluidInputs) {
+            if (f != null && f.getFluid() != null) x.fi.add(new int[] { fluid(f), f.amount });
+        }
+        if (r.mOutputs != null) for (int i = 0; i < r.mOutputs.length; i++) {
+            ItemStack s = r.mOutputs[i];
+            if (s != null && s.getItem() != null) x.io.add(new int[] { item(s), s.stackSize, chance(r, i) });
+        }
+        if (r.mFluidOutputs != null) for (FluidStack f : r.mFluidOutputs) {
+            if (f != null && f.getFluid() != null) x.fo.add(new int[] { fluid(f), f.amount });
+        }
+        return x;
+    }
+
+    private static int chance(GTRecipe r, int i) {
+        try {
+            return r.getOutputChance(i);
+        } catch (RuntimeException e) {
+            return 10000;
+        }
+    }
+
+    private static void writeRecipe(JsonWriter w, Resolved x) throws IOException {
         w.beginObject();
         w.name("m")
-            .value(m);
+            .value(x.m);
         w.name("eut")
-            .value(r.mEUt);
+            .value(x.eut);
         w.name("dur")
-            .value(r.mDuration);
-        if (r.mSpecialValue != 0) w.name("sv")
-            .value(r.mSpecialValue);
-
-        if (r.mInputs != null && r.mInputs.length > 0) {
-            w.name("ii")
-                .beginArray();
-            for (ItemStack s : r.mInputs) {
-                if (s == null || s.getItem() == null) continue;
-                w.beginArray()
-                    .value(item(s))
-                    .value(s.stackSize)
-                    .endArray();
-            }
-            w.endArray();
-        }
-        if (r.mFluidInputs != null && r.mFluidInputs.length > 0) {
-            w.name("fi")
-                .beginArray();
-            for (FluidStack f : r.mFluidInputs) {
-                if (f == null || f.getFluid() == null) continue;
-                w.beginArray()
-                    .value(fluid(f))
-                    .value(f.amount)
-                    .endArray();
-            }
-            w.endArray();
-        }
-        if (r.mOutputs != null && r.mOutputs.length > 0) {
-            w.name("io")
-                .beginArray();
-            for (int i = 0; i < r.mOutputs.length; i++) {
-                ItemStack s = r.mOutputs[i];
-                if (s == null || s.getItem() == null) continue;
-                w.beginArray()
-                    .value(item(s))
-                    .value(s.stackSize)
-                    .value(r.getOutputChance(i))
-                    .endArray();
-            }
-            w.endArray();
-        }
-        if (r.mFluidOutputs != null && r.mFluidOutputs.length > 0) {
-            w.name("fo")
-                .beginArray();
-            for (FluidStack f : r.mFluidOutputs) {
-                if (f == null || f.getFluid() == null) continue;
-                w.beginArray()
-                    .value(fluid(f))
-                    .value(f.amount)
-                    .endArray();
-            }
-            w.endArray();
-        }
+            .value(x.dur);
+        if (x.sv != 0) w.name("sv")
+            .value(x.sv);
+        writeTuples(w, "ii", x.ii);
+        writeTuples(w, "fi", x.fi);
+        writeTuples(w, "io", x.io);
+        writeTuples(w, "fo", x.fo);
         w.endObject();
+    }
+
+    private static void writeTuples(JsonWriter w, String name, List<int[]> tuples) throws IOException {
+        if (tuples.isEmpty()) return;
+        w.name(name)
+            .beginArray();
+        for (int[] t : tuples) {
+            w.beginArray();
+            for (int v : t) w.value(v);
+            w.endArray();
+        }
+        w.endArray();
     }
 
     private int item(ItemStack s) {
@@ -239,16 +246,29 @@ public class RecipeDumper {
         String key = id + "@" + meta;
         Integer idx = itemIndex.get(key);
         if (idx != null) return idx;
-        String name;
-        try {
-            name = s.getDisplayName();
-        } catch (RuntimeException e) {
-            name = s.getUnlocalizedName();
-        }
         idx = items.size();
-        items.add(new String[] { id, String.valueOf(meta), name });
+        items.add(new String[] { id, String.valueOf(meta), itemName(s, id, meta) });
         itemIndex.put(key, idx);
         return idx;
+    }
+
+    /**
+     * Display name that never throws. Wildcard inputs (meta 32767, "any variant") and some items whose meta is past
+     * their name table crash getDisplayName, so fall back to the base variant, then the unlocalized name, then the id.
+     */
+    private static String itemName(ItemStack s, String id, int meta) {
+        boolean wildcard = meta == OreDictionary.WILDCARD_VALUE;
+        ItemStack probe = wildcard ? new ItemStack(s.getItem(), 1, 0) : s;
+        String suffix = wildcard ? " (any)" : "";
+        try {
+            return probe.getDisplayName() + suffix;
+        } catch (RuntimeException e) {
+            try {
+                return probe.getUnlocalizedName() + suffix;
+            } catch (RuntimeException e2) {
+                return id + ":" + meta;
+            }
+        }
     }
 
     private int fluid(FluidStack f) {
