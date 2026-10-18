@@ -10,6 +10,8 @@ import {
 export const DEFAULT_FACING = 3;
 const GT_LOCAL_ID = 1;
 const MAX_DIM = 32767;
+/** 256³ cells. Larger schematics would need multi-GB arrays here and in Schematica. */
+const MAX_VOLUME = 256 ** 3;
 
 export interface SchematicSize { width: number; height: number; length: number }
 
@@ -49,11 +51,14 @@ export function buildSchematicTag(
     height: max[1] - min[1] + 1,
     length: max[2] - min[2] + 1,
   };
-  if (size.width > MAX_DIM || size.height > MAX_DIM || size.length > MAX_DIM) {
-    throw new Error('Build is too large for a schematic');
+  const volume = size.width * size.height * size.length;
+  if (size.width > MAX_DIM || size.height > MAX_DIM || size.length > MAX_DIM || volume > MAX_VOLUME) {
+    throw new Error(
+      `Build is too large for a schematic: blocks span ${min.join(',')} to ${max.join(',')} ` +
+        `(${size.width}x${size.height}x${size.length}). Check for stray blocks far from the rest.`,
+    );
   }
 
-  const volume = size.width * size.height * size.length;
   const blocks = new Uint8Array(volume);
   const data = new Uint8Array(volume);
   const connections = computeConnections(cells.map((c) => c.block), catalog);

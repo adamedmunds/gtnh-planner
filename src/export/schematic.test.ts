@@ -124,3 +124,10 @@ test('buildSchematic gzips a root named "Schematic" that decodes to the same tag
   expect(name).toBe('Schematic');
   expect(root).toEqual(buildSchematicTag(build).tag);
 });
+
+test('refuses builds whose bounding box volume is too large, naming the bounds', () => {
+  expect(() => buildSchematicTag(mk([
+    { pos: [0, 0, 0], key: 'distillery_lv' },
+    { pos: [3000, 200, 3000], key: 'distillery_lv' },
+  ]))).toThrow(/too large.*0,0,0.*3000,200,3000/);
+});

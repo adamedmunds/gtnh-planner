@@ -12,6 +12,13 @@ machine(10, 'distillery_mv');
 machine(12, 'distillery_hv');
 machine(14, 'distillery_lv', 5);
 
+// Second row (z = 4): the remaining MV/HV machines, so every catalog machine ID is seen in-game.
+const row2 = [
+  'fluid_extractor_mv', 'fluid_extractor_hv', 'chemical_reactor_mv', 'chemical_reactor_hv',
+  'electrolyzer_mv', 'electrolyzer_hv', 'extractor_mv', 'extractor_hv',
+];
+row2.forEach((key, i) => blocks.push({ pos: [i * 2, 0, 4], key, facing: 3 }));
+
 for (let x = 0; x <= 14; x++) blocks.push({ pos: [x, 0, -1], key: 'tin_cable_1x' });
 for (let x = 0; x <= 8; x++) blocks.push({ pos: [x, 1, 0], key: 'bronze_pipe_normal' });
 for (let x = 0; x <= 3; x++) blocks.push({ pos: [x, 0, 2], key: 'tin_item_pipe_small' });

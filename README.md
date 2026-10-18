@@ -13,4 +13,4 @@ npm run schematic:test
 
 1. Copy `out/test-hologram.schematic` into your instance's `.minecraft/schematics/` folder.
 2. In a creative test world, open Schematica's load menu and load `test-hologram`.
-3. Expect a 15×2×4 hologram: a row of LV Fluid Extractor, Distillery, Chemical Reactor, Electrolyzer, Extractor, then MV and HV Distillery, all fronts facing south, plus one LV Distillery facing east at the end; a tin cable behind the row, a bronze pipe on top of the first five machines, and a short tin item pipe in front.
+3. Expect a 15×2×6 hologram. Front row: LV Fluid Extractor, Distillery, Chemical Reactor, Electrolyzer, Extractor, then MV and HV Distillery, all fronts facing south, plus one LV Distillery facing east at the end; a tin cable behind the row, a bronze pipe on top of the first five machines, and a short tin item pipe in front. Back row (4 blocks further south): MV and HV Fluid Extractor, Chemical Reactor, Electrolyzer and Extractor, all facing south.
