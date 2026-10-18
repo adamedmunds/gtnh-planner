@@ -65,7 +65,7 @@ export function ResourceMenuProvider({ chain, db, result, dispatch, onShow, chil
   }, [menu]);
 
   const items: ResourceAction[] = menu
-    ? [...actionsFor(menu.key), { label: 'Show in recipe browser', run: () => onShow(menu.key) }]
+    ? [...actionsFor(menu.key), { label: 'What makes this?', run: () => onShow(menu.key) }]
     : [];
 
   return (

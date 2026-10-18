@@ -1,29 +1,32 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { memo, useState } from 'react';
+import { memo } from 'react';
 import { formatNumber, formatRate } from '../format';
 import type { NodeView, ResourceRow } from '../graphModel';
 import { useGraph } from './graphContext';
 import { useResourceMenu } from './ResourceMenu';
-import { SuggestList } from './SuggestList';
 
 export type CardNode = Node<{ view: NodeView }>;
 
-function Row({ row, input }: { row: ResourceRow; input: boolean }) {
+function Row({ row }: { row: ResourceRow }) {
   const openMenu = useResourceMenu();
-  const [open, setOpen] = useState(false);
+  const { openPicker } = useGraph();
   return (
     <li data-testid="node-row" data-key={row.key} onContextMenu={(e) => openMenu(e, row.key)}>
       <div className="node-row">
         <span className={row.unmet && !row.external ? 'unmet' : ''}>{row.name}</span>
         <span className="num">{formatRate(row.rate, row.kind)}</span>
         <button className="more nodrag" aria-label={`Options for ${row.name}`} title="Target, supply limit, bought in" onClick={(e) => openMenu(e, row.key)}>⋯</button>
-        {input && row.unmet && (
-          row.external
-            ? <span className="tag">bought in</span>
-            : <button className="nodrag" data-testid="suggest" title="Recipes that make this" onClick={() => setOpen((o) => !o)}>suggest</button>
-        )}
       </div>
-      {open && input && row.unmet && !row.external && <SuggestList resource={row.key} onDone={() => setOpen(false)} />}
+      {(row.actions.includes('make') || row.actions.includes('use')) && (
+        <div className="row-actions">
+          {row.actions.includes('make') && (
+            <button className="nodrag" data-testid="add-make" onClick={() => openPicker({ kind: 'makes', key: row.key })}>+ add what makes this</button>
+          )}
+          {row.actions.includes('use') && (
+            <button className="nodrag" data-testid="add-use" onClick={() => openPicker({ kind: 'uses', key: row.key })}>+ use this in…</button>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -66,9 +69,9 @@ export const NodeCard = memo(function NodeCard({ data, selected }: NodeProps<Car
           <b>{v.build}</b> to build · {formatNumber(v.machines)} running · {formatRate(v.eut, 'eu')}
         </p>
       )}
-      {v.inputs.length > 0 && <ul className="node-rows">{v.inputs.map((r) => <Row key={r.key} row={r} input />)}</ul>}
+      {v.inputs.length > 0 && <ul className="node-rows">{v.inputs.map((r) => <Row key={r.key} row={r} />)}</ul>}
       {v.outputs.length > 0 && (
-        <ul className="node-rows out">{v.outputs.map((r) => <Row key={r.key} row={r} input={false} />)}</ul>
+        <ul className="node-rows out">{v.outputs.map((r) => <Row key={r.key} row={r} />)}</ul>
       )}
       <Handle type="source" position={Position.Right} />
     </div>

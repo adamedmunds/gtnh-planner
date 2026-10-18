@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ResourceKey } from '../../recipes/types';
 import { overview } from '../overview';
 import { useSolve } from '../useSolve';
 import { ChainGraph } from './ChainGraph';
 import { OverviewPanel } from './OverviewPanel';
-import { RecipeBrowser } from './RecipeBrowser';
+import { chainReducer, type ChainAction } from '../chainState';
+import { autoArrange } from '../layout';
+import { newGeneratorNode, newRecipeNode } from '../newNodes';
+import type { PickerMode, PickerRow } from '../picker';
+import { Picker } from './Picker';
+import { StartPrompt } from './StartPrompt';
 import { ResourceMenuProvider } from './ResourceMenu';
 import { TargetsBar } from './TargetsBar';
 import type { RecipeDb } from '../../recipes/db';
@@ -75,18 +80,45 @@ export function Calculator(p: CalculatorProps) {
 
 function Workspace({ active, db, warning, history, dispatch, toast }: CalculatorProps & { db: RecipeDb; warning?: string }) {
   const chain = history.present;
-  const [selected, setSelected] = useState<ResourceKey>();
+  const [picker, setPicker] = useState<{ mode: PickerMode; want?: ResourceKey } | null>(null);
   const { result, greyed, problem, solving } = useSolve(chain, db);
   const o = useMemo(() => overview(chain, db, result, problem), [chain, db, result, problem]);
+
+  // Adding or removing boxes re-tidies the graph, as one undo step.
+  const structural = (actions: ChainAction[]) => {
+    let next = actions.reduce(chainReducer, chain);
+    next = chainReducer(next, { type: 'arrange', positions: autoArrange(next, db) });
+    if (next !== chain) dispatch({ type: 'load', chain: next });
+  };
+  const openPicker = useCallback((mode: PickerMode) => setPicker({ mode }), []);
+  const closePicker = useCallback(() => setPicker(null), []);
+  const use = (row: PickerRow) => {
+    const node = row.fuel ? newGeneratorNode(row.fuel, chain, db) : newRecipeNode(row.recipe!, chain, db, row.machine.mID);
+    if (!node) return toast('No machine can run this', 'error');
+    structural([{ type: 'addNode', node }, ...(picker?.want ? [{ type: 'setWant', key: picker.want } as ChainAction] : [])]);
+    setPicker(null);
+  };
+
   return (
-    <ResourceMenuProvider chain={chain} db={db} result={result} dispatch={dispatch} onShow={setSelected}>
+    <ResourceMenuProvider chain={chain} db={db} result={result} dispatch={dispatch} onShow={(key) => openPicker({ kind: 'makes', key })}>
       {warning && <div className="banner" data-testid="version-warning">{warning}</div>}
       <div className="calc">
         <OverviewPanel o={o} greyed={greyed} solving={solving} />
         <section className="calc-centre">
           <TargetsBar chain={chain} db={db} dispatch={dispatch} />
           <div className="graph">
+            {chain.nodes.length === 0 && (
+              <StartPrompt
+                db={db}
+                onMake={(key) => setPicker({ mode: { kind: 'makes', key }, want: key })}
+                onHave={(key) => {
+                  structural([{ type: 'setHave', key }]);
+                  setPicker({ mode: { kind: 'uses', key } });
+                }}
+              />
+            )}
             <ChainGraph
+              openPicker={openPicker}
               active={active}
               chain={chain}
               db={db}
@@ -98,8 +130,8 @@ function Workspace({ active, db, warning, history, dispatch, toast }: Calculator
             />
           </div>
         </section>
-        <RecipeBrowser db={db} chain={chain} dispatch={dispatch} selected={selected} onSelect={setSelected} toast={toast} />
       </div>
+      {picker && <Picker mode={picker.mode} chain={chain} db={db} onClose={closePicker} onUse={use} />}
     </ResourceMenuProvider>
   );
 }

@@ -8,6 +8,7 @@ import type { Chain } from '../../calc/chain';
 import type { ChainResult } from '../../calc/solve';
 import type { RecipeDb } from '../../recipes/db';
 import type { ChainHistoryAction } from '../chainState';
+import type { PickerMode } from '../picker';
 import { formatRate } from '../format';
 import { chainEdges, nodeView, resourceInfo } from '../graphModel';
 import { autoArrange } from '../layout';
@@ -26,9 +27,10 @@ export interface ChainGraphProps {
   canUndo: boolean;
   canRedo: boolean;
   dispatch: (a: ChainHistoryAction) => void;
+  openPicker(mode: PickerMode): void;
 }
 
-function Graph({ active, chain, db, result, greyed, canUndo, canRedo, dispatch }: ChainGraphProps) {
+function Graph({ active, chain, db, result, greyed, canUndo, canRedo, dispatch, openPicker }: ChainGraphProps) {
   const flow = useReactFlow();
   const views = useMemo(
     () => chain.nodes.map((n) => nodeView(n, chain, db, result?.nodes.find((r) => r.id === n.id))),
@@ -71,7 +73,7 @@ function Graph({ active, chain, db, result, greyed, canUndo, canRedo, dispatch }
   const onNodeDragStop: OnNodeDrag<CardNode> = (_e, _node, moved) =>
     dispatch({ type: 'arrange', positions: Object.fromEntries(moved.map((n) => [n.id, n.position])) });
 
-  const ctx = useMemo(() => ({ chain, db, dispatch, greyed }), [chain, db, dispatch, greyed]);
+  const ctx = useMemo(() => ({ chain, db, dispatch, greyed, openPicker }), [chain, db, dispatch, greyed, openPicker]);
   return (
     <GraphContext.Provider value={ctx}>
       <ReactFlow
@@ -94,11 +96,6 @@ function Graph({ active, chain, db, result, greyed, canUndo, canRedo, dispatch }
           <button onClick={() => dispatch({ type: 'redo' })} disabled={!canRedo} title="Redo (Ctrl+Y)">Redo</button>
           <button disabled title="Coming next: turn this chain into a 3D layout and schematic (project 2)">Build in 3D</button>
         </Panel>
-        {!chain.nodes.length && (
-          <Panel position="top-center" className="hint graph-empty">
-            Search for a product in the recipe browser and add the recipe that makes it, then use “suggest” on its inputs.
-          </Panel>
-        )}
       </ReactFlow>
     </GraphContext.Provider>
   );
