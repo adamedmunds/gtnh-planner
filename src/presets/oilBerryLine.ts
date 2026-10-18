@@ -14,8 +14,8 @@
  * grow east, so a bigger line contains a smaller one block-for-block: expand in-game by extending the three
  * lines and adding modules at either end. The light fuel tank connects behind the reactor module.
  */
-import type { Build, Facing, PlacedBlock, Vec3 } from '../src/model/types';
-import { DIRS, addVec, posKey } from '../src/model/directions';
+import type { Build, Facing, PlacedBlock, Vec3 } from '../model/types';
+import { DIRS, addVec, posKey } from '../model/directions';
 
 export interface OilBerryLineOptions {
   extractors: number;

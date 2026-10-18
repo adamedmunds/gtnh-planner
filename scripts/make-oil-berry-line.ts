@@ -7,7 +7,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildSchematic } from '../src/export/schematic';
-import { countsForBerryRate, makeOilBerryLine, type OilBerryLineOptions } from './oilBerryLine';
+import { countsForBerryRate, makeOilBerryLine, type OilBerryLineOptions } from '../src/presets/oilBerryLine';
 
 function parseArgs(argv: string[]): OilBerryLineOptions {
   const flag = (name: string) => {

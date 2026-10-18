@@ -1,9 +1,9 @@
 import { OIL_BERRY_LINE, makeOilBerryLine, countsForBerryRate } from './oilBerryLine';
-import { buildSchematic } from '../src/export/schematic';
-import { CATALOG, type CatalogEntry } from '../src/catalog';
-import { computeConnections } from '../src/model/connections';
-import { DIRS, OPPOSITE, addVec, posKey } from '../src/model/directions';
-import type { Build, PlacedBlock } from '../src/model/types';
+import { buildSchematic } from '../export/schematic';
+import { CATALOG, type CatalogEntry } from '../catalog';
+import { computeConnections } from '../model/connections';
+import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
+import type { Build, PlacedBlock } from '../model/types';
 
 const EU_PER_TICK: Record<string, number> = {
   fluid_extractor_lv: 30,
