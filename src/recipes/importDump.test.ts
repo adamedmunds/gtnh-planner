@@ -88,3 +88,8 @@ test('non-fuel recipes with zero or negative duration are skipped with a warning
   expect(data.recipes).toHaveLength(0);
   expect(warnings[0]).toMatch(/duration/);
 });
+
+test('fluid containers are kept as item → fluid pairs', () => {
+  const { data } = importDump(dump());
+  expect(data.containers).toEqual([{ item: 'item:gregtech:gt.metaitem.98@5', fluid: 'fluid:lightfuel', amount: 1000 }]);
+});

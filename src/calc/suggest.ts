@@ -11,6 +11,10 @@ export interface Suggestion {
   newExternals: ResourceKey[];
   /** Uses something the chain already makes (e.g. turns a byproduct back into an input). */
   closesLoop: boolean;
+  /** How many of its inputs the chain already makes. */
+  loops: number;
+  /** Just empties a container of the resource (a cell, bucket or capsule) rather than making it. */
+  unpacks: boolean;
 }
 
 /** Ranked recipes that could make `key` for this chain. Never picks for the user; the UI shows the list. */
@@ -35,11 +39,14 @@ export function suggestFor(key: ResourceKey, chain: Chain, db: RecipeDb, limit =
       machine,
       newExternals: consumed.filter((k) => !made.has(k)),
       closesLoop: consumed.some((k) => made.has(k)),
+      loops: consumed.filter((k) => made.has(k)).length,
+      unpacks: consumed.some((k) => db.containerFluid(k) === key),
     });
   }
   out.sort(
     (a, b) =>
-      Number(b.closesLoop) - Number(a.closesLoop) ||
+      Number(a.unpacks) - Number(b.unpacks) ||
+      b.loops - a.loops ||
       machineTier(a.machine) - machineTier(b.machine) ||
       a.newExternals.length - b.newExternals.length ||
       a.recipe.eut - b.recipe.eut,

@@ -52,7 +52,12 @@ export function importDump(raw: unknown): { data: AppRecipeData; warnings: strin
     dumpFormat === 2 ? maps[mi].machines.some((m) => m.generator) : /fuels?$/i.test(maps[mi].id);
 
   const containerFluid = new Map<number, number>(); // item index → fluid index
-  for (const c of d.containers ?? []) containerFluid.set(c[0], c[1]);
+  const containers: NonNullable<AppRecipeData['containers']> = [];
+  for (const c of d.containers ?? []) {
+    if (!d.items[c[0]] || !d.fluids[c[1]]) continue;
+    containerFluid.set(c[0], c[1]);
+    containers.push({ item: itemKey(d.items[c[0]]), fluid: fluidKey(d.fluids[c[1]]), amount: c[2] });
+  }
 
   const item = (i: number) => {
     const it = d.items[i];
@@ -110,6 +115,7 @@ export function importDump(raw: unknown): { data: AppRecipeData; warnings: strin
       maps,
       recipes,
       fuels,
+      containers,
     },
     warnings,
   };

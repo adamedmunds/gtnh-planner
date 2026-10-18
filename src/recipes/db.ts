@@ -23,6 +23,7 @@ export class RecipeDb {
   private readonly fuels = new Map<number, Fuel[]>();
   private readonly fuelUses = new Map<ResourceKey, Fuel[]>();
   private readonly mapIndex = new Map<string, number>();
+  private readonly containers = new Map<ResourceKey, ResourceKey>();
   private signatures?: Map<string, Recipe>;
   private readonly searchable: { lower: string; resource: Resource }[];
 
@@ -51,6 +52,7 @@ export class RecipeDb {
       uses.push(f);
       this.fuelUses.set(f.key, uses);
     }
+    for (const c of data.containers ?? []) this.containers.set(c.item, c.fluid);
     this.searchable = data.resources.map((resource) => ({ lower: resource.name.toLowerCase(), resource }));
   }
 
@@ -80,6 +82,11 @@ export class RecipeDb {
 
   fuelsFor(mapIndex: number): Fuel[] {
     return this.fuels.get(mapIndex) ?? [];
+  }
+
+  /** The fluid a container item holds (a cell, bucket or capsule), if it is one. */
+  containerFluid(item: ResourceKey): ResourceKey | undefined {
+    return this.containers.get(item);
   }
 
   /** Every generator map that burns this resource, in map order. */

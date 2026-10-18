@@ -3,7 +3,7 @@ import {
   type Edge, type NodeChange, type NodeTypes, type OnNodeDrag,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Chain } from '../../calc/chain';
 import type { ChainResult } from '../../calc/solve';
 import type { RecipeDb } from '../../recipes/db';
@@ -41,6 +41,16 @@ function Graph({ chain, db, result, greyed, canUndo, canRedo, dispatch }: ChainG
       return chain.nodes.map((n, i) => ({ ...old.get(n.id), id: n.id, type: n.kind, position: n.position, data: { view: views[i] } }));
     });
   }, [chain, views]);
+
+  // Bring a newly added node into view (after React Flow has measured it).
+  const count = useRef(chain.nodes.length);
+  useEffect(() => {
+    const grew = chain.nodes.length > count.current;
+    count.current = chain.nodes.length;
+    if (!grew) return;
+    const h = setTimeout(() => flow.fitView({ duration: 200, maxZoom: 1 }), 50);
+    return () => clearTimeout(h);
+  }, [chain.nodes.length, flow]);
 
   const edges: Edge[] = useMemo(
     () =>

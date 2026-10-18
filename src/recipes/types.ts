@@ -71,4 +71,6 @@ export interface AppRecipeData {
   maps: RecipeMapInfo[];
   recipes: Recipe[];
   fuels: Fuel[];
+  /** Items that hold a fluid (cells, buckets, capsules); absent in files imported before containers were kept. */
+  containers?: { item: ResourceKey; fluid: ResourceKey; amount: number }[];
 }

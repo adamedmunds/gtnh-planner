@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const hasRecipes = existsSync('public/data/recipes.json.gz');
 
@@ -66,6 +66,52 @@ test.describe('with recipe data', () => {
     const box = async (title: string) => (await page.getByTestId('node-card').filter({ hasText: title }).boundingBox())!;
     expect((await box('Distillery')).x).toBeLessThan((await box('Chemical Reactor')).x);
     await expect(page.getByRole('button', { name: 'Build in 3D' })).toBeDisabled();
+  });
+
+  test('reference: oil berry line to ≈513 L/s, with undo', async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCalculator(page);
+    await addLightFuelReactor(page);
+    await suggest(page, 'fluid:liquid_sufluriclight_fuel', /Distillery/, /50 L Oil(,| →)/);
+    await suggest(page, 'fluid:oil', /Oil Berry/);
+    await suggest(page, 'item:gregtech:gt.metaitem.01@30001', /Electrolyzer/, /Hydrogen Sulfide Cell/);
+
+    await showInBrowser(page, 'Light Fuel', 'fluid:liquid_light_fuel');
+    await page.getByRole('button', { name: /^Burned in/ }).click();
+    await page.getByTestId('browser-row').filter({ hasText: 'Combustion' }).first().getByTestId('add-recipe').click();
+    await page.getByTestId('node-card').filter({ hasText: 'Light Fuel → EU' }).getByTestId('machine-select')
+      .selectOption({ label: 'Advanced Combustion Generator' });
+
+    await page.getByTestId('browser-selected').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Maximise' }).click();
+    await page.locator('[data-testid=node-row][data-key="item:cropsnh:materialLeaf@10"]').first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /^Supply limit/ }).click();
+    const limit = page.getByLabel('Supply limit for Oil Berry');
+    await limit.fill('5.57');
+    await limit.press('Enter');
+
+    const outputs = page.getByTestId('overview-outputs');
+    await expect(outputs).toContainText('Light Fuel');
+    await expect(outputs).toContainText(/513\.\d L\/s/);
+    await expect(page.getByTestId('overview-problems')).toHaveCount(0);
+    await expect(page.getByTestId('overview-power').locator('dd').nth(2)).toHaveText('0 EU/t');
+
+    await page.getByRole('heading', { name: 'Outputs' }).click(); // leave the input so Ctrl+Z reaches the calculator
+    await page.keyboard.press('Control+z');
+    await expect(outputs).not.toContainText(/513\.\d L\/s/);
+    await page.keyboard.press('Control+y');
+    await expect(outputs).toContainText(/513\.\d L\/s/);
+
+    // Save the project, forget everything, load it back.
+    await page.getByTestId('tab-editor').click();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Save .json' }).click();
+    const file = (await (await download).path())!;
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.locator('input[type=file]').setInputFiles({ name: 'project.json', mimeType: 'application/json', buffer: readFileSync(file) });
+    await page.getByTestId('tab-calculator').click();
+    await expect(page.getByTestId('overview-outputs')).toContainText(/513\.\d L\/s/, { timeout: 30_000 });
   });
 
   test('the calculator tab loads recipes and is remembered', async ({ page }) => {
