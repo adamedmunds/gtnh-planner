@@ -48,3 +48,8 @@ test('recipes with the same items but different EU/t or duration get different s
   expect(d.bySignature(a)!.id).toBe(1);
   expect(d.bySignature(b)!.id).toBe(5);
 });
+
+test('fuelUsesOf lists the generator maps that burn a fluid', () => {
+  expect(db.fuelUsesOf(K.lightFuel)).toEqual([{ map: 4, key: K.lightFuel, euPerLitre: 305 }]);
+  expect(db.fuelUsesOf(K.oil)).toEqual([]);
+});

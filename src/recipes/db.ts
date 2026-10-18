@@ -21,6 +21,7 @@ export class RecipeDb {
   private readonly producers = new Map<ResourceKey, Recipe[]>();
   private readonly consumers = new Map<ResourceKey, Recipe[]>();
   private readonly fuels = new Map<number, Fuel[]>();
+  private readonly fuelUses = new Map<ResourceKey, Fuel[]>();
   private readonly mapIndex = new Map<string, number>();
   private signatures?: Map<string, Recipe>;
   private readonly searchable: { lower: string; resource: Resource }[];
@@ -46,6 +47,9 @@ export class RecipeDb {
       const list = this.fuels.get(f.map) ?? [];
       list.push(f);
       this.fuels.set(f.map, list);
+      const uses = this.fuelUses.get(f.key) ?? [];
+      uses.push(f);
+      this.fuelUses.set(f.key, uses);
     }
     this.searchable = data.resources.map((resource) => ({ lower: resource.name.toLowerCase(), resource }));
   }
@@ -76,6 +80,11 @@ export class RecipeDb {
 
   fuelsFor(mapIndex: number): Fuel[] {
     return this.fuels.get(mapIndex) ?? [];
+  }
+
+  /** Every generator map that burns this resource, in map order. */
+  fuelUsesOf(key: ResourceKey): Fuel[] {
+    return this.fuelUses.get(key) ?? [];
   }
 
   bySignature(sig: string): Recipe | undefined {
