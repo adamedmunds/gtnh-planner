@@ -183,7 +183,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
   // 1. Output faces, decided up front so inputs never take them.
   for (const u of region.units) {
     let primary: Net | undefined;
-    if (u.pm?.generator) primary = sourceNet(TIERS.find((t) => nets.some((n) => n.tier === t && n.source))!);
+    if (u.pm?.generator) primary = sourceNet(u.tier ?? TIERS.find((t) => nets.some((n) => n.tier === t && n.source))!);
     else if (u.transformer) primary = sourceNet(u.transformer.from);
     else if (!u.marker) {
       const outs = roleNets(u).filter((n) => n.producers.has(u.role));
@@ -214,7 +214,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
   // 2. Each network: its lane (if any) plus every block that uses it, on the faces it may use.
   const powerEnds = (n: Net) =>
     region.units.flatMap((u): { u: Placed; mode: 'facing' | 'other' | 'any' }[] => {
-      if (u.pm?.generator) return n.source ? [{ u, mode: 'facing' }] : [];
+      if (u.pm?.generator) return (u.tier ? u.tier === n.tier : n.source) ? [{ u, mode: 'facing' }] : [];
       if (u.transformer) return u.transformer.from === n.tier ? [{ u, mode: 'facing' }] : u.transformer.to === n.tier ? [{ u, mode: 'other' }] : [];
       if (u.marker?.kind === 'power') return n.source ? [{ u, mode: 'any' }] : [];
       if (u.tier === n.tier && !u.marker && !u.pm?.multiblock && !directlyPowered.has(posKey(u.pos))) return [{ u, mode: 'other' }];

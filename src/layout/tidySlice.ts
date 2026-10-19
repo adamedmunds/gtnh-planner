@@ -169,11 +169,12 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
   if (tier || gens.length) {
     const layerTier = tier ?? supply;
     const transformers = new Map<string, Facing>(); // layer cell -> the transformer's input face
-    const genAt = new Map<string, Placed>();
+    // Generators pushing into a layer block: two (from below and above) can share a cable, not a transformer's one input.
+    const genAt = new Map<string, Placed[]>();
     for (const g of gens) {
       const cell = posKey([g.pos[0], 1, g.pos[2]]);
-      if (genAt.has(cell)) return fail('two generators would push into one power-layer block');
-      genAt.set(cell, g);
+      if (genAt.has(cell) && step === 1) return fail('two generators would push into one transformer');
+      genAt.set(cell, [...(genAt.get(cell) ?? []), g]);
       if (step === 1) transformers.set(cell, g.pos[1] === 0 ? 0 : 1);
     }
     if (!gens.length && step === 1) {
@@ -220,8 +221,7 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
           const m = unitAt.get(posKey([x, y, pos[2]]));
           if (m && consumers.includes(m)) serve(pos, m);
         }
-        const g = genAt.get(posKey(pos));
-        if (g) serve(pos, g); // a generator at the layer's voltage pushes straight into it
+        for (const g of genAt.get(posKey(pos)) ?? []) serve(pos, g); // generators at the layer's voltage push straight in
       }
       const [a, b]: Vec3[] = [[x, 1, 0], [x, 1, 1]];
       if (cellNet.get(posKey(a)) === layerNet.id && cellNet.get(posKey(b)) === layerNet.id) link(a, b);

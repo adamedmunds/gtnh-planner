@@ -200,3 +200,24 @@ test('HV power from outside lays out: HV→MV in the core, MV→LV in the power 
   expect(sliceTransformers.length).toBeGreaterThan(0);
   for (const t of sliceTransformers) expect(t.pos[1]).toBe(1);
 });
+
+describe('generators matching each voltage', () => {
+  const matched = async (style: 'modular' | 'straight') => {
+    const chain = { ...reference(), nodes: reference().nodes.map((n) => (n.kind === 'generator' ? { ...n, matchTiers: true } : n)) };
+    const p = planLine(chain, db, await solveForScreen(chain, db, await createHighsSolver()), style);
+    if ('error' in p) throw new Error(p.error);
+    return p;
+  };
+
+  for (const style of ['modular', 'straight'] as const) {
+    test(`the ${style} oil line uses LV generators for LV machines and an MV one for the MV electrolyzer, no transformers`, async () => {
+      const p = await matched(style);
+      const { build } = buildLine(p, 'Light Fuel line');
+      expect(checkLine(build, p)).toEqual([]);
+      const keys = new Set(build.blocks.map((b) => b.key));
+      expect([...keys].some((k) => /1110|combustion_generator_lv/.test(k))).toBe(true);
+      expect(keys.has('combustion_generator_mv')).toBe(true);
+      expect(keys.has('transformer_mv_lv')).toBe(false);
+    }, 60_000);
+  }
+});

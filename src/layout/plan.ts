@@ -33,7 +33,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
   const nodes = chain.nodes.filter((n) => solved.has(n.id));
   if (!nodes.length) return { error: 'Nothing to build yet — add machines and type how much you have or want' };
 
-  const info = nodes.map((node) => {
+  const perNode = nodes.map((node) => {
     const r = nodeRates(node, db);
     const perMachine = r.valid ? r.perMachine : new Map<ResourceKey, number>();
     const mapIndex = node.kind === 'recipe' ? db.bySignature(node.recipeSig)!.map : db.mapIndexById(node.fuelMap)!;
@@ -46,6 +46,8 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     });
     const title = recipe ? db.map(recipe.map).name : `${resourceInfo((node as { fuelKey: string }).fuelKey, db).name} generator`;
     return {
+      id: node.id,
+      build: solved.get(node.id)!.build,
       title,
       kept,
       node,
@@ -58,6 +60,17 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
       outputs: [...perMachine].filter(([k, v]) => v > 0 && k !== EU).map(([k]) => k),
     };
   });
+  // A generator matching each voltage: one entry per voltage (its own generator, count and EU).
+  const info = perNode.flatMap((i) => {
+    const tiers = solved.get(i.node.id)!.tiers;
+    if (i.node.kind !== 'generator' || !tiers?.length) return [i];
+    const mapIndex = db.mapIndexById(i.node.fuelMap)!;
+    return tiers.filter((t) => t.machines > 1e-9).map((t) => {
+      const ref = db.map(mapIndex).machines.find((m) => m.mID === t.machineMID)!;
+      const r = nodeRates({ ...i.node, machineMID: t.machineMID }, db);
+      return { ...i, id: `${i.node.id}@${t.tier}`, build: t.build, ref, tier: t.tier, machines: t.machines, eut: Math.abs(t.eut), perMachineEut: r.valid ? Math.abs(r.eut) : 0 };
+    });
+  });
 
   for (const i of info) {
     if (i.tier && !i.ref.multiblock && tierIndex(i.tier) > tierIndex('HV')) {
@@ -66,7 +79,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
   }
 
   const machine = (i: (typeof info)[number], count: number): PlanMachine => ({
-    nodeId: i.node.id,
+    nodeId: i.id,
     key: i.ref.multiblock ? 'marker_multiblock' : keyFor(i.ref),
     machine: { key: keyFor(i.ref), name: i.ref.name, mID: i.ref.mID, ...(i.tier ? { tier: i.tier } : {}) },
     ...(i.tier ? { tier: i.tier } : {}),
@@ -90,8 +103,8 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
   const networks: PlanNetwork[] = [];
   const keys = new Set(info.flatMap((i) => [...i.inputs, ...i.outputs]));
   for (const key of keys) {
-    const producers = info.filter((i) => i.outputs.includes(key)).map((i) => i.node.id);
-    const consumers = info.filter((i) => i.inputs.includes(key)).map((i) => i.node.id);
+    const producers = info.filter((i) => i.outputs.includes(key)).map((i) => i.id);
+    const consumers = info.filter((i) => i.inputs.includes(key)).map((i) => i.id);
     if (markers.some((m) => m.id === `in:${key}`)) producers.push(`in:${key}`);
     if (markers.some((m) => m.id === `out:${key}`)) consumers.push(`out:${key}`);
     if (producers.length + consumers.length < 2) continue;
@@ -140,14 +153,14 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     style: 'straight',
     sliceCount: 0,
     core: [],
-    straight: info.map((i) => machine(i, solved.get(i.node.id)!.build)),
+    straight: info.map((i) => machine(i, i.build)),
     networks,
     markers,
     power,
     notes: [
       ...(fallback ? [fallback] : []),
       ...multiblockNotes(),
-      ...buildNotes(info.map((i) => machine(i, solved.get(i.node.id)!.build)), (m) => m.count),
+      ...buildNotes(info.map((i) => machine(i, i.build)), (m) => m.count),
     ],
     ...(fallback ? { fallback } : {}),
   });

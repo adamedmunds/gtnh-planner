@@ -198,6 +198,8 @@ const GENERATOR_MARGIN = 1.1;
  * generators in the plan take power from the core through a feed.
  */
 function powerEachRegion(plan: LinePlan, rows: PlanMachine[], oneOffs: PlanMachine[], copies: number): { rows: PlanMachine[]; oneOffs: PlanMachine[] } {
+  const allGens = [...rows, ...oneOffs].filter((m) => m.generator);
+  if (new Set(allGens.map((g) => g.tier)).size > 1) return powerEachVoltage(rows, oneOffs, copies, allGens);
   const gen = [...rows, ...oneOffs].find((m) => m.generator);
   if (!gen || plan.power.source.kind !== 'generators' || !gen.eut) return { rows, oneOffs };
   const uses = (ms: PlanMachine[], per: number) => ms.filter((m) => !m.generator && !m.multiblock).reduce((s, m) => s + (m.avgEut ?? m.eut * m.count * per) / per, 0);
@@ -215,6 +217,36 @@ function powerEachRegion(plan: LinePlan, rows: PlanMachine[], oneOffs: PlanMachi
   return { rows: withGen(rows, perSlice), oneOffs: withGen(oneOffs, core) };
 }
 
+/**
+ * Generators matching each voltage: each region gets, for every voltage its machines use, generators of that voltage
+ * (or the next one up, through transformers) covering what they use on average.
+ */
+function powerEachVoltage(rows: PlanMachine[], oneOffs: PlanMachine[], copies: number, gens: PlanMachine[]) {
+  const genFor = (tier: string) => {
+    const want = TIER_ORDER.indexOf(tier);
+    return [...gens].sort((a, b) => TIER_ORDER.indexOf(a.tier!) - TIER_ORDER.indexOf(b.tier!)).find((g) => TIER_ORDER.indexOf(g.tier!) >= want) ?? gens[gens.length - 1];
+  };
+  const region = (ms: PlanMachine[], per: number): PlanMachine[] => {
+    const count = new Map<PlanMachine, number>();
+    const machinesOf = new Map<PlanMachine, number>();
+    for (const m of ms.filter((x) => !x.generator && !x.multiblock && x.tier)) {
+      const tier = m.tier === 'ULV' ? 'LV' : m.tier!;
+      const g = genFor(tier);
+      const eu = (m.avgEut ?? m.eut * m.count * per) / per;
+      count.set(g, (count.get(g) ?? 0) + eu);
+      if (TIER_ORDER.indexOf(g.tier!) > TIER_ORDER.indexOf(tier)) machinesOf.set(g, (machinesOf.get(g) ?? 0) + m.count);
+    }
+    const out: PlanMachine[] = [];
+    for (const [g, eu] of count) {
+      const need = Math.max(Math.ceil((eu * GENERATOR_MARGIN) / g.eut - 1e-9), Math.ceil((machinesOf.get(g) ?? 0) / 4));
+      if (need > 0) out.push({ ...g, count: need });
+    }
+    return [...ms.filter((m) => !m.generator), ...out];
+  };
+  return { rows: region(rows, copies), oneOffs: region(oneOffs, 1) };
+}
+const TIER_ORDER = ['LV', 'MV', 'HV'];
+
 /** The core for a tidy slice, and the whole line assembled around it. */
 function withCore(
   plan: LinePlan, name: string, slice: TidySlice, copies: { left: number; right: number }, nets: Net[], coreMachines: Unit[], everyMachine: Unit[],
@@ -223,18 +255,20 @@ function withCore(
   const source = plan.power.source.tier;
   const feed = slice.nets.find((n) => n.kind === 'cable' && slice.throughRuns.has(n.id));
   // The core steps the source down to the feed (if the slices run below it) and to its own machines' voltages.
+  const ownGen = new Set(coreMachines.filter((u) => u.pm?.generator).map((u) => u.tier));
+  const needsStep = (u: Unit) => !u.pm?.generator && !ownGen.has(u.tier);
   const steps = feed && feed.tier !== source
-    ? [...transformersFor(everyMachine, source).filter((t) => t.transformer!.from === source), ...transformersFor(coreMachines, source).filter((t) => t.transformer!.from !== source)]
-    : transformersFor(coreMachines, source);
+    ? [...transformersFor(everyMachine, source).filter((t) => t.transformer!.from === source), ...transformersFor(coreMachines.filter(needsStep), source).filter((t) => t.transformer!.from !== source)]
+    : ownGen.size > 1 ? transformersFor(coreMachines.filter(needsStep), source) : transformersFor(coreMachines, source);
   const coreUnits = [...coreMachines, ...steps];
   const markerColumns = Math.ceil(markers.length / 4);
   const laneIds = new Set(slice.throughRuns.keys());
   const local = nets.map((n) => (n.kind === 'cable' && !n.source && !laneIds.has(n.id) ? { ...n, id: `${n.id}:core` } : n));
   // A power network that stays in the core carries only the core's own generators: size its cable for those.
-  const coreGenEut = coreUnits.filter((u) => u.pm?.generator).reduce((s, u) => s + (u.pm?.eut ?? 0), 0);
+  const genEutAt = (tier?: string) => coreUnits.filter((u) => u.pm?.generator && u.tier === tier).reduce((s, u) => s + (u.pm?.eut ?? 0), 0);
   const sized = (n: Net): Net =>
-    n.kind === 'cable' && n.source && !laneIds.has(n.id) && plan.power.source.kind === 'generators' && coreGenEut > 0
-      ? { ...n, conduit: cableFor(n.tier!, Math.max(1, coreGenEut / VOLTAGE[n.tier!])).key }
+    n.kind === 'cable' && !laneIds.has(n.id) && plan.power.source.kind === 'generators' && genEutAt(n.tier) > 0
+      ? { ...n, conduit: cableFor(n.tier!, Math.max(1, genEutAt(n.tier) / VOLTAGE[n.tier!])).key }
       : n;
   const coreNets = local.map((n) => sized(slice.nets.find((s) => s.id === n.id) ?? n));
   // A core machine sits on the side with more of the through-runs it uses.
