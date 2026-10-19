@@ -84,6 +84,8 @@ export function buildSchematicTag(
       te.value.id = str('BaseMetaTileEntity');
       te.value.mID = int(entry.mID);
       te.value.mFacing = short(block.facing ?? DEFAULT_FACING);
+      // GT stores "allowed to work" inverted; a transformer that isn't allowed to work steps up.
+      if (block.stepUp) te.value.mWorks = byte(1);
       // GT basic machines keep their front separately; without it they load with the front on the output side.
       if (block.mainFacing !== undefined) {
         te.value.mMainFacing = int(block.mainFacing);

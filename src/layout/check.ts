@@ -185,6 +185,13 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
   };
   const feedBlock = (n: Cell, fromSide: number, tier: number) => {
     // `fromSide` is the side of `n` the power arrives on.
+    if (isTransformer(n.entry) && n.block.stepUp) {
+      // Step-up: the lower voltage in on any face but its facing, the higher out of its facing.
+      const low = tierIdx(n.entry.tier);
+      if (fromSide === n.block.facing || tier !== low) return;
+      if (raise(posKey(n.block.pos), tier)) emitAll(n, low + 1, [n.block.facing!]);
+      return;
+    }
     if (isTransformer(n.entry)) {
       if (fromSide !== n.block.facing) return;
       if (raise(posKey(n.block.pos), tier)) {
@@ -245,6 +252,7 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
       const m = byNode.get(roleOf(n) ?? '');
       let out: number | undefined;
       if (m?.generator && n.block.facing === toward) out = machineTier(n);
+      else if (isTransformer(n.entry) && n.block.stepUp) out = n.block.facing === toward ? tierIdx(n.entry.tier) + 1 : undefined;
       else if (isTransformer(n.entry) && n.block.facing !== toward) out = tierIdx(n.entry.tier);
       else if (n.entry.key === 'marker_power_in') out = tierIdx(plan.power.source.tier);
       if (out !== undefined && out > rated(c)) burn(c, `the power output of the ${label(n)}`, out);

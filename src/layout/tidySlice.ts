@@ -112,6 +112,8 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
   if (tiersUsed.size > 1) return fail('machines of two voltages would share one power layer');
   const tier: PowerTier | undefined = consumers[0]?.tier;
   let supply: PowerTier = gens.length ? tierOf(gens[0].pm) ?? source : source;
+  // Machines above the source get their voltage from the core (stepped up there), straight into their power layer.
+  if (!gens.length && tier && TIERS.indexOf(tier) > si) supply = tier;
   if (!gens.length && tier && TIERS.indexOf(tier) < si - 1) {
     supply = TIERS[si - 1]; // the core steps HV down to MV for the feed
     if (TIERS.indexOf(tier) < si - 2) return fail('machines three voltages below the source');
@@ -122,9 +124,11 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
   const feedId = `p:${supply}`;
   const belowSource = TIERS.slice(0, si).reduce((s, t) => s + (plan.power.demand[t] ?? 0), 0);
   const given = nets.find((n) => n.id === feedId);
+  const aboveSource = TIERS.slice(si + 1).reduce((s, t) => s + (plan.power.demand[t] ?? 0), 0);
   const feedNet: Net | undefined = gens.length || !given || !consumers.length
     ? undefined
-    : supply === source ? given : { ...given, conduit: cableFor(supply, Math.max(1, belowSource / VOLTAGE[supply])).key };
+    : supply === source ? given
+    : { ...given, conduit: cableFor(supply, Math.max(1, (TIERS.indexOf(supply) > si ? aboveSource : belowSource) / VOLTAGE[supply])).key };
   if (!gens.length && consumers.length && !feedNet) return fail(`no ${supply} power network`);
 
   // Enough generators for what the machines use on average, and enough transformers (4 A each) for one amp a machine.

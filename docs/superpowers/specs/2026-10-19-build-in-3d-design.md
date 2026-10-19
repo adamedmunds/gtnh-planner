@@ -311,3 +311,17 @@ My calls:
 - With "match", a voltage the fuel has no generator for uses the next generator up (stepped down).
 - The layout gives each slice and the core generators of each voltage their machines use, each pushing into that
   voltage's power; the planner and checker treat each voltage's generators as that voltage's source.
+
+## Step-up transformers
+
+Machines above every generator's voltage are powered through transformers set to step up (soft mallet; the
+schematic stores this as `mWorks=1`, GT's inverted "allowed to work"). A step-up takes the lower voltage on its five
+other faces and gives the higher voltage out of its front only, 1 A per transformer, so the core gets one per amp of
+what the machines at or above that voltage use (MV to HV: `transformer_hv_mv`; LV to MV: `transformer_mv_lv`).
+
+- All the generators go in the core beside the step-ups; slices take the stepped-up voltage through their power layer.
+- A step-up touches no machine (it never powers one directly) and no cable of another voltage touches its input
+  faces. No two power outputs of different voltages sit side by side.
+- The checker, the cable-loss model and the straight fallback all know a step-up's faces. The build notes say to hit
+  each step-up with a soft mallet.
+- Only outside power below a machine's voltage still stops the layout with a reason.

@@ -21,6 +21,7 @@ import {
   placeCore,
   planNets,
   powerNets,
+  stepUpsFor,
   routeRegion,
   transformersFor,
   unitBlock,
@@ -81,7 +82,9 @@ const ROOMY: Form = {
 /** Straight line: machines one high along a walkway, every network routed behind them. */
 function buildStraight(plan: LinePlan, name: string, warnings: string[], why: string[] = []): Build | undefined {
   const machines = machineUnits(plan.straight ?? []);
-  const units: Unit[] = [...machines, ...transformersFor(machines, plan.power.source.tier), ...markerUnits(plan.markers)];
+  const source = plan.power.source.tier;
+  const ups = plan.power.source.kind === 'generators' ? stepUpsFor(machines, source) : [];
+  const units: Unit[] = [...machines, ...transformersFor(machines, source), ...ups, ...markerUnits(plan.markers)];
   const nets = [...planNets(plan, warnings), ...powerNets(plan, units, countTransformers(units), warnings)];
   for (let gap = 1; gap <= WIDEN_TRIES; gap++) {
     const step = gap + 1;
@@ -207,9 +210,10 @@ function buildModular(plan: LinePlan, name: string, warnings: string[], form: Fo
  * lose, adding a generator per slice (or to the line) until they do.
  */
 export function buildLine(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
-  // GT machines can't run below their recipe's voltage, and lines aren't stepped up: say so before trying to lay out.
+  // Power from outside comes in at the highest voltage the machines use; generators below a machine's voltage are
+  // stepped up in the core. Only outside power too low for a machine can't work.
   const source = plan.power.source.tier;
-  const tooHigh = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])]
+  const tooHigh = plan.power.source.kind === 'generators' ? [] : [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])]
     .filter((m) => !m.generator && !m.multiblock && m.tier && TIER_NAMES.indexOf(m.tier) > TIER_NAMES.indexOf(source));
   if (tooHigh.length) {
     throw new LayoutFailure(tooHigh.map((m) => `${CATALOG.get(m.key)?.name ?? m.machine.name} needs ${m.tier} power, but the line's power is ${source}`));
@@ -233,13 +237,21 @@ export function buildLine(plan: LinePlan, name: string): { build: Build; warning
         ...(extra ? [`Added ${extra} extra generator${extra > 1 ? 's' : ''}${p.style === 'modular' ? ' in the core' : ''} to cover cable loss`] : []),
         ...(short ? [`The generators still fall short of what the machines use plus cable loss — add more`] : []),
       ];
-      out.build.notes = [...(out.build.notes ?? []), ...notes, ...pullBackNote(out.build, p)];
+      out.build.notes = [...(out.build.notes ?? []), ...notes, ...stepUpNote(out.build), ...pullBackNote(out.build, p)];
       return out;
     }
     const missing = Math.ceil((used + lost - gens.length * genEut) / genEut - 1e-9);
     p = withExtraGenerators(p, missing);
     extra += missing;
   }
+}
+
+/** Step-up transformers placed by hand step down until hit with a soft mallet. */
+function stepUpNote(build: Build): string[] {
+  const ups = build.blocks.filter((b) => b.stepUp);
+  if (!ups.length) return [];
+  const pairs = [...new Set(ups.map((b) => { const low = CATALOG.get(b.key)?.tier ?? 'LV'; return `${low} up to ${TIER_NAMES[TIER_NAMES.indexOf(low) + 1]}`; }))];
+  return [`Hit each of the ${ups.length} step-up transformer${ups.length > 1 ? 's' : ''} with a soft mallet so it steps ${pairs.join(' and ')} (the schematic sets this when pasted); its output is the face shown as its front`];
 }
 
 /**

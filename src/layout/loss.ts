@@ -7,7 +7,7 @@ import type { LinePlan, PlanMachine, PowerTier } from './types';
 
 const TIER_ORDER: readonly PowerTier[] = ['LV', 'MV', 'HV'];
 
-interface Cell { pos: Vec3; entry: CatalogEntry; facing?: number; role?: string }
+interface Cell { pos: Vec3; entry: CatalogEntry; facing?: number; role?: string; stepUp?: boolean }
 
 /**
  * EU/t lost in cables: every machine draws EU/t ÷ voltage amps on average over its shortest cable run from a power source
@@ -18,7 +18,7 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
   const cells = new Map<string, Cell>();
   for (const b of build.blocks) {
     const entry = CATALOG.get(b.key);
-    if (entry) cells.set(posKey(b.pos), { pos: b.pos, entry, facing: b.facing, role: b.role });
+    if (entry) cells.set(posKey(b.pos), { pos: b.pos, entry, facing: b.facing, role: b.role, stepUp: b.stepUp });
   }
   const masks = computeConnections(build.blocks);
   const byNode = new Map<string, PlanMachine>([...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])].map((m) => [m.nodeId, m]));
@@ -33,7 +33,7 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
     const marker = c.entry.key === 'marker_power_in';
     if (!gen && !transformer && !marker) continue;
     DIRS.forEach((d, side) => {
-      const gives = gen ? side === c.facing : transformer ? side !== c.facing : true;
+      const gives = gen || c.stepUp ? side === c.facing : transformer ? side !== c.facing : true;
       const n = cells.get(posKey(addVec(c.pos, d)));
       if (gives && n && isCable(n) && connected(n, OPPOSITE[side])) sources.push({ cable: posKey(n.pos), source: posKey(c.pos) });
     });
@@ -60,7 +60,8 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
   const nearest = (c: Cell, transformerHigh: boolean) => {
     let best: { d: number; loss: number; from: string } | undefined;
     DIRS.forEach((d, side) => {
-      if (transformerHigh ? side !== c.facing : side === c.facing) return;
+      // A transformer takes power in on its facing (step-down) or on its other faces (step-up).
+      if (transformerHigh ? (c.stepUp ? side === c.facing : side !== c.facing) : side === c.facing) return;
       const n = cells.get(posKey(addVec(c.pos, d)));
       const nd = n && dist.get(posKey(n.pos));
       if (!n || !isCable(n) || nd === undefined || !connected(n, OPPOSITE[side])) return;
@@ -96,7 +97,8 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
     const best = nearest(t, true);
     if (!best || !eu) continue;
     const high = TIER_ORDER[TIER_ORDER.indexOf(tierOfVoltage(t.entry.tier)) + 1] ?? 'MV';
-    const lost = best.d * best.loss * (eu / VOLTAGE[high]);
+    // It draws in packets of the voltage it takes in: the higher for a step-down, the lower for a step-up.
+    const lost = best.d * best.loss * (eu / VOLTAGE[t.stepUp ? tierOfVoltage(t.entry.tier) : high]);
     perMachine.set(posKey(t.pos), lost);
     total += lost;
     if (isTransformer(cells.get(best.from))) fedEu.set(best.from, (fedEu.get(best.from) ?? 0) + eu);

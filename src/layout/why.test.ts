@@ -1,4 +1,5 @@
 import { buildLine } from './build';
+import { checkLine } from './check';
 import { LayoutFailure, explainFailures } from './why';
 import type { LinePlan, PlanMachine } from './types';
 
@@ -58,13 +59,9 @@ test('a machine above the line\'s power voltage stops the layout with why and wh
     nodeId: 'mix', key: 'gt_583', machine: { key: 'gt_583', name: 'Advanced Mixer II', mID: 583, tier: 'HV' }, tier: 'HV',
     count: 1, eut: 480, avgEut: 480, title: 'Mixer', kept: [], inputs: [], outputs: [], generator: false, multiblock: false,
   };
-  const gen: PlanMachine = {
-    nodeId: 'gen', key: 'combustion_generator_mv', machine: { key: 'combustion_generator_mv', name: 'Advanced Combustion Generator', mID: 1111, tier: 'MV' },
-    tier: 'MV', count: 4, eut: 128, avgEut: 501, title: 'Diesel generator', kept: [], inputs: [], outputs: [], generator: true, multiblock: false,
-  };
   const plan: LinePlan = {
-    style: 'straight', sliceCount: 0, core: [], straight: [mixer, gen], notes: [], networks: [], markers: [],
-    power: { tiers: ['HV'], source: { kind: 'generators', tier: 'MV' }, demand: { HV: 480 }, transformers: [] },
+    style: 'straight', sliceCount: 0, core: [], straight: [mixer], notes: [], networks: [], markers: [],
+    power: { tiers: ['HV'], source: { kind: 'outside', tier: 'MV', eut: 480 }, demand: { HV: 480 }, transformers: [] },
   };
   let error: unknown;
   try {
@@ -82,3 +79,21 @@ test('a layout the checker rejects is never handed over: it fails with the probl
   const [r] = explainFailures(['check: No power reaches the Advanced Mixer II at (0, 0, -1)']);
   expect(r.text).toMatch(/No power reaches the Advanced Mixer II/);
 });
+
+test('the same mixer on MV generators is stepped up instead', () => {
+  const mixer: PlanMachine = {
+    nodeId: 'mix', key: 'gt_583', machine: { key: 'gt_583', name: 'Advanced Mixer II', mID: 583, tier: 'HV' }, tier: 'HV',
+    count: 1, eut: 480, avgEut: 480, title: 'Mixer', kept: [], inputs: [], outputs: [], generator: false, multiblock: false,
+  };
+  const gen: PlanMachine = {
+    nodeId: 'gen', key: 'combustion_generator_mv', machine: { key: 'combustion_generator_mv', name: 'Advanced Combustion Generator', mID: 1111, tier: 'MV' },
+    tier: 'MV', count: 4, eut: 128, avgEut: 501, title: 'Diesel generator', kept: [], inputs: [], outputs: [], generator: true, multiblock: false,
+  };
+  const plan: LinePlan = {
+    style: 'straight', sliceCount: 0, core: [], straight: [mixer, gen], notes: [], networks: [], markers: [],
+    power: { tiers: ['HV'], source: { kind: 'generators', tier: 'MV' }, demand: { HV: 480 }, transformers: [] },
+  };
+  const { build } = buildLine(plan, 'Diesel line');
+  expect(checkLine(build, plan)).toEqual([]);
+  expect(build.blocks.some((b) => b.stepUp)).toBe(true);
+}, 60_000);

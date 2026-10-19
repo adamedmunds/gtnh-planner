@@ -28,6 +28,8 @@ export interface PlacedBlock {
   role?: string;
   /** Generated pipes/cables: the network (`Build.networks` id) it belongs to. */
   net?: string;
+  /** Transformers set to step up (soft mallet): the lower voltage in on five faces, the higher out of `facing`. */
+  stepUp?: boolean;
 }
 
 /** What one generated pipe or cable network carries, for labels, highlight and the legend. */

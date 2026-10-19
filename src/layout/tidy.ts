@@ -12,6 +12,7 @@ import {
   planNets,
   powerNets,
   routeRegion,
+  stepUpsFor,
   transformersFor,
   TIERS,
   unitBlock,
@@ -133,8 +134,12 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[], why:
       .reduce((s, m) => s + m.count * ((plan.slice ?? []).includes(m) ? plan.sliceCount : 1), 0);
     const built = best.build.blocks.filter((b) => b.role === gen.nodeId).length;
     if (built > planned) {
+      // Stepped-up power is made in the core only (beside its step-up transformers); the extra covers cable loss.
+      const why = best.build.blocks.some((b) => b.stepUp)
+        ? 'The generators sit in the core beside the step-up transformers, with a few extra for what the cables lose'
+        : 'Each slice and the core have their own generators so power never travels far';
       best.build.notes = [...(best.build.notes ?? []),
-        `Each slice and the core have their own generators so power never travels far: ${built} in all (the Calculator counted ${planned}). Idle generators burn no fuel`];
+        `${why}: ${built} in all (the Calculator counted ${planned}). Idle generators burn no fuel`];
     }
   }
   return best.build;
@@ -176,8 +181,14 @@ function placeTidyCore(units: Unit[], start: number, length: number, side: (u: U
     return !m || !m.tier || m.marker || m.pm?.generator || m.tier === t.transformer!.to;
   });
   for (const t of units.filter((x) => x.transformer)) {
-    const ok = safeFor(t);
-    const near = placed
+    // A step-up gives the higher voltage out of one face (routed to later): it touches no machine but a generator.
+    const ok = t.transformer!.up
+      ? (c: Vec3) => free(c) && c[0] >= start && c[0] < start + length && DIRS.every((d) => {
+        const m = placed.find((p) => posKey(p.pos) === posKey(addVec(c, d)));
+        return !m || m.marker || m.pm?.generator;
+      })
+      : safeFor(t);
+    const near = t.transformer!.up ? undefined : placed
       .filter((m) => !m.transformer && m.tier === t.transformer!.to)
       .flatMap((m) => [1, -1].map((dx): Vec3 => [m.pos[0] + dx, m.pos[1], m.pos[2]]))
       .find(ok);
@@ -205,7 +216,10 @@ function powerEachRegion(plan: LinePlan, rows: PlanMachine[], oneOffs: PlanMachi
   const uses = (ms: PlanMachine[], per: number) => ms.filter((m) => !m.generator && !m.multiblock).reduce((s, m) => s + (m.avgEut ?? m.eut * m.count * per) / per, 0);
   const need = (eu: number) => (eu > 0 ? Math.ceil((eu * GENERATOR_MARGIN) / gen.eut - 1e-9) : 0);
   const planned = [...rows, ...oneOffs].filter((m) => m.generator).reduce((s, m) => s + m.count * (rows.includes(m) ? copies : 1), 0);
-  const inRows = rows.some((m) => m.generator);
+  // Machines above the generators' voltage are stepped up to in the core, which then powers their slices: all the
+  // generators go in the core.
+  const above = rows.some((m) => !m.generator && m.tier && TIERS.indexOf(m.tier as PowerTier) > TIERS.indexOf(gen.tier as PowerTier));
+  const inRows = rows.some((m) => m.generator) && !above;
   // A transformer gives 4 A of the lower voltage: one generator (through one transformer) per 4 machines a step down.
   const stepDown = rows.some((m) => !m.generator && m.tier && TIERS.indexOf(m.tier as PowerTier) < TIERS.indexOf(gen.tier as PowerTier));
   const machinesPerSlice = rows.filter((m) => !m.generator && !m.multiblock).reduce((s, m) => s + m.count, 0);
@@ -260,7 +274,7 @@ function withCore(
   const steps = feed && feed.tier !== source
     ? [...transformersFor(everyMachine, source).filter((t) => t.transformer!.from === source), ...transformersFor(coreMachines.filter(needsStep), source).filter((t) => t.transformer!.from !== source)]
     : ownGen.size > 1 ? transformersFor(coreMachines.filter(needsStep), source) : transformersFor(coreMachines, source);
-  const coreUnits = [...coreMachines, ...steps];
+  const coreUnits = [...coreMachines, ...steps, ...(plan.power.source.kind === 'generators' ? stepUpsFor(everyMachine, source) : [])];
   const markerColumns = Math.ceil(markers.length / 4);
   const laneIds = new Set(slice.throughRuns.keys());
   const local = nets.map((n) => (n.kind === 'cable' && !n.source && !laneIds.has(n.id) ? { ...n, id: `${n.id}:core` } : n));

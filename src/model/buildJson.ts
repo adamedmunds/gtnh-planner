@@ -39,6 +39,7 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
     const block: PlacedBlock = { pos: [pos[0], pos[1], pos[2]], key: rb.key };
     if (typeof rb.role === 'string') block.role = rb.role;
     if (typeof rb.net === 'string') block.net = rb.net;
+    if (rb.stepUp === true) block.stepUp = true;
     if (isInt(rb.mainFacing) && rb.mainFacing >= 2 && rb.mainFacing <= 5) block.mainFacing = rb.mainFacing as Facing;
     if (rb.facing !== undefined) {
       if (isInt(rb.facing) && rb.facing >= 0 && rb.facing <= 5) block.facing = rb.facing as Facing;

@@ -18,7 +18,8 @@ export interface Unit {
   name: string;
   pm?: PlanMachine;
   marker?: PlanMarker;
-  transformer?: { from: PowerTier; to: PowerTier };
+  /** `up`: set to step up (soft mallet) — `from` (lower) in on five faces, `to` (higher) out of its facing. */
+  transformer?: { from: PowerTier; to: PowerTier; up?: boolean };
   /** Power tier the block runs on (machines). */
   tier?: PowerTier;
 }
@@ -138,6 +139,25 @@ export function transformersFor(units: Unit[], source: PowerTier): Unit[] {
   return out;
 }
 
+/**
+ * Transformers set to step up from the source to each voltage above it that machines use: each gives 1 A of the higher
+ * voltage (from 4 A of the lower), so one per amp of what the machines at or above that voltage use.
+ */
+export function stepUpsFor(units: Unit[], source: PowerTier): Unit[] {
+  const out: Unit[] = [];
+  const machines = units.filter((u) => u.tier && !u.pm?.generator && !u.transformer);
+  for (let t = TIERS.indexOf(source) + 1; t < TIERS.length; t++) {
+    const carried = machines.filter((u) => TIERS.indexOf(u.tier!) >= t).reduce((s, u) => s + (u.pm?.eut ?? 0), 0);
+    if (carried <= 0) continue;
+    const from = TIERS[t - 1];
+    const to = TIERS[t];
+    const key = to === 'MV' ? 'transformer_mv_lv' : 'transformer_hv_mv';
+    const count = Math.ceil(carried / VOLTAGE[to] - 1e-9);
+    for (let i = 0; i < count; i++) out.push({ role: `xu:${from}-${to}`, key, name: CATALOG.get(key)!.name, transformer: { from, to, up: true }, tier: to });
+  }
+  return out;
+}
+
 export const countTransformers = (units: Unit[]) => {
   const out: Partial<Record<PowerTier, number>> = {};
   for (const u of units) if (u.transformer) out[u.transformer.to] = (out[u.transformer.to] ?? 0) + 1;
@@ -184,13 +204,19 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
   for (const u of region.units) {
     let primary: Net | undefined;
     if (u.pm?.generator) primary = sourceNet(u.tier ?? TIERS.find((t) => nets.some((n) => n.tier === t && n.source))!);
-    else if (u.transformer) primary = sourceNet(u.transformer.from);
+    else if (u.transformer) primary = sourceNet(u.transformer.up ? u.transformer.to : u.transformer.from);
     else if (!u.marker) {
       const outs = roleNets(u).filter((n) => n.producers.has(u.role));
       primary = outs.find((n) => n.kind === 'itemPipe') ?? outs[0];
     }
     if (!primary) continue;
-    const side = facingPrefs(u.pos, oneHigh).find((s) => usable(addVec(u.pos, DIRS[s]), primary.id));
+    // A power output never sits beside another voltage's output cell (they'd join when built by hand).
+    const clashes = (c: Vec3) => primary.kind === 'cable' && DIRS.some((d) => {
+      const other = nets.find((x) => x.id === netOf.get(posKey(addVec(c, d))));
+      return other?.kind === 'cable' && other.tier !== primary.tier;
+    });
+    const prefs = facingPrefs(u.pos, oneHigh).filter((s) => usable(addVec(u.pos, DIRS[s]), primary.id));
+    const side = prefs.find((s) => !clashes(addVec(u.pos, DIRS[s]))) ?? prefs[0];
     if (side === undefined) return { fail: `no free face for the output of the ${u.name}` };
     u.facing = side;
     u.facingNet = primary.id;
@@ -201,7 +227,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
   // from it, with no cable.
   const directlyPowered = new Set<string>();
   for (const t of region.units) {
-    if (!t.transformer) continue;
+    if (!t.transformer || t.transformer.up) continue;
     DIRS.forEach((d, side) => {
       if (side === t.facing) return;
       const m = occupied.get(posKey(addVec(t.pos, d)));
@@ -215,6 +241,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
   const powerEnds = (n: Net) =>
     region.units.flatMap((u): { u: Placed; mode: 'facing' | 'other' | 'any' }[] => {
       if (u.pm?.generator) return (u.tier ? u.tier === n.tier : n.source) ? [{ u, mode: 'facing' }] : [];
+      if (u.transformer?.up) return u.transformer.from === n.tier ? [{ u, mode: 'other' }] : u.transformer.to === n.tier ? [{ u, mode: 'facing' }] : [];
       if (u.transformer) return u.transformer.from === n.tier ? [{ u, mode: 'facing' }] : u.transformer.to === n.tier ? [{ u, mode: 'other' }] : [];
       if (u.marker?.kind === 'power') return n.source ? [{ u, mode: 'any' }] : [];
       if (u.tier === n.tier && !u.marker && !u.pm?.multiblock && !directlyPowered.has(posKey(u.pos))) return [{ u, mode: 'other' }];
@@ -244,7 +271,11 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
         const other = nets.find((x) => x.id === id);
         if (other?.kind === 'cable' && other.tier !== n.tier) apart(routed.cells.get(k)?.pos ?? (k.split(',').map(Number) as unknown as Vec3));
       }
-      for (const u of region.units) if (u.transformer && TIERS.indexOf(u.transformer.to) > TIERS.indexOf(n.tier!)) apart(u.pos);
+      for (const u of region.units) {
+        if (!u.transformer) continue;
+        // Step-down: its low-voltage output faces; step-up: its low-voltage input faces (anything else must keep off).
+        if (u.transformer.up ? n.tier !== u.transformer.from : TIERS.indexOf(u.transformer.to) > TIERS.indexOf(n.tier!)) apart(u.pos);
+      }
     }
     return blocked;
   };
@@ -381,6 +412,7 @@ export function conduitBlocks(routed: Routed, nets: Net[], laneIds: Set<string>,
 
 export const unitBlock = (u: Placed): PlacedBlock => ({
   pos: u.pos, key: u.key, role: u.role,
+  ...(u.transformer?.up ? { stepUp: true } : {}),
   ...(u.facing !== undefined ? { facing: u.facing } : {}),
   ...(u.mainFacing !== undefined ? { mainFacing: u.mainFacing } : {}),
 });
@@ -395,10 +427,13 @@ export function powerNets(plan: LinePlan, units: Unit[], localTransformers: Part
   const sourceEut = plan.power.source.kind === 'outside'
     ? plan.power.source.eut
     : units.filter((u) => u.pm?.generator).reduce((s, u) => s + (u.pm?.eut ?? 0), 0);
-  return TIERS.filter((t) => TIERS.indexOf(t) <= TIERS.indexOf(source)).map((t) => {
+  // Voltages above the source are stepped up to: their networks carry what the machines at or above them use.
+  const top = Math.max(TIERS.indexOf(source), ...units.filter((u) => u.tier && !u.pm?.generator).map((u) => TIERS.indexOf(u.tier!)));
+  const usedFrom = (t: PowerTier) => units.filter((u) => !u.pm?.generator && u.tier && TIERS.indexOf(u.tier) >= TIERS.indexOf(t)).reduce((s, u) => s + (u.pm?.eut ?? 0), 0);
+  return TIERS.filter((t) => TIERS.indexOf(t) <= top).map((t) => {
     const amps = t === source
       ? sourceEut / VOLTAGE[t]
-      : (localTransformers[t] ?? 0) * 4;
+      : TIERS.indexOf(t) > TIERS.indexOf(source) ? usedFrom(t) / VOLTAGE[t] : (localTransformers[t] ?? 0) * 4;
     const cable = cableFor(t, Math.max(1, amps));
     if (cable.warning) warnings.push(cable.warning);
     return { id: `p:${t}`, kind: 'cable' as const, name: `${t} power`, conduit: cable.key, producers: new Set<string>(), consumers: new Set<string>(), tier: t, source: t === source };
