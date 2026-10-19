@@ -12,6 +12,7 @@ export type ChainAction =
   | { type: 'arrange'; positions: Record<string, Position> }
   | { type: 'setMachine'; id: string; machineMID: number }
   | { type: 'setOverclock'; id: string; on: boolean }
+  | { type: 'setMatchTiers'; id: string; on: boolean }
   | { type: 'setTarget'; target: Target }
   | { type: 'removeTarget'; key: ResourceKey }
   | { type: 'setLimit'; key: ResourceKey; maxRate: number }
@@ -70,6 +71,8 @@ export function chainReducer(chain: Chain, a: ChainAction): Chain {
       return updateNode(chain, a.id, (n) => (n.machineMID === a.machineMID ? n : { ...n, machineMID: a.machineMID }));
     case 'setOverclock':
       return updateNode(chain, a.id, (n) => (n.kind !== 'recipe' || n.overclock === a.on ? n : { ...n, overclock: a.on }));
+    case 'setMatchTiers':
+      return updateNode(chain, a.id, (n) => (n.kind !== 'generator' || !!n.matchTiers === a.on ? n : { ...n, matchTiers: a.on }));
     case 'setTarget':
       return { ...chain, targets: [...chain.targets.filter((t) => t.key !== a.target.key), a.target] };
     case 'removeTarget':

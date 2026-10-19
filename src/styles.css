@@ -141,5 +141,7 @@ button.primary { background: #1f4f66; border-color: var(--accent); }
 .build-failure h3 { margin-top: 0; }
 .build-failure ul { margin: 4px 0 8px; padding-left: 18px; line-height: 1.5; }
 .build-failure .close { position: absolute; top: 6px; right: 8px; background: none; border: none; font-size: 16px; cursor: pointer; }
+.node-gen-mode { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 4px 8px; }
+.tier-gens .node-row { gap: 6px; }
 .slice-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .slice-buttons button { font-size: 12px; padding: 3px 8px; }

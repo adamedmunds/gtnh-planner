@@ -39,6 +39,10 @@ export interface NodeView {
   maxMachines?: number;
   /** Icon key of the machine block. */
   machineIcon: ResourceKey;
+  /** Generators: one generator per voltage the machines need, instead of only the chosen one. */
+  matchTiers?: boolean;
+  /** Generators matching each voltage: each voltage's generator and how many. */
+  tierGenerators?: { tier: string; name: string; build: number; machines: number }[];
 }
 
 /** A "What I have" box on the graph. */
@@ -149,6 +153,10 @@ export function nodeView(node: ChainNode, chain: Chain, db: RecipeDb, result?: N
     machineMID: node.machineMID,
     machineOptions: options(node, db).map((m) => ({ mID: m.mID, name: m.name })),
     ...(node.kind === 'recipe' ? { overclock: node.overclock } : {}),
+    ...(node.kind === 'generator' ? { matchTiers: !!node.matchTiers } : {}),
+    ...(node.kind === 'generator' && node.matchTiers && solved && result!.tiers
+      ? { tierGenerators: result!.tiers.map((t) => ({ tier: t.tier, name: options(node, db).find((m) => m.mID === t.machineMID)?.name ?? `Machine ${t.machineMID}`, build: t.build, machines: t.machines })) }
+      : {}),
     machines: solved ? result!.machines : 0,
     build: solved ? result!.build : 0,
     eut: solved ? Math.abs(result!.eut) : Math.abs(baseEut),

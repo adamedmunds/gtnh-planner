@@ -50,16 +50,32 @@ export const NodeCard = memo(function NodeCard({ data, selected }: NodeProps<Car
         {v.approximate && <span className="tag" title="Multiblock or unknown voltage: worked out like a single block">≈</span>}
         <button className="x nodrag" title="Remove from the line" onClick={() => dispatch({ type: 'removeNode', id: v.id })}>×</button>
       </header>
+      {v.kind === 'generator' && (
+        <label className="node-gen-mode nodrag">
+          Generators
+          <select
+            className="nodrag"
+            aria-label="Generators"
+            value={v.matchTiers ? 'match' : 'one'}
+            onChange={(e) => dispatch({ type: 'setMatchTiers', id: v.id, on: e.target.value === 'match' })}
+          >
+            <option value="one">one tier</option>
+            <option value="match">match each machine's voltage</option>
+          </select>
+        </label>
+      )}
       <div className="node-machine">
-        <select
-          className="nodrag"
-          data-testid="machine-select"
-          aria-label="Machine"
-          value={v.machineMID}
-          onChange={(e) => dispatch({ type: 'setMachine', id: v.id, machineMID: Number(e.target.value) })}
-        >
-          {v.machineOptions.map((m) => <option key={m.mID} value={m.mID}>{m.name}</option>)}
-        </select>
+        {!v.matchTiers && (
+          <select
+            className="nodrag"
+            data-testid="machine-select"
+            aria-label="Machine"
+            value={v.machineMID}
+            onChange={(e) => dispatch({ type: 'setMachine', id: v.id, machineMID: Number(e.target.value) })}
+          >
+            {v.machineOptions.map((m) => <option key={m.mID} value={m.mID}>{m.name}</option>)}
+          </select>
+        )}
         {v.overclock !== undefined && (
           <label className="nodrag" title="Overclock to the machine's tier">
             <input type="checkbox" checked={v.overclock} onChange={(e) => dispatch({ type: 'setOverclock', id: v.id, on: e.target.checked })} /> OC
@@ -84,6 +100,15 @@ export const NodeCard = memo(function NodeCard({ data, selected }: NodeProps<Car
             />
           </label>
         </div>
+      )}
+      {v.tierGenerators && (
+        <ul className="node-rows tier-gens">
+          {v.tierGenerators.map((t) => (
+            <li key={t.tier} data-testid="tier-generator">
+              <div className="node-row"><TierBadge tier={t.tier} /><span>{t.name}</span><span className="num">×{t.build}</span></div>
+            </li>
+          ))}
+        </ul>
       )}
       {v.inputs.length > 0 && <ul className="node-rows">{v.inputs.map((r) => <Row key={r.key} row={r} />)}</ul>}
       {v.outputs.length > 0 && <ul className="node-rows out">{v.outputs.map((r) => <Row key={r.key} row={r} />)}</ul>}

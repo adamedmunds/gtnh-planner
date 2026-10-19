@@ -53,7 +53,13 @@ export function SummaryPanel({ s, greyed, solving, canAddPower, onPower }: { s: 
       <dl className="power" data-testid="summary-power">
         <dt>Used</dt><dd>{formatRate(s.power.used, 'eu')}</dd>
         <dt>Generated</dt><dd>{formatRate(s.power.made, 'eu')}</dd>
-        <dt>From outside</dt><dd>{formatRate(s.power.outside, 'eu')}</dd>
+        <dt>From outside</dt>
+        <dd>
+          {formatRate(s.power.outside, 'eu')}
+          {s.power.outsideByTier.length > 0 && (
+            <span className="hint" title="Nothing in the line makes power at this voltage"> ({s.power.outsideByTier.map((t) => t.tier).join(', ')})</span>
+          )}
+        </dd>
       </dl>
       {canAddPower && s.power.outside > 0 && <button className="power-btn" onClick={onPower}>Power it with a generator</button>}
     </aside>

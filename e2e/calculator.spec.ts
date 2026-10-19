@@ -342,6 +342,20 @@ test.describe('with recipe data', () => {
     await expect(page.locator('.pipe-label')).toHaveCount(0);
   });
 
+  test("generators can match each machine's voltage: LV ones for LV machines, MV for MV", async ({ page }) => {
+    test.setTimeout(120_000);
+    await buildOilLine(page);
+    const card = page.getByTestId('node-card').filter({ hasText: 'Light Fuel → EU' });
+    await card.getByLabel('Generators').selectOption({ label: "match each machine's voltage" });
+    const rows = card.getByTestId('tier-generator');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.filter({ hasText: 'Basic Combustion Generator' })).toContainText('LV');
+    await expect(rows.filter({ hasText: 'Advanced Combustion Generator' })).toContainText('MV');
+    const machines = page.getByTestId('summary-machines');
+    await expect(machines).toContainText('Basic Combustion Generator');
+    await expect(machines).toContainText('Advanced Combustion Generator');
+  });
+
   test('Build in 3D as a straight line keeps the exact counts', async ({ page }) => {
     test.setTimeout(120_000);
     await buildOilLine(page);
