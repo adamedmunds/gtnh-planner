@@ -114,7 +114,7 @@ function buildModular(plan: LinePlan, name: string, warnings: string[], form: Fo
   if (laneNets.length > form.lanes.length) return undefined;
   const laneIds = new Set(laneNets.map((n) => n.id));
   const lanesFor = (x0: number, x1: number) =>
-    new Map(laneNets.map((n, i) => [n.id, Array.from({ length: x1 - x0 + 1 }, (_, k) => [x0 + k, form.lanes[i][0], form.lanes[i][1]] as Vec3)]));
+    new Map(laneNets.map((n, i) => [n.id, [Array.from({ length: x1 - x0 + 1 }, (_, k) => [x0 + k, form.lanes[i][0], form.lanes[i][1]] as Vec3)]]));
   // Local voltages (below the source) are separate networks in each slice and in the core.
   const local = (suffix: string) => nets.map((n) => (n.kind === 'cable' && !n.source ? { ...n, id: `${n.id}:${suffix}` } : n));
 
@@ -162,7 +162,7 @@ function buildModular(plan: LinePlan, name: string, warnings: string[], form: Fo
       continue;
     }
 
-    const laneCellsOf = (r: Region) => new Set([...r.lanes.values()].flat().map(posKey));
+    const laneCellsOf = (r: Region) => new Set([...r.lanes.values()].flat(2).map(posKey));
     const template = [...slicePlaced.map(unitBlock), ...conduitBlocks(sliceRouted, sliceNets, laneIds, laneCellsOf(sliceRegion))];
     const right = Math.ceil(plan.sliceCount / 2);
     const left = plan.sliceCount - right;

@@ -53,8 +53,12 @@ export interface Region {
   units: Placed[];
   min: Vec3;
   max: Vec3;
-  /** Lane cells (straight runs along x) per network. */
-  lanes: Map<string, Vec3[]>;
+  /** Lanes per network: straight runs along x, already in place. Several runs of one network get joined here. */
+  lanes: Map<string, Vec3[][]>;
+  /** Cells nothing may use besides the walkway (e.g. the floor under it). */
+  keepClear?: Set<string>;
+  /** Extra cost per bend, so routes come out straight (default 0). */
+  bendPenalty?: number;
 }
 
 export interface Routed {
@@ -150,12 +154,12 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
   const occupied = new Map(region.units.map((u) => [posKey(u.pos), u]));
   const inBounds = (c: Vec3) => [0, 1, 2].every((a) => c[a] >= region.min[a] && c[a] <= region.max[a]);
   const netOf = new Map<string, string>(); // cell -> net (lanes, reserved faces, routed cells)
-  for (const [id, cells] of region.lanes) for (const c of cells) netOf.set(posKey(c), id);
+  for (const [id, runs] of region.lanes) for (const c of runs.flat()) netOf.set(posKey(c), id);
   const routed: Routed = { cells: new Map(), attach: new Set(), ends: [], covers: [], notes: [] };
-  for (const [id, cells] of region.lanes) for (const c of cells) routed.cells.set(posKey(c), { pos: c, net: id });
+  for (const [id, runs] of region.lanes) for (const c of runs.flat()) routed.cells.set(posKey(c), { pos: c, net: id });
   const usable = (c: Vec3, net: string) => {
     const k = posKey(c);
-    return inBounds(c) && !occupied.has(k) && !isWalkway(c) && (netOf.get(k) === undefined || netOf.get(k) === net);
+    return inBounds(c) && !occupied.has(k) && !isWalkway(c) && !region.keepClear?.has(k) && (netOf.get(k) === undefined || netOf.get(k) === net);
   };
 
   const sourceNet = (t: PowerTier) => nets.find((n) => n.kind === 'cable' && n.tier === t)!;
@@ -217,18 +221,19 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
           if (n.consumers.has(u.role)) return [{ u, mode: 'other' }];
           return [];
         });
-    const lane = region.lanes.get(n.id);
-    if (!ends.length || ends.length + (lane ? 1 : 0) < 2) continue;
-    const terminals: Vec3[][] = lane ? [lane] : [];
+    const lanes = region.lanes.get(n.id) ?? [];
+    if (!ends.length || ends.length + lanes.length < 2) continue;
+    const terminals: Vec3[][] = [...lanes];
     for (const { u, mode } of ends) {
       const sides = mode === 'facing' ? [u.facing!] : mode === 'any' ? [0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5].filter((s) => s !== u.facing);
       terminals.push(sides.map((s) => addVec(u.pos, DIRS[s])).filter((c) => usable(c, n.id)));
     }
     const stuck = terminals.findIndex((t) => !t.length);
-    if (stuck >= 0) return { fail: `no free face on the ${ends[stuck - (lane ? 1 : 0)]?.u.name ?? 'line'} for ${n.name}` };
+    if (stuck >= 0) return { fail: `no free face on the ${ends[stuck - lanes.length]?.u.name ?? 'line'} for ${n.name}` };
     const blocked = new Set<string>(occupied.keys());
     for (const [k, id] of netOf) if (id !== n.id) blocked.add(k);
     for (let x = region.min[0]; x <= region.max[0]; x++) for (const y of [0, 1]) blocked.add(posKey([x, y, 0]));
+    for (const k of region.keepClear ?? []) blocked.add(k);
     // Steer clear of machine faces and of the cells around other machines' output faces, so no output gets boxed in.
     const avoid = new Set<string>();
     for (const u of region.units) {
@@ -242,7 +247,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
     try {
       // Machine faces are scarce: routes pass next to a machine only when there's no other way.
       // Power goes last, when every pipe already has its faces, so cables can take the short way (less EU lost).
-      res = routeNetwork({ terminals, blocked, avoid, avoidPenalty: n.kind === 'cable' ? 2 : 40, bounds: { min: region.min, max: region.max } });
+      res = routeNetwork({ terminals, blocked, avoid, avoidPenalty: n.kind === 'cable' ? 2 : 40, bendPenalty: region.bendPenalty, bounds: { min: region.min, max: region.max } });
     } catch {
       return { fail: `no room to run ${n.name} in the ${region.name}` };
     }
@@ -251,7 +256,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
       routed.cells.set(posKey(c), { pos: c, net: n.id });
     }
     ends.forEach(({ u, mode }, i) => {
-      const cell = res.chosen[i + (lane ? 1 : 0)];
+      const cell = res.chosen[i + lanes.length];
       routed.attach.add(`${posKey(cell)}>${posKey(u.pos)}`);
       routed.ends.push({ net: n.id, cell, unit: u });
       if (mode === 'cover') {
@@ -270,7 +275,13 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
     u.facing = ([0, 1, 2, 3, 4, 5] as Facing[]).find((s) => s !== u.mainFacing && !used.has(posKey(addVec(u.pos, DIRS[s])))) as Facing;
   }
 
-  // A pipe with several kinds of item ending at several places: places that should take one kind get an Item Filter.
+  itemFilters(routed, nets);
+  void plan;
+  return routed;
+}
+
+/** A pipe with several kinds of item ending at several places: places that should take one kind get an Item Filter. */
+export function itemFilters(routed: Routed, nets: Net[]): void {
   for (const n of nets) {
     if (!n.parts || n.parts.length < 2) continue;
     const takers = new Set(n.parts.flatMap((p) => p.consumers));
@@ -290,8 +301,6 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
       }
     }
   }
-  void plan;
-  return routed;
 }
 
 /** Conduit masks: on toward same-network neighbours and the blocks they serve; lanes also stay open along x. */
