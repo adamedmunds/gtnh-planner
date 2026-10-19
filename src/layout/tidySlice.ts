@@ -251,6 +251,8 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
   });
   const byIdTier = (id: string) => localPower.get(id)?.tier ?? (feedNet?.id === id ? feedNet.tier : undefined);
 
+  // Blocks generators push straight into (a generator at the machines' voltage): power sources, like transformers.
+  const genOutputs = new Set(gens.filter((g) => g.facing !== undefined).map((g) => posKey(addVec(g.pos, DIRS[g.facing!]))).filter((k) => localPower.has(cellNet.get(k) ?? '')));
   // Cut power cable that powers nothing: a layer block with no machine of its own and at most one neighbour in the
   // layer (a cable or a transformer of its voltage), over and over until none is left.
   for (let cut = true; cut; ) {
@@ -262,7 +264,7 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
         const m = unitAt.get(posKey([p[0], y, p[2]]));
         return !!m && consumers.includes(m);
       });
-      if (powers || layerNeighbours(p, id).length > 1) continue;
+      if (powers || layerNeighbours(p, id).length > 1 || genOutputs.has(k)) continue;
       cellNet.delete(k);
       cellPos.delete(k);
       for (const a of [...routed.attach]) if (a.startsWith(`${k}>`)) routed.attach.delete(a);
@@ -277,7 +279,7 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
   const powered = (skip?: string): number => {
     const reached = new Set<string>();
     const seen = new Set<string>();
-    const stack = units.filter((u) => u.transformer).map((u) => posKey(u.pos));
+    const stack = [...units.filter((u) => u.transformer).map((u) => posKey(u.pos)), ...genOutputs];
     while (stack.length) {
       const k = stack.pop()!;
       if (seen.has(k) || k === skip) continue;
@@ -301,7 +303,7 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
         const m = unitAt.get(posKey([p[0], y, p[2]]));
         return !!m && consumers.includes(m);
       });
-      if (own || powered(k) < all) continue;
+      if (own || genOutputs.has(k) || powered(k) < all) continue;
       cellNet.delete(k);
       cellPos.delete(k);
       for (const at of [...routed.attach]) if (at.startsWith(`${k}>`)) routed.attach.delete(at);
