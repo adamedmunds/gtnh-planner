@@ -81,6 +81,8 @@ export interface GeneratedLine {
   /** x where the left-most slice starts, and where the right group starts (the column after the core). */
   leftStart: number;
   rightStart: number;
+  /** Tidy lines: x (within a slice) of the first service column, where runs are joined. */
+  serviceFrom?: number;
   /** Slice 0's blocks, relative to its own x = 0. */
   template: PlacedBlock[];
   /** Slice 0's covers and face settings, relative to its own x = 0. */

@@ -98,7 +98,7 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
   for (const net of plan.networks) {
     const kind = net.kind === 'fluid' ? 'fluidPipe' : 'itemPipe';
     const cover = net.kind === 'fluid' ? 'pump' : 'conveyor';
-    const candidates: Set<number>[] = [];
+    const candidates: { producing: boolean; comps: Set<number> }[] = [];
     const endpoint = (id: string, producing: boolean) => {
       const blocks = blocksOf.get(id);
       if (!blocks?.length) {
@@ -124,15 +124,18 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
           );
           continue;
         }
-        candidates.push(new Set(ok.map((o) => o.comp)));
+        candidates.push({ producing, comps: new Set(ok.map((o) => o.comp)) });
       }
     };
     for (const p of net.producers) endpoint(p, true);
     for (const q of net.consumers) endpoint(q, false);
     if (!candidates.length) continue;
-    const shared = [...candidates[0]].filter((comp) => candidates.every((s) => s.has(comp)));
-    if (!shared.length) problems.push(`${net.name} is split into pipes that don't join`);
-    for (const comp of shared) compNets.set(comp, new Set([...(compNets.get(comp) ?? []), net.name]));
+    // A network may be several pipes (e.g. one per slice), as long as every maker's and user's pipe joins both.
+    const makers = new Set(candidates.filter((c) => c.producing).flatMap((c) => [...c.comps]));
+    const users = new Set(candidates.filter((c) => !c.producing).flatMap((c) => [...c.comps]));
+    const whole = (comp: number) => makers.has(comp) && users.has(comp);
+    if (!candidates.every((c) => [...c.comps].some(whole))) problems.push(`${net.name} is split into pipes that don't join`);
+    for (const comp of [...makers].filter(whole)) compNets.set(comp, new Set([...(compNets.get(comp) ?? []), net.name]));
   }
   for (const [comp, nets] of compNets) {
     if (comps[comp].kind === 'fluidPipe' && nets.size > 1) {

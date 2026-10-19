@@ -2,6 +2,7 @@ import { posKey } from '../model/directions';
 import type { Build, PlacedBlock, Vec3 } from '../model/types';
 import { checkLine } from './check';
 import { cableLoss } from './loss';
+import { UNTIDY_NOTE, buildTidy } from './tidy';
 import type { GeneratedLine, LinePlan, PlanMachine } from './types';
 import {
   type Net,
@@ -246,12 +247,19 @@ function withExtraGenerators(plan: LinePlan, n: number): LinePlan {
 function buildOnce(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
   const warnings: string[] = [];
   if (plan.style === 'modular') {
+    // Tidy first: every pipe and cable on a fixed straight run.
+    const tidy: string[] = [];
+    const t = buildTidy(plan, name, tidy);
+    if (t && !checkLine(t, plan).length) return { build: t, warnings: tidy };
     // Each form starts clean, so a line that fits never mentions why a tighter form didn't.
     const reasons = new Set<string>();
     for (const form of [COMPACT, NARROW, ROOMY]) {
       const tried: string[] = [];
       const b = buildModular(plan, name, tried, form);
-      if (b && !checkLine(b, plan).length) return { build: b, warnings: tried };
+      if (b && !checkLine(b, plan).length) {
+        b.notes = [UNTIDY_NOTE, ...(b.notes ?? [])];
+        return { build: b, warnings: tried };
+      }
       for (const w of tried) if (w.startsWith('(')) reasons.add(w);
     }
     warnings.push("Couldn't fit this line into identical slices, so it's laid out in a straight line instead.", ...reasons);

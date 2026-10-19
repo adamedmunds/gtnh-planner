@@ -132,3 +132,26 @@ describe('front faces (GregTech basic machines have a front and a separate outpu
     expect(checkLine(b, presetPlan).join(' | ')).toMatch(/Item Filter cover set to Hydrogen Cell/);
   });
 });
+
+describe('a network may be several pipes, each joining makers and users', () => {
+  const plan: LinePlan = {
+    ...presetPlan,
+    straight: [pm('fe', 'fluid_extractor_lv', 'LV', [K.oilBerry], [K.oil]), pm('dist', 'distillery_lv', 'LV', [K.oil], [K.sulfuricLightFuel])],
+    networks: [{ key: K.oil, name: 'Oil', kind: 'fluid', flow: 1, producers: ['fe'], consumers: ['dist'] }],
+  };
+  /** Extractor → pipe → distillery along x at height z. */
+  const pair = (z: number, withExtractor = true): PlacedBlock[] => [
+    ...(withExtractor ? [{ pos: [0, 0, z], key: 'fluid_extractor_lv', role: 'fe', facing: 5, mainFacing: 2 } as PlacedBlock] : []),
+    { pos: [1, 0, z], key: 'bronze_pipe_small', manualMask: { forcedOn: 0b110000, forcedOff: 0b001111 } },
+    { pos: [2, 0, z], key: 'distillery_lv', role: 'dist', facing: 1, mainFacing: 2 },
+  ];
+  const build = (blocks: PlacedBlock[]): Build => ({ version: 1, name: 't', blocks });
+
+  test('two separate extractor → distillery pipes are fine', () => {
+    expect(checkLine(build([...pair(0), ...pair(5)]), plan).join('\n')).not.toMatch(/Oil/);
+  });
+
+  test("a distillery whose pipe comes from no extractor is reported", () => {
+    expect(checkLine(build([...pair(0), ...pair(5, false)]), plan).join('\n')).toMatch(/Oil is split into pipes that don't join/);
+  });
+});
