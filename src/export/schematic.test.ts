@@ -151,3 +151,11 @@ test('a machine with a front writes mMainFacing next to its output face', () => 
   expect(num(te, 'mFacing')).toBe(2);
   expect(num(te, 'mMainFacing')).toBe(3);
 });
+
+test('a pasted basic machine keeps input from its output side and auto-output on (GT reads missing keys as off)', () => {
+  const { tag } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'distillery_lv', facing: 2, mainFacing: 3 }]));
+  const [te] = tes(tag);
+  expect(num(te, 'mAllowInputFromOutputSide')).toBe(1);
+  expect(num(te, 'mItemTransfer')).toBe(1);
+  expect(num(te, 'mFluidTransfer')).toBe(1);
+});

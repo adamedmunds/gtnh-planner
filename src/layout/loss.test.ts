@@ -49,3 +49,13 @@ describe('the oil line', () => {
     expect(build.notes?.join(' ')).toMatch(/extra generator/);
   });
 });
+
+test('a straight line never says the generators cover the loss and fall short at once', async () => {
+  const p = planLine(reference(), db, await solveForScreen(reference(), db, await createHighsSolver()), 'straight');
+  if ('error' in p) throw new Error(p.error);
+  const notes = buildLine(p, 'Light Fuel line').build.notes ?? [];
+  const short = notes.some((n) => /fall short/.test(n));
+  const covered = notes.some((n) => /generators cover it/.test(n));
+  expect(short && covered).toBe(false);
+  expect(covered || short).toBe(true);
+});

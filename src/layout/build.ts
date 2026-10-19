@@ -10,6 +10,8 @@ import type { GeneratedLine, LinePlan, PlanMachine, PlanMarker, PowerTier } from
 const TIERS: readonly PowerTier[] = ['LV', 'MV', 'HV'];
 const SIDE_NAME = ['bottom', 'top', 'north side', 'south side', 'west side', 'east side'];
 const WIDEN_TRIES = 6;
+/** Layouts tried while adding generators to cover cable loss (each try can move cables and change the loss). */
+const MAX_TOP_UPS = 5;
 
 type ConduitKind = 'fluidPipe' | 'itemPipe' | 'cable';
 
@@ -560,18 +562,18 @@ function buildModular(plan: LinePlan, name: string, warnings: string[], form: Fo
 export function buildLine(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
   let p = plan;
   let extra = 0;
-  for (;;) {
+  for (let attempt = 1; ; attempt++) {
     const out = buildOnce(p, name);
     const lost = Math.round(cableLoss(out.build, p).total);
     const used = Object.values(p.power.demand).reduce((s, x) => s + (x ?? 0), 0);
     const gens = out.build.blocks.filter((b) => [...(p.slice ?? []), ...p.core, ...(p.straight ?? [])].some((m) => m.generator && m.nodeId === b.role));
     const genEut = [...(p.slice ?? []), ...p.core, ...(p.straight ?? [])].find((m) => m.generator)?.eut ?? 0;
     const short = p.power.source.kind === 'generators' && gens.length * genEut < used + lost;
-    if (!short || extra >= 3) {
+    if (!short || attempt >= MAX_TOP_UPS) {
       const notes = [
         ...(lost > 0
           ? [p.power.source.kind === 'generators'
-              ? `Cables lose about ${lost} EU/t (the generators cover it)`
+              ? `Cables lose about ${lost} EU/t${short ? '' : ' (the generators cover it)'}`
               : `Cables lose about ${lost} EU/t — bring in ${Math.ceil(used + lost)} EU/t`]
           : []),
         ...(extra ? [`Added ${extra} extra generator${extra > 1 ? 's' : ''}${p.style === 'modular' ? ' in the core' : ''} to cover cable loss`] : []),

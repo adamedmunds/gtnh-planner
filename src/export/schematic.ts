@@ -85,7 +85,14 @@ export function buildSchematicTag(
       te.value.mID = int(entry.mID);
       te.value.mFacing = short(block.facing ?? DEFAULT_FACING);
       // GT basic machines keep their front separately; without it they load with the front on the output side.
-      if (block.mainFacing !== undefined) te.value.mMainFacing = int(block.mainFacing);
+      if (block.mainFacing !== undefined) {
+        te.value.mMainFacing = int(block.mainFacing);
+        // GT reads a missing flag as off, though a machine placed by hand starts with input from the output side on.
+        // Auto-output on too, as the line notes ask.
+        te.value.mAllowInputFromOutputSide = byte(1);
+        te.value.mItemTransfer = byte(1);
+        te.value.mFluidTransfer = byte(1);
+      }
     } else {
       const mask = connections.get(posKey(block.pos)) ?? 0;
       te.value.id = str('BaseMetaPipeEntity');
