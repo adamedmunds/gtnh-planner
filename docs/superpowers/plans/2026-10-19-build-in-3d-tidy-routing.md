@@ -15,7 +15,7 @@
 - Cross-section per side s (north s = −1, south s = +1): lower machine (x, 0, s), upper machine (x, 2, s); output runs (x, 0, 2s) and (x, 2, 2s); input runs (x, −1, s) and (x, 3, s); power run (x, 1, s); power feed (x, 1, 2s).
 - Walkway (z = 0, y = 0..1) and the floor under it (y = −1, z = 0) stay empty. Bounds for any routing: z ∈ [−3, 3], y ∈ [−1, 3].
 - Fronts face the walkway (`mainFacing` 3 on the north side, 2 on the south); output face is the back (`facing` 2 north, 3 south). DIRS order: 0 down, 1 up, 2 north (−z), 3 south (+z), 4 west (−x), 5 east (+x).
-- Outside service columns and the core, conduits connect only along x (to the same run) or to the block they serve.
+- Outside service columns and the core, conduits connect only along x (to the same run) or to the block they serve — except a cable linking a power run or a generator's back cell to the power feed beside it at the same x.
 - Transformers step down one tier, input face (`facing`) toward the power feed; one per 4 A of the lower voltage, per side, per slice (per stretch for straight lines).
 - Fallback note (exact): "Couldn't keep this line tidy, so some pipes take detours". Floor note (exact): "The floor pipes sit one block below the walkway: dig one layer for them".
 - The checker (`checkLine`) has the last word: a tidy layout that doesn't pass it is not used.
@@ -109,7 +109,7 @@
 - Behaviour:
   - Machines at their row cells; front toward the walkway, output on the back.
   - Each stretch's output run = its primary output network (item first, as today; generators: the source power network); input run = its primary input network.
-  - Power run per side at that side's consumer tier; transformers placed in the power run (service column first, then machine columns), input face toward the feed, count = ceil(side demand ÷ (V × 4)).
+  - Power run per side at that side's consumer tier; transformers placed in the power run at machine columns (the service column's power-run cell stays free: it is the only way from a lower row's output up to the upper row's input at 5 wide), input face toward the feed, count = ceil(side demand ÷ (V × 4)).
   - Feed on both sides at the source tier when anything on the side needs it.
   - A network needed outside the slice (by the core, markers, or other slices) gets a through-run: its own run extended over free cells of the same slot across the whole slice when possible, else a spare slot (y = −1 or 3 at z = ±2, or z = ±3) for the whole length.
   - Runs of one network joined in the service column only (`canStep`: off-x moves only at x = columns; bounds per Global Constraints; `bendPenalty` 2). Second inputs/outputs use a free face at a stretch end or the service column, with pump/conveyor covers and Item Filters as in `routeRegion`.

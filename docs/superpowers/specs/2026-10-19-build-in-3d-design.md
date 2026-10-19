@@ -222,7 +222,9 @@ Looking down the walkway (z = 0, two blocks tall at y = 0..1), the same on both 
   column** (one machine-free column at the same x in every slice), using the existing search router restricted to the
   service column and spare cells, with a penalty for bends so crossovers are straight risers and bridges.
 - Outside the service column, every conduit block connects only along the walkway (to its neighbours in the run) or
-  to the machine it touches. That's the measurable meaning of "tidy".
+  to the machine it touches. That's the measurable meaning of "tidy". Exception (my call, from the builder check): a
+  one-block power link straight across from a power run or a generator's back to the power feed beside it, at the
+  same x — at 5 wide those cells are all taken, so these links can't live in the service column.
 - The core (one-off machines: reactor, electrolyzer, extra generators, HV→MV steps, markers) uses the same rows and
   runs where it can; anything else in the core is joined by the bend-penalised search. The core may be messier than a
   slice but must stay within the line's cross-section bounds.
