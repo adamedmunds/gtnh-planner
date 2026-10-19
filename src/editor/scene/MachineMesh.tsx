@@ -17,7 +17,7 @@ export function MachineMesh({ block, entry }: { block: PlacedBlock; entry: Catal
       position={[x + 0.5, y + 0.5, z + 0.5]}
       userData={{ pos: block.pos }}
       geometry={boxGeometry(UNIT)}
-      material={machineMaterials(entry, block.facing ?? 3, tex)}
+      material={machineMaterials(entry, block.mainFacing ?? block.facing ?? 3, tex, block.mainFacing !== undefined ? block.facing : undefined)}
       dispose={null}
     />
   );

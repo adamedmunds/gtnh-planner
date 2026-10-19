@@ -80,6 +80,18 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
   const setting = (c: Cell, side: number, kind: string) =>
     (build.covers ?? []).some((s) => posKey(s.pos) === posKey(c.block.pos) && s.side === side && s.kind === kind);
   const label = (c: Cell) => `${c.entry.name} at ${where(c.block.pos)}`;
+  /** The face that takes nothing in: a basic machine's front, else (old-style blocks) the output side. */
+  const frontOf = (c: Cell) => c.block.mainFacing ?? c.block.facing;
+  const SIDE = ['bottom', 'top', 'north side', 'south side', 'west side', 'east side'];
+
+  // Fronts: sideways, not the output side, and nothing attached.
+  for (const c of cells.values()) {
+    const front = c.block.mainFacing;
+    if (front === undefined) continue;
+    if (front < 2) problems.push(`The front of the ${label(c)} must face sideways, not up or down`);
+    if (front === c.block.facing) problems.push(`The front of the ${label(c)} is also its output side, so nothing could come out`);
+    if (attachments(c).some((a) => a.side === front)) problems.push(`Something is connected to the front of the ${label(c)} — fronts take nothing in`);
+  }
 
   // Item and fluid networks.
   const compNets = new Map<number, Set<string>>();
@@ -107,7 +119,7 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
             producing
               ? `${net.name} can't get out of the ${label(c)}`
               : viaOutput
-                ? `The ${label(c)} gets ${net.name} through its output face — turn on "input from output side" with a screwdriver, or feed it from another side`
+                ? `The ${label(c)} gets ${net.name} through its output face — make sure "input from output side" is on (screwdriver), or feed it from another side`
                 : `The ${label(c)} gets no ${net.name}`,
           );
           continue;
@@ -125,6 +137,29 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
   for (const [comp, nets] of compNets) {
     if (comps[comp].kind === 'fluidPipe' && nets.size > 1) {
       problems.push(`A pipe at ${where(comps[comp].cells[0].block.pos)} joins ${[...nets].join(' and ')}, which would mix`);
+    }
+  }
+
+  // A pipe carrying several kinds of item to several places: a place that should take one kind needs an Item Filter.
+  for (const [comp, names] of compNets) {
+    if (comps[comp].kind !== 'itemPipe' || names.size < 2) continue;
+    const here = plan.networks.filter((n) => n.kind === 'item' && names.has(n.name));
+    const takers = new Set(here.flatMap((n) => n.consumers));
+    if (takers.size < 2) continue;
+    for (const role of takers) {
+      const wants = here.filter((n) => n.consumers.includes(role));
+      if (wants.length !== 1) continue;
+      for (const c of blocksOf.get(role) ?? []) {
+        const faces = attachments(c).filter((a) => a.comp === comp);
+        const filtered = faces.some(({ side }) => {
+          const pipe = neighbour(c, side)!;
+          return (build.covers ?? []).some((s) => s.kind === 'itemFilter' && s.item === wants[0].key &&
+            ((posKey(s.pos) === posKey(c.block.pos) && s.side === side) || (posKey(s.pos) === posKey(pipe.block.pos) && s.side === OPPOSITE[side])));
+        });
+        if (faces.length && !filtered) {
+          problems.push(`The pipe into the ${label(c)} also carries other items — put an Item Filter cover set to ${wants[0].name} on its ${SIDE[faces[0].side]}`);
+        }
+      }
     }
   }
 
@@ -155,7 +190,8 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
       }
       return;
     }
-    if (n.entry.kind === 'machine' && !byNode.get(roleOf(n) ?? '')?.generator && fromSide !== n.block.facing) raise(posKey(n.block.pos), tier);
+    // GT machines take power on every side but their front.
+    if (n.entry.kind === 'machine' && !byNode.get(roleOf(n) ?? '')?.generator && fromSide !== frontOf(n)) raise(posKey(n.block.pos), tier);
   };
   while (queue.length) {
     const { c, side, tier } = queue.pop()!;

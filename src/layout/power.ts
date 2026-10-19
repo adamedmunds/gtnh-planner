@@ -21,7 +21,11 @@ export function cableFor(tier: PowerTier, needed: number): { key: string; warnin
   const fit = ok.find((e) => amps(e) >= needed - 1e-9);
   if (fit) return { key: fit.key };
   const biggest = [...ok].sort((a, b) => amps(b) - amps(a))[0];
-  return { key: biggest.key, warning: `The ${tier} power line needs more than one ${biggest.name} carries (${Math.ceil(needed)} A) — run a second cable alongside it` };
+  const count = Math.ceil(needed / amps(biggest) - 1e-9);
+  return {
+    key: biggest.key,
+    warning: `The ${tier} power line carries ${Math.ceil(needed)} A, more than one ${biggest.name} can: it needs ${count} of them side by side`,
+  };
 }
 
 /** The smallest pipe that carries `flow` per second (litres for fluids, items for items). */

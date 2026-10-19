@@ -61,9 +61,14 @@ export function removeSlice(build: Build, end: End): Build {
   };
 }
 
-/** Where to put a single exported slice in game. */
-export const ALIGN_HINT =
-  "Line it up so its walkway continues the line's walkway: on the east end, its west edge goes right after the last slice; on the west end, its east edge goes right before the first slice.";
+/** Where to put a single exported slice in game: its schematic corner relative to the walkway it continues. */
+export function alignHint(build: Build): string {
+  const t = build.generated!.template;
+  const below = -Math.min(...t.map((b) => b.pos[1]));
+  const north = -Math.min(...t.map((b) => b.pos[2]));
+  return `To line it up: put the schematic's corner ${below} below and ${north} north of the first walkway block of the new slice ` +
+    `(on the east end, the walkway block right after the last slice; on the west end, ${build.generated!.sliceLength} blocks before the first slice).`;
+}
 
 /** A single slice on its own, for exporting and lining up by hand in game. */
 export function sliceBuild(build: Build): Build {
@@ -74,6 +79,6 @@ export function sliceBuild(build: Build): Build {
     blocks: g.template,
     ...(build.machines ? { machines: build.machines } : {}),
     ...(g.templateCovers?.length ? { covers: g.templateCovers } : {}),
-    notes: [ALIGN_HINT],
+    notes: [alignHint(build)],
   };
 }

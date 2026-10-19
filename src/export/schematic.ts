@@ -84,6 +84,8 @@ export function buildSchematicTag(
       te.value.id = str('BaseMetaTileEntity');
       te.value.mID = int(entry.mID);
       te.value.mFacing = short(block.facing ?? DEFAULT_FACING);
+      // GT basic machines keep their front separately; without it they load with the front on the output side.
+      if (block.mainFacing !== undefined) te.value.mMainFacing = int(block.mainFacing);
     } else {
       const mask = connections.get(posKey(block.pos)) ?? 0;
       te.value.id = str('BaseMetaPipeEntity');

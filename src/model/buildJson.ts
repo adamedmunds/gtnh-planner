@@ -38,6 +38,7 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
     }
     const block: PlacedBlock = { pos: [pos[0], pos[1], pos[2]], key: rb.key };
     if (typeof rb.role === 'string') block.role = rb.role;
+    if (isInt(rb.mainFacing) && rb.mainFacing >= 2 && rb.mainFacing <= 5) block.mainFacing = rb.mainFacing as Facing;
     if (rb.facing !== undefined) {
       if (isInt(rb.facing) && rb.facing >= 0 && rb.facing <= 5) block.facing = rb.facing as Facing;
       else warnings.push(`Block #${i + 1}: ignored invalid facing`);
@@ -73,7 +74,7 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
   const covers = (Array.isArray(obj.covers) ? obj.covers : []).filter((c): c is FaceSetting => {
     const r = c as Record<string, unknown> | null;
     return !!r && Array.isArray(r.pos) && r.pos.length === 3 && r.pos.every(isInt) && isInt(r.side) && r.side >= 0 && r.side <= 5 &&
-      (r.kind === 'pump' || r.kind === 'conveyor' || r.kind === 'inputFromOutput');
+      (r.kind === 'pump' || r.kind === 'conveyor' || r.kind === 'inputFromOutput' || (r.kind === 'itemFilter' && typeof r.item === 'string'));
   });
   if (covers.length) build.covers = covers;
   // A generated line is only kept when it looks whole; otherwise the build is just blocks.

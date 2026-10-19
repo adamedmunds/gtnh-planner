@@ -15,6 +15,10 @@ export interface PlanMachine {
   count: number;
   /** EU/t one machine uses at full speed (generators: EU/t one makes). */
   eut: number;
+  /** What the machine is called in notes ("Distillery"): its recipe type, or "<fuel> generator". */
+  title: string;
+  /** Inputs it needs but doesn't use up (programmed circuits, molds). */
+  kept: { key: ResourceKey; name: string }[];
   inputs: ResourceKey[];
   outputs: ResourceKey[];
   generator: boolean;

@@ -14,7 +14,7 @@ import { toBuild } from './editor/state';
 import { Scene, type Hover } from './editor/scene/Scene';
 import { InfoPanel } from './editor/ui/InfoPanel';
 import { LineNotes } from './editor/ui/LineNotes';
-import { ALIGN_HINT, sliceBuild } from './layout/grow';
+import { alignHint, sliceBuild } from './layout/grow';
 import { MaterialsPanel } from './editor/ui/MaterialsPanel';
 import { Palette } from './editor/ui/Palette';
 import { Toasts, type Toast } from './editor/ui/Toasts';
@@ -186,7 +186,7 @@ export function App() {
       const slice = sliceBuild(toBuild(state));
       const { bytes } = buildSchematic(slice);
       downloadBytes(bytes, `${safeFileName(slice.name)}.schematic`);
-      toast(`Exported ${safeFileName(slice.name)}.schematic. ${ALIGN_HINT}`);
+      toast(`Exported ${safeFileName(slice.name)}.schematic. ${alignHint(toBuild(state))}`);
     } catch (err) {
       toast((err as Error).message, 'error');
     }

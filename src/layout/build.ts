@@ -26,6 +26,8 @@ interface Unit {
 interface Placed extends Unit {
   pos: Vec3;
   facing?: Facing;
+  /** GT basic machines: the front, toward the walkway. */
+  mainFacing?: Facing;
   /** The network its output face belongs to. */
   facingNet?: string;
 }
@@ -42,6 +44,8 @@ interface Net {
   tier?: PowerTier;
   /** Power: the line's source voltage (runs through every slice). */
   source?: boolean;
+  /** Item pipes: the item kinds sharing it, and where each should go. */
+  parts?: { key: string; name: string; consumers: string[] }[];
 }
 
 interface Region {
@@ -58,6 +62,8 @@ interface Routed {
   cells: Map<string, { pos: Vec3; net: string }>;
   /** `${cellKey}>${blockKey}` for every conduit side that connects to a block. */
   attach: Set<string>;
+  /** The same, with the network and the block's role. */
+  ends: { net: string; cell: Vec3; unit: Placed }[];
   covers: FaceSetting[];
   notes: string[];
 }
@@ -88,14 +94,8 @@ function planNets(plan: LinePlan, warnings: string[]): Net[] {
     nets.push({
       id: `i:${g.map((n) => n.key).join('+')}`, kind: 'itemPipe', name, conduit: pipeFor('item', flow).key,
       producers: new Set(g.flatMap((n) => n.producers)), consumers: new Set(g.flatMap((n) => n.consumers)),
+      parts: g.map((n) => ({ key: n.key, name: n.name, consumers: n.consumers })),
     });
-    const outs = g.flatMap((n) => n.consumers.filter((c) => c.startsWith('out:')));
-    if (g.length > 1 && outs.length) {
-      for (const o of outs) {
-        const n = g.find((x) => x.consumers.includes(o))!;
-        warnings.push(`${name} share a pipe: put a filter on the ${n.name} chest so only ${n.name} goes in.`);
-      }
-    }
   }
   return nets;
 }
@@ -148,7 +148,7 @@ function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh: boole
   const inBounds = (c: Vec3) => [0, 1, 2].every((a) => c[a] >= region.min[a] && c[a] <= region.max[a]);
   const netOf = new Map<string, string>(); // cell -> net (lanes, reserved faces, routed cells)
   for (const [id, cells] of region.lanes) for (const c of cells) netOf.set(posKey(c), id);
-  const routed: Routed = { cells: new Map(), attach: new Set(), covers: [], notes: [] };
+  const routed: Routed = { cells: new Map(), attach: new Set(), ends: [], covers: [], notes: [] };
   for (const [id, cells] of region.lanes) for (const c of cells) routed.cells.set(posKey(c), { pos: c, net: id });
   const usable = (c: Vec3, net: string) => {
     const k = posKey(c);
@@ -227,6 +227,7 @@ function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh: boole
     ends.forEach(({ u, mode }, i) => {
       const cell = res.chosen[i + (lane ? 1 : 0)];
       routed.attach.add(`${posKey(cell)}>${posKey(u.pos)}`);
+      routed.ends.push({ net: n.id, cell, unit: u });
       if (mode === 'cover') {
         const side = sideTo(u.pos, cell);
         const kind = n.kind === 'fluidPipe' ? 'pump' : 'conveyor';
@@ -236,12 +237,32 @@ function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh: boole
     });
   }
 
-  // Machines with nothing to push out face a free side (the walkway if they can).
+  // Machines with nothing to push out still need an output side: any free side but the front.
   for (const u of region.units) {
     if (u.facing !== undefined || u.marker) continue;
     const used = new Set([...routed.attach].filter((a) => a.endsWith(`>${posKey(u.pos)}`)).map((a) => a.split('>')[0]));
-    const toWalk: Facing = u.pos[2] < 0 ? 3 : 2;
-    u.facing = [toWalk, 0, 1, 2, 3, 4, 5].find((s) => !used.has(posKey(addVec(u.pos, DIRS[s])))) as Facing;
+    u.facing = ([0, 1, 2, 3, 4, 5] as Facing[]).find((s) => s !== u.mainFacing && !used.has(posKey(addVec(u.pos, DIRS[s])))) as Facing;
+  }
+
+  // A pipe with several kinds of item ending at several places: places that should take one kind get an Item Filter.
+  for (const n of nets) {
+    if (!n.parts || n.parts.length < 2) continue;
+    const takers = new Set(n.parts.flatMap((p) => p.consumers));
+    if (takers.size < 2) continue;
+    for (const end of routed.ends.filter((e) => e.net === n.id && takers.has(e.unit.role))) {
+      const wants = n.parts.filter((p) => p.consumers.includes(end.unit.role));
+      if (wants.length !== 1) continue;
+      const item = wants[0];
+      if (end.unit.marker) {
+        const side = sideTo(end.cell, end.unit.pos);
+        routed.covers.push({ pos: end.cell, side, kind: 'itemFilter', item: item.key });
+        routed.notes.push(`Put an Item Filter cover set to ${item.name} on the pipe at (${end.cell.join(', ')}), on its ${SIDE_NAME[side]} next to the ${item.name} chest, so only ${item.name} goes in.`);
+      } else {
+        const side = sideTo(end.unit.pos, end.cell);
+        routed.covers.push({ pos: end.unit.pos, side, kind: 'itemFilter', item: item.key });
+        routed.notes.push(`Put an Item Filter cover set to ${item.name} on the ${SIDE_NAME[side]} of the ${end.unit.name} at (${end.unit.pos.join(', ')}), so only ${item.name} goes in from that pipe.`);
+      }
+    }
   }
   void plan;
   return routed;
@@ -261,7 +282,15 @@ function conduitBlocks(routed: Routed, nets: Net[], laneIds: Set<string>, laneCe
   });
 }
 
-const unitBlock = (u: Placed): PlacedBlock => ({ pos: u.pos, key: u.key, role: u.role, ...(u.facing !== undefined ? { facing: u.facing } : {}) });
+const unitBlock = (u: Placed): PlacedBlock => ({
+  pos: u.pos, key: u.key, role: u.role,
+  ...(u.facing !== undefined ? { facing: u.facing } : {}),
+  ...(u.mainFacing !== undefined ? { mainFacing: u.mainFacing } : {}),
+});
+
+/** GregTech basic machines get a front toward the walkway; generators, transformers and markers don't have one. */
+const withFront = (u: Placed): Placed =>
+  u.pm && !u.pm.generator && !u.pm.multiblock && !u.transformer ? { ...u, mainFacing: u.pos[2] < 0 ? 3 : 2 } : u;
 
 const LANE_SLOTS: readonly [number, number][] = [
   [0, -3], [0, 3], [1, -3], [1, 3], [-1, -3], [-1, 3], [2, -3], [2, 3],
@@ -308,7 +337,7 @@ function buildStraight(plan: LinePlan, name: string, warnings: string[]): Build 
   const nets = [...planNets(plan, warnings), ...powerNets(plan, units, countTransformers(units), warnings)];
   for (let gap = 1; gap <= WIDEN_TRIES; gap++) {
     const step = gap + 1;
-    const placed: Placed[] = units.map((u, i) => ({ ...u, pos: u.marker ? [i * step, 0, -5] : [i * step, 0, -1] }));
+    const placed: Placed[] = units.map((u, i) => withFront({ ...u, pos: u.marker ? [i * step, 0, -5] : [i * step, 0, -1] }));
     const region: Region = { name: 'line', units: placed, min: [-1, -1, -5], max: [units.length * step, 3, -1], lanes: new Map() };
     const routed = routeRegion(region, nets, plan, true);
     if ('fail' in routed) continue;
@@ -352,7 +381,7 @@ function buildModular(plan: LinePlan, name: string, warnings: string[]): Build |
     const L = 2 * columns + 1 + extra;
     const slots: Vec3[] = [];
     for (let c = 0; c < columns; c++) slots.push([2 * c + 1, 0, -1], [2 * c + 1, 1, -1], [2 * c + 1, 0, 1], [2 * c + 1, 1, 1]);
-    const slicePlaced: Placed[] = sliceUnits.map((u, i) => ({ ...u, pos: slots[i] }));
+    const slicePlaced: Placed[] = sliceUnits.map((u, i) => withFront({ ...u, pos: slots[i] }));
     const sliceRegion: Region = { name: 'slice', units: slicePlaced, min: [0, -1, -5], max: [L - 1, 3, 5], lanes: lanesFor(0, L - 1) };
     const sliceNets = local('slice');
     const sliceRouted = routeRegion(sliceRegion, sliceNets, plan, false);
@@ -365,7 +394,7 @@ function buildModular(plan: LinePlan, name: string, warnings: string[]): Build |
     const C = 2 * coreCount + 2 + 2 * extra;
     const coreStart = -C;
     const corePlaced: Placed[] = [
-      ...coreUnits.map((u, i): Placed => ({ ...u, pos: [coreStart + 1 + 2 * Math.floor(i / 2), 0, i % 2 ? 1 : -1] })),
+      ...coreUnits.map((u, i): Placed => withFront({ ...u, pos: [coreStart + 1 + 2 * Math.floor(i / 2), 0, i % 2 ? 1 : -1] })),
       ...markers.map((u, i): Placed => ({ ...u, pos: [coreStart + 1 + 2 * Math.floor(i / 2), 0, i % 2 ? 5 : -5] })),
     ];
     const coreRegion: Region = { name: 'core', units: corePlaced, min: [coreStart, -1, -5], max: [-1, 3, 5], lanes: lanesFor(coreStart, -1) };

@@ -16,8 +16,9 @@ export function boxGeometry(size: Vec3): THREE.BoxGeometry {
 
 type MachineTextures = readonly (THREE.Texture | null)[] | undefined; // [top, side, bottom, front]
 const machineSets = new Map<string, THREE.Material[]>();
-export function machineMaterials(entry: CatalogEntry, facing: number, tex: MachineTextures): THREE.Material[] {
-  const key = `${entry.key}|${facing}|${tex ? 'tex' : 'flat'}`;
+/** `facing`: the face with the machine's picture; `output`: a separate output side, tinted so it can be seen. */
+export function machineMaterials(entry: CatalogEntry, facing: number, tex: MachineTextures, output?: number): THREE.Material[] {
+  const key = `${entry.key}|${facing}|${output ?? ''}|${tex ? 'tex' : 'flat'}`;
   let set = machineSets.get(key);
   if (!set) {
     const [top, side, bottom, front] = tex ?? [null, null, null, null];
@@ -25,6 +26,7 @@ export function machineMaterials(entry: CatalogEntry, facing: number, tex: Machi
     set = FACE_ORDER.map((s) => {
       const map = faceTexture(s);
       const untexturedFront = !map && s === facing;
+      if (s === output && s !== facing) return new THREE.MeshStandardMaterial({ map: map ?? null, color: '#5ad1ff', emissive: '#0b3a52' });
       return new THREE.MeshStandardMaterial({ map: map ?? null, color: map ? '#ffffff' : untexturedFront ? '#f0f0f0' : entry.color });
     });
     machineSets.set(key, set);

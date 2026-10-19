@@ -15,8 +15,13 @@ export interface ManualMask {
 export interface PlacedBlock {
   pos: Vec3;
   key: string;
-  /** Machines only. */
+  /** Machines only: the output side (GT `mFacing`). */
   facing?: Facing;
+  /**
+   * GregTech basic machines only: the front (GT `mMainFacing`, horizontal), which shows the machine's picture and
+   * takes nothing in. When absent the machine is drawn and exported the old way, front = output side.
+   */
+  mainFacing?: Facing;
   /** Cables/pipes only. */
   manualMask?: ManualMask;
   /** Generated lines: which recipe node or marker this block is. */
@@ -27,7 +32,9 @@ export interface PlacedBlock {
 export interface FaceSetting {
   pos: Vec3;
   side: Facing;
-  kind: 'pump' | 'conveyor' | 'inputFromOutput';
+  kind: 'pump' | 'conveyor' | 'inputFromOutput' | 'itemFilter';
+  /** Item Filter covers: the one item let through. */
+  item?: string;
 }
 
 export interface Build {

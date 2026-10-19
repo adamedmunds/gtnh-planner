@@ -144,3 +144,10 @@ test('recipe machines export with their mID; markers export as plain vanilla blo
   const ids = Array.from((v(tag, 'Blocks') as { value: Uint8Array }).value);
   expect(ids[1]).toBe((mapping['minecraft:chest'] as { value: number }).value);
 });
+
+test('a machine with a front writes mMainFacing next to its output face', () => {
+  const { tag } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'distillery_lv', facing: 2, mainFacing: 3 }]));
+  const [te] = tes(tag);
+  expect(num(te, 'mFacing')).toBe(2);
+  expect(num(te, 'mMainFacing')).toBe(3);
+});

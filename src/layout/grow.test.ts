@@ -61,3 +61,11 @@ test('the one-slice build equals slice 0 and says how to line it up', () => {
   expect(one.notes?.[0]).toMatch(/line it up/i);
   expect(one.generated).toBeUndefined();
 });
+
+test('the one-slice export says exactly where its corner goes', () => {
+  const one = sliceBuild(line);
+  const minY = Math.min(...line.generated!.template.map((b) => b.pos[1]));
+  const minZ = Math.min(...line.generated!.template.map((b) => b.pos[2]));
+  expect(one.notes![0]).toContain(`${-minY} below`);
+  expect(one.notes![0]).toContain(`${-minZ} north`);
+});

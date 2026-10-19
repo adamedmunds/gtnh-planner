@@ -5,7 +5,7 @@ import { checkLine } from './check';
 import type { GeneratedLine, LinePlan, PlanMachine } from './types';
 
 const pm = (nodeId: string, key: string, tier: string, inputs: string[], outputs: string[], generator = false): PlanMachine => ({
-  nodeId, key, machine: { key, name: key, mID: 0, tier }, tier, count: 1, eut: 0, inputs, outputs, generator, multiblock: false,
+  nodeId, key, machine: { key, name: key, mID: 0, tier }, tier, count: 1, eut: 0, title: key, kept: [], inputs, outputs, generator, multiblock: false,
 });
 
 /** A plan describing the hand-made oil berry preset (its open pipe ends have no markers). */
@@ -41,6 +41,8 @@ const preset = (): Build => ({
     { pos: [-1, 2, 0], side: 0, kind: 'pump' },
     { pos: [-1, 2, 0], side: 1, kind: 'inputFromOutput' },
     { pos: [1, 3, 0], side: 4, kind: 'inputFromOutput' },
+    // The cells pipe carries three kinds of cell; the reactor should only take Hydrogen Cells from it.
+    { pos: [-1, 2, 0], side: 1, kind: 'itemFilter', item: K.hydrogenCell },
   ],
 });
 const at = (b: Build, x: number, y: number, z: number) => b.blocks.find((p) => p.pos[0] === x && p.pos[1] === y && p.pos[2] === z)!;
@@ -108,4 +110,25 @@ describe('generated builds', () => {
 test('a machine taking input through its output face needs the screwdriver setting', () => {
   const b = { ...preset(), covers: preset().covers!.filter((c) => c.kind !== 'inputFromOutput') };
   expect(checkLine(b, presetPlan).join(' | ')).toMatch(/input from output side/i);
+});
+
+describe('front faces (GregTech basic machines have a front and a separate output face)', () => {
+  test('a pipe attached to a machine front is reported', () => {
+    const b = preset();
+    const fe = b.blocks.find((p) => p.key === 'fluid_extractor_lv')!;
+    fe.mainFacing = fe.facing; // front on the output side: nothing could come out
+    expect(checkLine(b, presetPlan).join(' | ')).toMatch(/front/i);
+  });
+
+  test('a front facing up or down is reported', () => {
+    const b = preset();
+    const fe = b.blocks.find((p) => p.key === 'fluid_extractor_lv')!;
+    fe.mainFacing = 1;
+    expect(checkLine(b, presetPlan).join(' | ')).toMatch(/front .*sideways|front .*horizontal/i);
+  });
+
+  test('a mixed item pipe feeding two places needs item filters', () => {
+    const b = { ...preset(), covers: preset().covers!.filter((c) => c.kind !== 'itemFilter') };
+    expect(checkLine(b, presetPlan).join(' | ')).toMatch(/Item Filter cover set to Hydrogen Cell/);
+  });
 });

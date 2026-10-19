@@ -39,7 +39,15 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     const mapIndex = node.kind === 'recipe' ? db.bySignature(node.recipeSig)!.map : db.mapIndexById(node.fuelMap)!;
     const ref = db.map(mapIndex).machines.find((m) => m.mID === node.machineMID)!;
     const tier = tierName(ref);
+    const recipe = node.kind === 'recipe' ? db.bySignature(node.recipeSig) : undefined;
+    const kept = (recipe?.inputs ?? []).filter((s) => s.consumed === false).map((s) => {
+      const circuit = /gt\.integrated_circuit@(\d+)$/.exec(s.key);
+      return { key: s.key, name: circuit ? `Programmed Circuit ${circuit[1]}` : resourceInfo(s.key, db).name };
+    });
+    const title = recipe ? db.map(recipe.map).name : `${resourceInfo((node as { fuelKey: string }).fuelKey, db).name} generator`;
     return {
+      title,
+      kept,
       node,
       ref,
       tier,
@@ -64,6 +72,8 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     ...(i.tier ? { tier: i.tier } : {}),
     count,
     eut: i.perMachineEut,
+    title: i.title,
+    kept: i.kept,
     inputs: i.inputs,
     outputs: i.outputs,
     generator: i.node.kind === 'generator',
@@ -110,6 +120,19 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     if (below > 0) transformers.push({ from: POWER_TIERS[t + 1], to: POWER_TIERS[t], count: Math.ceil(below / (V[t + 1] * 4) - 1e-9) });
   }
   if (source.kind === 'outside') markers.push({ id: 'power', key: EU, dir: 'in', kind: 'power' });
+
+  /** What to set on the machines in game: fronts, auto-output, circuits, outside power. */
+  const buildNotes = (machines: PlanMachine[], times: (m: PlanMachine) => number): string[] => [
+    'Place every machine with its front (the face with its picture) toward the walkway, then wrench its output to the side shown in the 3D view.',
+    'Turn on item and fluid auto-output on every machine.',
+    ...machines.flatMap((m) => m.kept.map((k) => {
+      const n = times(m);
+      return n === 1 ? `Put a ${k.name} in the ${m.title}` : `Put a ${k.name} in every ${m.title} (${n})`;
+    })),
+    ...(source.kind === 'outside'
+      ? [`Power in: bring ${source.tier}, ${formatNumber(source.eut)} EU/t (${Math.max(1, Math.ceil(source.eut / V[POWER_TIERS.indexOf(source.tier) + 1] - 1e-9))} A)`]
+      : []),
+  ];
   const power: PowerPlan = { tiers, source, demand, transformers };
 
   const straightPlan = (fallback?: string): LinePlan => ({
@@ -120,7 +143,11 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     networks,
     markers,
     power,
-    notes: [...(fallback ? [fallback] : []), ...multiblockNotes()],
+    notes: [
+      ...(fallback ? [fallback] : []),
+      ...multiblockNotes(),
+      ...buildNotes(info.map((i) => machine(i, solved.get(i.node.id)!.build)), (m) => m.count),
+    ],
     ...(fallback ? { fallback } : {}),
   });
   const multiblockNotes = () => info.filter((i) => i.ref.multiblock).map((i) => `Build the ${i.ref.name} here yourself (multiblocks aren't laid out yet)`);
@@ -147,6 +174,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     `${sliceCount} slices for ${amountText(haveAmount, haveKey!, db)} · paste more slices on either end to grow it`,
     ...(coreServes !== undefined ? [`This core handles up to ${coreServes} slices`] : []),
     ...multiblockNotes(),
+    ...buildNotes([...slice, ...core], (m) => (slice.includes(m) ? m.count * sliceCount : m.count)),
   ];
   return {
     style: 'modular',

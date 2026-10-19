@@ -73,3 +73,44 @@ test('pipe and cable sizes follow the flow', () => {
   expect(cableFor('HV', 4).key).toBe('electrum_cable_2x');
   expect(cableFor('HV', 100).warning).toMatch(/more than/);
 });
+
+describe('things a player has to know to build it', () => {
+  test('every machine faces the walkway and outputs elsewhere', async () => {
+    const p = await plan(reference());
+    const { build } = buildLine(p, 'Light Fuel line');
+    const machines = build.blocks.filter((b) => /fluid_extractor|distillery|chemical_reactor|electrolyzer/.test(b.key));
+    for (const m of machines) {
+      expect(m.mainFacing).toBe(m.pos[2] < 0 ? 3 : 2);
+      expect(m.facing).not.toBe(m.mainFacing);
+    }
+    expect(checkLine(build, p)).toEqual([]);
+    expect(build.notes?.join(' ')).toMatch(/front .*walkway/i);
+  });
+
+  test('notes say to turn on auto-output and which programmed circuit each machine needs', async () => {
+    const p = await plan(reference());
+    const notes = buildLine(p, 'Light Fuel line').build.notes!.join(' ');
+    expect(notes).toMatch(/auto-output/i);
+    expect(notes).toMatch(/Programmed Circuit 2 in every Distillery \(18\)/);
+    expect(notes).toMatch(/Programmed Circuit 4 in the Chemical Reactor/);
+  });
+
+  test('a shared item pipe gets item filters where it ends', async () => {
+    const p = await plan(reference());
+    const { build } = buildLine(p, 'Light Fuel line');
+    const filters = (build.covers ?? []).filter((c) => c.kind === 'itemFilter');
+    expect(filters.map((f) => f.item)).toEqual(expect.arrayContaining([K.hydrogenCell, K.sulfur]));
+    expect(build.notes?.join(' ')).toMatch(/Item Filter cover set to Sulfur Dust/);
+    expect(checkLine(build, p)).toEqual([]);
+  });
+
+  test('power from outside says the voltage and how much', async () => {
+    const chain: Chain = { ...emptyChain(), nodes: line(), targets: [{ key: K.lightFuel, rate: 100 }], externals: [K.oilBerry] };
+    const p = await plan(chain, 'straight');
+    expect(buildLine(p, 'x').build.notes!.join(' ')).toMatch(/Power in: bring MV, [\d,.]+ EU\/t \(\d+ A\)/);
+  });
+
+  test('an oversized power line says how many cables it needs', () => {
+    expect(cableFor('HV', 100).warning).toMatch(/3 /);
+  });
+});

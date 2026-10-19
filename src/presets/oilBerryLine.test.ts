@@ -211,7 +211,18 @@ test('the line records the cover and screwdriver settings it relies on, with pla
     { pos: [-1, 2, 0], side: 0, kind: 'pump' },
     { pos: [-1, 2, 0], side: 1, kind: 'inputFromOutput' },
     { pos: [1, 3, 0], side: 4, kind: 'inputFromOutput' },
+    { pos: [-1, 2, 0], side: 1, kind: 'itemFilter', item: 'item:gregtech:gt.metaitem.01@30001' },
   ]);
   expect(b.notes?.join(' ')).toMatch(/pump cover .*bottom .*Chemical Reactor/);
   expect(b.notes?.join(' ')).toMatch(/input from output side/);
+});
+
+test('every machine has a front that nothing is attached to, and the checker-relevant note is right', () => {
+  const b = makeOilBerryLine({ extractors: 6, distilleries: 17 });
+  const machines = b.blocks.filter((x) => /fluid_extractor|distillery|chemical_reactor|electrolyzer/.test(x.key));
+  for (const m of machines) {
+    expect(m.mainFacing, m.key).toBeGreaterThanOrEqual(2);
+    expect(m.mainFacing).not.toBe(m.facing);
+  }
+  expect(b.notes?.join(' ')).toMatch(/make sure "input from output side" is on/i);
 });

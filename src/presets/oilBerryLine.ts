@@ -16,7 +16,8 @@
  * lines and adding modules at either end. The light fuel tank connects behind the reactor module.
  */
 import type { Build, Facing, PlacedBlock, Vec3 } from '../model/types';
-import { DIRS, addVec, posKey } from '../model/directions';
+import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
+import { computeConnections } from '../model/connections';
 
 export interface OilBerryLineOptions {
   extractors: number;
@@ -164,6 +165,22 @@ export function makeOilBerryLine({ extractors, distilleries }: OilBerryLineOptio
     put({ pos: here, key: PIPES[net], manualMask: { forcedOn: on, forcedOff: 63 & ~on } });
   }
 
+  // Fronts (GT mMainFacing): a sideways face nothing connects to, so the output side stays free to push.
+  const all = [...blocks.values()];
+  const masks = computeConnections(all);
+  for (const b of all) {
+    if (!(b.key in FACING)) continue;
+    const front = ([4, 5, 2, 3] as Facing[]).find((side) => {
+      if (side === b.facing) return false;
+      const n = blocks.get(posKey(addVec(b.pos, DIRS[side])));
+      if (!n) return true;
+      // Not against a power source (fronts take no power) or a pipe that connects to this machine.
+      if (n.key === 'transformer_mv_lv' || n.key === 'combustion_generator_mv') return false;
+      return !netOf.has(posKey(n.pos)) || ((masks.get(posKey(n.pos)) ?? 0) & (1 << OPPOSITE[side])) === 0;
+    });
+    if (front !== undefined) b.mainFacing = front;
+  }
+
   const custom = extractors !== 6 || distilleries !== 17;
   const name = custom ? `oil-berry-line-${extractors}fe-${distilleries}d` : 'oil-berry-line';
   // GregTech settings the line relies on: the reactor's Light Fuel leaves through a pump cover underneath, and the
@@ -176,10 +193,14 @@ export function makeOilBerryLine({ extractors, distilleries }: OilBerryLineOptio
       { pos: [-1, 2, 0], side: 0, kind: 'pump' },
       { pos: [-1, 2, 0], side: 1, kind: 'inputFromOutput' },
       { pos: [1, 3, 0], side: 4, kind: 'inputFromOutput' },
+      { pos: [-1, 2, 0], side: 1, kind: 'itemFilter', item: 'item:gregtech:gt.metaitem.01@30001' },
     ],
     notes: [
+      'Place every machine with its front (the face with its picture) facing the way shown, then wrench its output to the side shown.',
+      'Turn on item and fluid auto-output on every machine.',
       'Put a pump cover on the bottom of the Chemical Reactor at (-1, 2, 0), set to export, so Light Fuel drops into the pipe below.',
-      'Use a screwdriver on the output face of the Chemical Reactor (top) and the MV Electrolyzer (west) to turn on "input from output side", so they can take in the cells that pipe brings.',
+      'The Chemical Reactor (top) and the MV Electrolyzer (west) take cells in through their output side: make sure "input from output side" is on (it is when you place a machine; the screwdriver toggles it).',
+      'Put an Item Filter cover set to Hydrogen Cell on the top of the Chemical Reactor, so only Hydrogen Cells go into it from the cells pipe.',
     ],
   };
 }
