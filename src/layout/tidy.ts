@@ -52,7 +52,7 @@ const shift = (b: PlacedBlock, dx: number): PlacedBlock => ({ ...b, pos: [b.pos[
  * with the slices' through-runs as lanes. Tries several row arrangements and keeps the least lossy (in half-generator
  * steps), then narrowest, then shortest, then smallest line that passes the checker; undefined when none does.
  */
-export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Build | undefined {
+export function buildTidy(plan: LinePlan, name: string, warnings: string[], why: string[] = []): Build | undefined {
   // A straight line is one long slice of every kind with two or more machines, its one-offs in the core at one end.
   const straight = plan.style === 'straight';
   let rows = straight ? (plan.straight ?? []).filter((m) => m.count >= 2 && !m.multiblock) : plan.slice ?? [];
@@ -96,11 +96,20 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
       for (const serviceWidth of [1, 2]) {
         for (const powerFirst of [true, false]) {
           const slice = tidySlice(arr, nets, plan, { serviceWidth, straight, powerFirst, copies: copies.left + copies.right, relaxed });
-          if ('fail' in slice || coreFails.has(entries(slice))) continue;
+          if ('fail' in slice) {
+            why.push(`slice: ${slice.fail}`);
+            continue;
+          }
+          if (coreFails.has(entries(slice))) continue;
           // A quick core to compare slices by; the winner's core is made compact afterwards.
-          const build = withCore(plan, name, slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings], true);
+          const build = withCore(plan, name, slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings], true, why);
           if (!build) coreFails.add(entries(slice));
-          if (!build || checkLine(build, plan).length) continue;
+          if (!build) continue;
+          const problems = checkLine(build, plan);
+          if (problems.length) {
+            why.push(`check: ${problems[0]}`);
+            continue;
+          }
           const span = (a: number) => Math.max(...build.blocks.map((b) => b.pos[a])) - Math.min(...build.blocks.map((b) => b.pos[a])) + 1;
           // Fewest generators; then EU lost in cables (in half-generator steps); then the shortest line, the narrowest,
           // the fewest blocks.
@@ -209,7 +218,7 @@ function powerEachRegion(plan: LinePlan, rows: PlanMachine[], oneOffs: PlanMachi
 /** The core for a tidy slice, and the whole line assembled around it. */
 function withCore(
   plan: LinePlan, name: string, slice: TidySlice, copies: { left: number; right: number }, nets: Net[], coreMachines: Unit[], everyMachine: Unit[],
-  markers: Unit[], warnings: string[], quick: boolean,
+  markers: Unit[], warnings: string[], quick: boolean, why: string[] = [],
 ): Build | undefined {
   const source = plan.power.source.tier;
   const feed = slice.nets.find((n) => n.kind === 'cable' && slice.throughRuns.has(n.id));
@@ -242,6 +251,7 @@ function withCore(
   // shortest core that routes. The shortest of those wins, then the one with the fewest pipe blocks.
   const machineCount = Math.max(coreUnits.filter((u) => !u.transformer).length, 1);
   let best: { build: Build; score: number[] } | undefined;
+  let lastWhy = '';
   const shapes = quick
     ? [{ step: 2 as const, avoid: undefined }]
     : ([1, 2] as const).flatMap((step) => [undefined, LOW_AVOID].map((avoid) => ({ step, avoid })));
@@ -273,7 +283,10 @@ function withCore(
       taken.add(posKey(pos));
     }
     const core = placeTidyCore(coreUnits, coreMin + markerColumns, C - markerColumns, coreSide, taken, step);
-    if (!core) continue;
+    if (!core) {
+      lastWhy = 'core: no room to place the core machines';
+      continue;
+    }
     corePlaced.push(...core.map(facingInward));
     // Nothing goes in front of a core machine.
     for (const u of corePlaced) if (u.mainFacing !== undefined) keepClear.add(posKey(addVec(u.pos, DIRS[u.mainFacing])));
@@ -285,7 +298,10 @@ function withCore(
       lanes, keepClear, bendPenalty: BEND_PENALTY, walkway: false, ...(avoid !== undefined ? { avoidPenalty: avoid } : {}),
     };
     const routed = routeRegion(region, coreNets, plan, true);
-    if ('fail' in routed) continue;
+    if ('fail' in routed) {
+      lastWhy = `core: ${routed.fail}`;
+      continue;
+    }
 
     const { left, right } = copies;
     const leftStart = coreMin - left * L;
@@ -321,5 +337,6 @@ function withCore(
     break;
   }
   }
+  if (!best && lastWhy) why.push(lastWhy);
   return best?.build;
 }

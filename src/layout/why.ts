@@ -1,0 +1,86 @@
+/** Why a line couldn't be laid out, in plain words, with what to try. */
+export interface FailureReason {
+  text: string;
+  /** What to try, as one sentence (`tips` joined). */
+  advice: string;
+  /** What to try, one tip each (the same tip can come with several reasons). */
+  tips: string[];
+  /** How many of the layouts tried failed this way. */
+  count: number;
+}
+
+const STRAIGHT = 'Try ticking "Straight line" (one long row gives machines more room around them)';
+const SPLIT = 'Build part of the chain as its own line (fewer different pipes in one place)';
+const FEWER = 'Pick a recipe or machine with fewer inputs and outputs for it';
+const FUEL = 'Give the line more fuel (raise what you have) so it gets more generators, or power it from outside';
+const VOLTS = 'Use one voltage for the machines that repeat in each slice, and generators of that voltage (or one above)';
+
+/** Patterns of the layout code's failure reasons, turned into plain words and advice. */
+const RULES: { test: RegExp; text: (m: RegExpMatchArray) => string; tips: string[] }[] = [
+  {
+    test: /no free face on the (.+?) for (.+)$/,
+    text: (m) => `The ${m[1]} has more pipes than free sides (it needed one for ${m[2]})`,
+    tips: [FEWER, STRAIGHT],
+  },
+  {
+    test: /no room to join the (.+?) runs/,
+    text: (m) => `Couldn't connect all the ${m[1]} pipes: too many pipes cross in a small space`,
+    tips: [STRAIGHT, SPLIT],
+  },
+  {
+    test: /no room to run (.+?) in the (core|line|slice)/,
+    text: (m) => `No way through for the ${m[1]} in the ${m[2] === 'line' ? 'line' : m[2]}`,
+    tips: [STRAIGHT, SPLIT],
+  },
+  {
+    test: /no straight run left for (.+)/,
+    text: (m) => `No straight run left for the ${m[1]}: too many different pipes run through each slice`,
+    tips: [STRAIGHT, SPLIT],
+  },
+  {
+    test: /not enough generators|more machines than the transformers can feed/,
+    text: () => "The generators in a slice can't cover what its machines use",
+    tips: [FUEL],
+  },
+  {
+    test: /voltages|different voltage|supply|generators of different/,
+    text: () => 'Machines of different voltages ended up sharing power',
+    tips: [VOLTS],
+  },
+  {
+    test: /burns|carrying (LV|MV|HV)/,
+    text: () => 'A cable would have touched one of a higher voltage',
+    tips: [STRAIGHT],
+  },
+  {
+    test: /^core:|core/,
+    text: () => 'The core (the one-off machines in the middle) has too many pipes to fit',
+    tips: [STRAIGHT, SPLIT],
+  },
+];
+
+/** Groups raw reasons, explains each, most common first. */
+export function explainFailures(raw: string[]): FailureReason[] {
+  const out = new Map<string, FailureReason>();
+  for (const r of raw) {
+    const reason = r.replace(/^(core|check|slice): /, '');
+    const rule = RULES.find((x) => x.test.test(reason)) ?? RULES.find((x) => x.test.test(r));
+    const m = rule ? reason.match(rule.test) ?? r.match(rule.test)! : undefined;
+    const text = rule && m ? rule.text(m) : reason.charAt(0).toUpperCase() + reason.slice(1);
+    const tips = rule?.tips ?? [STRAIGHT, SPLIT];
+    const prev = out.get(text);
+    out.set(text, { text, tips, advice: tips.join('. '), count: (prev?.count ?? 0) + 1 });
+  }
+  return [...out.values()].sort((a, b) => b.count - a.count);
+}
+
+/** Thrown when no layout fits: the reasons, most common first, and the first in the message. */
+export class LayoutFailure extends Error {
+  readonly reasons: FailureReason[];
+  constructor(raw: string[]) {
+    const reasons = explainFailures(raw).slice(0, 4);
+    super(`Couldn't lay out this line: ${reasons[0]?.text.toLowerCase() ?? "there isn't room to connect all its pipes and cables"}.`);
+    this.name = 'LayoutFailure';
+    this.reasons = reasons;
+  }
+}

@@ -3,6 +3,7 @@ import type { Build, PlacedBlock, Vec3 } from '../model/types';
 import { checkLine } from './check';
 import { cableLoss } from './loss';
 import { UNTIDY_NOTE, buildTidy } from './tidy';
+import { LayoutFailure } from './why';
 import type { GeneratedLine, LinePlan, PlanMachine } from './types';
 import {
   type Net,
@@ -76,7 +77,7 @@ const ROOMY: Form = {
 };
 
 /** Straight line: machines one high along a walkway, every network routed behind them. */
-function buildStraight(plan: LinePlan, name: string, warnings: string[]): Build | undefined {
+function buildStraight(plan: LinePlan, name: string, warnings: string[], why: string[] = []): Build | undefined {
   const machines = machineUnits(plan.straight ?? []);
   const units: Unit[] = [...machines, ...transformersFor(machines, plan.power.source.tier), ...markerUnits(plan.markers)];
   const nets = [...planNets(plan, warnings), ...powerNets(plan, units, countTransformers(units), warnings)];
@@ -85,7 +86,10 @@ function buildStraight(plan: LinePlan, name: string, warnings: string[]): Build 
     const placed: Placed[] = units.map((u, i) => withFront({ ...u, pos: u.marker ? [i * step, 0, -5] : [i * step, 0, -1] }));
     const region: Region = { name: 'line', units: placed, min: [-1, -1, -5], max: [units.length * step, 3, -1], lanes: new Map() };
     const routed = routeRegion(region, nets, plan, true);
-    if ('fail' in routed) continue;
+    if ('fail' in routed) {
+      why.push(routed.fail);
+      continue;
+    }
     const blocks = [...placed.map(unitBlock), ...conduitBlocks(routed, nets, new Set(), new Set())];
     return assemble(name, plan, blocks, routed.covers, [...plan.notes, ...routed.notes, ...warnings], undefined, nets);
   }
@@ -270,10 +274,11 @@ function withExtraGenerators(plan: LinePlan, n: number): LinePlan {
  */
 function buildOnce(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
   const warnings: string[] = [];
+  const why: string[] = []; // every reason a layout failed, for the error if none fits
   if (plan.style === 'modular') {
     // Tidy first: every pipe and cable on a fixed straight run.
     const tidy: string[] = [];
-    const t = buildTidy(plan, name, tidy);
+    const t = buildTidy(plan, name, tidy, why);
     if (t && !checkLine(t, plan).length) return { build: t, warnings: tidy };
     // Each form starts clean, so a line that fits never mentions why a tighter form didn't.
     const reasons = new Set<string>();
@@ -284,17 +289,20 @@ function buildOnce(plan: LinePlan, name: string): { build: Build; warnings: stri
         b.notes = [UNTIDY_NOTE, ...(b.notes ?? [])];
         return { build: b, warnings: tried };
       }
-      for (const w of tried) if (w.startsWith('(')) reasons.add(w);
+      for (const w of tried) if (w.startsWith('(')) {
+        reasons.add(w);
+        why.push(w.slice(1, -1));
+      }
     }
     warnings.push("Couldn't fit this line into identical slices, so it's laid out in a straight line instead.", ...reasons);
   }
   const straightPlan: LinePlan = plan.style === 'straight' ? plan : { ...plan, style: 'straight', straight: [...(plan.slice ?? []).map((m) => ({ ...m, count: m.count * plan.sliceCount })), ...plan.core] };
   const tidy: string[] = [];
-  const t = buildTidy(straightPlan, name, [...warnings, ...tidy]);
+  const t = buildTidy(straightPlan, name, [...warnings, ...tidy], why);
   if (t && !checkLine(t, straightPlan).length) return { build: t, warnings };
-  const b = buildStraight(straightPlan, name, warnings);
+  const b = buildStraight(straightPlan, name, warnings, why);
   if (b) b.notes = [UNTIDY_NOTE, ...(b.notes ?? [])];
-  if (!b) throw new Error("Couldn't lay out this line: there isn't room to connect all its pipes and cables.");
+  if (!b) throw new LayoutFailure(why);
   const problems = checkLine(b, straightPlan);
   if (problems.length) b.notes = [...(b.notes ?? []), 'Check these before building:', ...problems];
   return { build: b, warnings };

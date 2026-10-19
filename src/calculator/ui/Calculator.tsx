@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { LayoutFailure, type FailureReason } from '../../layout/why';
 import type { ResourceKey } from '../../recipes/types';
 import { driveText, screenProblems } from '../drive';
 import { summary } from '../overview';
@@ -124,8 +125,11 @@ function Workspace({ active, db, warning, history, dispatch, toast, onBuild3d }:
     }
   };
   const canBuild = !!shown?.result.nodes.some((n) => !n.invalid && n.build > 0);
+  // Why the last Build in 3D failed (stays until closed or the next try).
+  const [failure, setFailure] = useState<FailureReason[]>();
   const build3d = () => {
     if (!shown) return;
+    setFailure(undefined);
     const p = planLine(chain, db, shown, straight ? 'straight' : 'modular');
     if ('error' in p) return toast(p.error, 'error');
     try {
@@ -133,7 +137,8 @@ function Workspace({ active, db, warning, history, dispatch, toast, onBuild3d }:
       const { build } = buildLine(p, `${product} line`);
       onBuild3d(build);
     } catch (e) {
-      toast((e as Error).message, 'error');
+      if (e instanceof LayoutFailure) setFailure(e.reasons);
+      else toast((e as Error).message, 'error');
     }
   };
   const closePicker = useCallback(() => setPicker(null), []);
@@ -185,9 +190,29 @@ function Workspace({ active, db, warning, history, dispatch, toast, onBuild3d }:
               dispatch={dispatch}
             />
           </div>
+          {failure && <BuildFailure reasons={failure} straight={straight} onClose={() => setFailure(undefined)} />}
         </section>
       </div>
       {picker && <Picker mode={picker.mode} chain={chain} db={db} onClose={closePicker} onUse={use} />}
     </>
+  );
+}
+
+/** Why Build in 3D couldn't lay the line out, and what to try. */
+function BuildFailure({ reasons, straight, onClose }: { reasons: FailureReason[]; straight: boolean; onClose(): void }) {
+  const tries = [...new Set(reasons.flatMap((r) => r.tips))].filter((t) => !(straight && /^Try ticking "Straight line"/.test(t)));
+  return (
+    <aside className="panel build-failure" data-testid="build-failure" role="alert">
+      <button className="close" onClick={onClose} title="Close" aria-label="Close">×</button>
+      <h3>Couldn't lay this line out in 3D</h3>
+      <p className="hint">What got in the way (of the layouts tried):</p>
+      <ul>
+        {reasons.map((r) => (
+          <li key={r.text}>{r.text}{r.count > 1 ? <span className="hint"> · {r.count} times</span> : null}</li>
+        ))}
+      </ul>
+      <p className="hint">Things to try:</p>
+      <ul>{tries.map((a) => <li key={a}>{a}</li>)}</ul>
+    </aside>
   );
 }
