@@ -3,6 +3,7 @@ import { DIRS, addVec, posKey } from '../model/directions';
 import { routeNetwork } from '../model/route';
 import type { Build, FaceSetting, Facing, PlacedBlock, Vec3 } from '../model/types';
 import { checkLine } from './check';
+import { cableLoss } from './loss';
 import { VOLTAGE, cableFor, pipeFor } from './power';
 import type { GeneratedLine, LinePlan, PlanMachine, PlanMarker, PowerTier } from './types';
 
@@ -439,10 +440,50 @@ function buildModular(plan: LinePlan, name: string, warnings: string[]): Build |
 }
 
 /**
+ * Lays the plan out (see `buildOnce`), then makes sure the generators cover what the machines use plus what the cables
+ * lose, adding a generator per slice (or to the line) until they do.
+ */
+export function buildLine(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
+  let p = plan;
+  let extra = 0;
+  for (;;) {
+    const out = buildOnce(p, name);
+    const lost = Math.round(cableLoss(out.build, p).total);
+    const used = Object.values(p.power.demand).reduce((s, x) => s + (x ?? 0), 0);
+    const gens = out.build.blocks.filter((b) => [...(p.slice ?? []), ...p.core, ...(p.straight ?? [])].some((m) => m.generator && m.nodeId === b.role));
+    const genEut = [...(p.slice ?? []), ...p.core, ...(p.straight ?? [])].find((m) => m.generator)?.eut ?? 0;
+    const short = p.power.source.kind === 'generators' && gens.length * genEut < used + lost;
+    if (!short || extra >= 3) {
+      const notes = [
+        ...(lost > 0
+          ? [p.power.source.kind === 'generators'
+              ? `Cables lose about ${lost} EU/t (the generators cover it)`
+              : `Cables lose about ${lost} EU/t — bring in ${Math.ceil(used + lost)} EU/t`]
+          : []),
+        ...(extra ? [`Added ${extra} extra generator${extra > 1 ? 's' : ''} ${p.style === 'modular' ? 'per slice ' : ''}to cover cable loss`] : []),
+        ...(short ? [`The generators still fall short of what the machines use plus cable loss — add more`] : []),
+      ];
+      out.build.notes = [...(out.build.notes ?? []), ...notes];
+      return out;
+    }
+    p = withExtraGenerator(p);
+    extra++;
+  }
+}
+
+/** The plan with one more generator where the generators live (each slice, the core, or the straight line). */
+function withExtraGenerator(plan: LinePlan): LinePlan {
+  const bump = (ms?: PlanMachine[]) => ms?.map((m) => (m.generator ? { ...m, count: m.count + 1 } : m));
+  if (plan.slice?.some((m) => m.generator)) return { ...plan, slice: bump(plan.slice) };
+  if (plan.core.some((m) => m.generator)) return { ...plan, core: bump(plan.core)! };
+  return { ...plan, straight: bump(plan.straight) };
+}
+
+/**
  * Lays the plan out as blocks: modular (core + identical slices) or a straight line, every network routed and
  * checked. A modular line that won't fit falls back to a straight line, saying so.
  */
-export function buildLine(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
+function buildOnce(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
   const warnings: string[] = [];
   if (plan.style === 'modular') {
     const b = buildModular(plan, name, warnings);

@@ -22,7 +22,8 @@ test('oil line (modular) passes the checker', async () => {
   const { build } = buildLine(p, 'Light Fuel line');
   expect(checkLine(build, p)).toEqual([]);
   const b = bom(build.blocks);
-  expect(b).toMatchObject({ fluid_extractor_lv: 6, distillery_lv: 18, chemical_reactor_lv: 1, electrolyzer_mv: 1, combustion_generator_mv: 6 });
+  expect(b).toMatchObject({ fluid_extractor_lv: 6, distillery_lv: 18, chemical_reactor_lv: 1, electrolyzer_mv: 1 });
+  expect(b.combustion_generator_mv).toBeGreaterThanOrEqual(6); // more when cable loss needs them
   expect(build.generated).toMatchObject({ style: 'modular', sliceCount: 6 });
   expect(build.generated!.left + build.generated!.right).toBe(6);
   for (const blk of build.blocks) expect(blk.pos[2] === 0 && (blk.pos[1] === 0 || blk.pos[1] === 1)).toBe(false);
@@ -32,7 +33,8 @@ test('oil line (straight) passes the checker with Calculator counts', async () =
   const p = await plan(reference(), 'straight');
   const { build } = buildLine(p, 'Light Fuel line');
   expect(checkLine(build, p)).toEqual([]);
-  expect(bom(build.blocks)).toMatchObject({ fluid_extractor_lv: 6, distillery_lv: 17, chemical_reactor_lv: 1, electrolyzer_mv: 1, combustion_generator_mv: 5 });
+  expect(bom(build.blocks)).toMatchObject({ fluid_extractor_lv: 6, distillery_lv: 17, chemical_reactor_lv: 1, electrolyzer_mv: 1 });
+  expect(bom(build.blocks).combustion_generator_mv).toBeGreaterThanOrEqual(5); // more when cable loss needs them
   expect(build.generated).toBeUndefined();
 });
 
