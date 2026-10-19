@@ -26,6 +26,7 @@ import type { GeneratedLine, LinePlan, PlanMachine, PowerTier } from './types';
 export const FLOOR_NOTE = 'The floor pipes sit one block below the machines: dig one layer for them';
 const FRONT_NOTE = 'Place every machine with its front (the face with its picture) against the machine facing it, then wrench its output to the side shown in the 3D view. There is no walkway: GT machines open from any face, so reach them from outside.';
 export const UNTIDY_NOTE = "Couldn't keep this line tidy, so some pipes take detours";
+export const DENSE_NOTE = 'This line has many pipes per machine, so some pipes turn between machines and the line is a block or two bigger than usual';
 
 /** Row arrangements tried per line, best first. */
 const ARRANGEMENTS_TRIED = 8;
@@ -64,34 +65,51 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
   const netWarnings: string[] = [];
   const nets = [...planNets(plan, netWarnings), ...powerNets(plan, everyMachine, countTransformers(transformersFor(coreMachines, source)), netWarnings)];
 
-  let best: { build: Build; score: number[] } | undefined;
+  let best: { build: Build; score: number[]; relaxed: boolean } | undefined;
   // The shortest arrangements, and those that keep every row to one kind (every run straight through).
-  const arrangements = [...arrangeRows(rows).slice(0, ARRANGEMENTS_TRIED), ...arrangeRows(rows, undefined, true).slice(0, ARRANGEMENTS_TRIED)];
+  // Machines with more inputs or outputs than their two runs need side faces: they get gaps beside them.
+  const sideFaces = new Map(rows.map((m) => {
+    const ins = nets.filter((n) => n.kind !== 'cable' && n.consumers.has(m.nodeId)).length;
+    const outs = m.generator ? 0 : nets.filter((n) => n.kind !== 'cable' && n.producers.has(m.nodeId)).length;
+    return [m.nodeId, Math.min(2, Math.max(0, ins - 1) + Math.max(0, outs - 1))];
+  }));
+  // Two high first; when machines need side faces, also one high (the upper level then left for pipes to rise into).
+  const needsSides = [...sideFaces.values()].some((n) => n > 0);
+  const arrangements = [
+    ...arrangeRows(rows, undefined, false, [0, 1, 2, 3], sideFaces).slice(0, ARRANGEMENTS_TRIED),
+    ...arrangeRows(rows, undefined, true, [0, 1, 2, 3], sideFaces).slice(0, ARRANGEMENTS_TRIED),
+    ...(needsSides ? arrangeRows(rows, undefined, true, [0, 2], sideFaces).slice(0, ARRANGEMENTS_TRIED) : []),
+  ];
   const genRole = [...rows, ...oneOffs].find((m) => m.generator)?.nodeId;
   // The core only sees where the slices' through-runs enter it: one that can't be routed for a set of entries can't for
   // any slice with the same entries.
   const coreFails = new Set<string>();
   const entries = (slice: TidySlice) => [...slice.throughRuns]
     .map(([id, runs]) => `${id}:${runs.map((r) => `${r[0][1]},${r[0][2]}`).sort().join(';')}`).sort().join('|');
-  for (const arr of arrangements) {
-    for (const serviceWidth of [1, 2]) {
-      for (const powerFirst of [true, false]) {
-        const slice = tidySlice(arr, nets, plan, { serviceWidth, straight, powerFirst, copies: copies.left + copies.right });
-        if ('fail' in slice || coreFails.has(entries(slice))) continue;
-        const build = withCore(plan, name, slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings]);
-        if (!build) coreFails.add(entries(slice));
-        if (!build || checkLine(build, plan).length) continue;
-        const span = (a: number) => Math.max(...build.blocks.map((b) => b.pos[a])) - Math.min(...build.blocks.map((b) => b.pos[a])) + 1;
-        // Fewest generators; then EU lost in cables (in half-generator steps); then the shortest line, the narrowest,
-        // the fewest blocks.
-        const generators = build.blocks.filter((b) => b.role === genRole).length;
-        const score = [generators, Math.ceil(cableLoss(build, plan).total / LOSS_STEP), span(0), span(2), build.blocks.length];
-        if (!best || lessThan(score, best.score)) best = { build, score };
+  // Strict first (pipes leave their runs only in service and gap columns); relaxed only if nothing strict fits.
+  for (const relaxed of [false, true]) {
+    if (best) break;
+    for (const arr of arrangements) {
+      for (const serviceWidth of [1, 2]) {
+        for (const powerFirst of [true, false]) {
+          const slice = tidySlice(arr, nets, plan, { serviceWidth, straight, powerFirst, copies: copies.left + copies.right, relaxed });
+          if ('fail' in slice || coreFails.has(entries(slice))) continue;
+          const build = withCore(plan, name, slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings]);
+          if (!build) coreFails.add(entries(slice));
+          if (!build || checkLine(build, plan).length) continue;
+          const span = (a: number) => Math.max(...build.blocks.map((b) => b.pos[a])) - Math.min(...build.blocks.map((b) => b.pos[a])) + 1;
+          // Fewest generators; then EU lost in cables (in half-generator steps); then the shortest line, the narrowest,
+          // the fewest blocks.
+          const generators = build.blocks.filter((b) => b.role === genRole).length;
+          const score = [generators, Math.ceil(cableLoss(build, plan).total / LOSS_STEP), span(0), span(2), build.blocks.length];
+          if (!best || lessThan(score, best.score)) best = { build, score, relaxed };
+        }
       }
     }
   }
   if (!best) return undefined;
   best.build.notes = (best.build.notes ?? []).map((n) => (n.startsWith('Place every machine with its front') ? FRONT_NOTE : n));
+  if (best.relaxed) best.build.notes.push(DENSE_NOTE);
   // Say so when the line has more generators than the Calculator counted (each region powers itself).
   const gen = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])].find((m) => m.generator);
   if (gen) {
@@ -217,6 +235,8 @@ function withCore(
     const ends = (r: Vec3[]): Vec3[][] => [...(copies.left ? [[[coreMin, r[0][1], r[0][2]] as Vec3]] : []), [[-1, r[0][1], r[0][2]]]];
     const lanes = new Map([...slice.throughRuns].map(([id, runs]) => [id, runs.flatMap(ends)]));
     const keepClear = new Set<string>();
+    const laneYs = [...lanes.values()].flat(2).map((c) => c[1]);
+    const laneZs = [...lanes.values()].flat(2).map((c) => c[2]);
     const taken = new Set([...keepClear, ...[...lanes.values()].flat(2).map(posKey)]);
     // A marker sits right beside the through-run it fills or empties (no pipe needed), else in the end column.
     const corePlaced: Placed[] = [];
@@ -238,7 +258,10 @@ function withCore(
     // Nothing goes in front of a core machine.
     for (const u of corePlaced) if (u.mainFacing !== undefined) keepClear.add(posKey(addVec(u.pos, DIRS[u.mainFacing])));
     const region: Region = {
-      name: 'core', units: corePlaced, min: [coreMin, TIDY_BOUNDS.yMin, TIDY_BOUNDS.zMin], max: [-1, TIDY_BOUNDS.yMax, TIDY_BOUNDS.zMax],
+      // Within the tidy cross-section, or as far out as the slices' runs come in.
+      name: 'core', units: corePlaced,
+      min: [coreMin, Math.min(TIDY_BOUNDS.yMin, ...laneYs), Math.min(TIDY_BOUNDS.zMin, ...laneZs)],
+      max: [-1, Math.max(TIDY_BOUNDS.yMax, ...laneYs), Math.max(TIDY_BOUNDS.zMax, ...laneZs)],
       lanes, keepClear, bendPenalty: BEND_PENALTY, walkway: false,
     };
     const routed = routeRegion(region, coreNets, plan, true);

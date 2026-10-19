@@ -87,9 +87,10 @@ export function buildSchematicTag(
       // GT basic machines keep their front separately; without it they load with the front on the output side.
       if (block.mainFacing !== undefined) {
         te.value.mMainFacing = int(block.mainFacing);
-        // GT reads a missing flag as off, though a machine placed by hand starts with input from the output side on.
-        // Auto-output on too, as the line notes ask.
-        te.value.mAllowInputFromOutputSide = byte(1);
+        // GT reads a missing flag as off. Input from the output side only where the build relies on it (a machine could
+        // otherwise pull back in what its output pipe carries); auto-output on, as the line notes ask.
+        const fromOutput = (build.covers ?? []).some((c) => c.kind === 'inputFromOutput' && posKey(c.pos) === posKey(block.pos));
+        te.value.mAllowInputFromOutputSide = byte(fromOutput ? 1 : 0);
         te.value.mItemTransfer = byte(1);
         te.value.mFluidTransfer = byte(1);
       }

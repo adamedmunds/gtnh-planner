@@ -96,6 +96,17 @@ export function planNets(plan: LinePlan, warnings: string[]): Net[] {
     if (g) g.push(n);
     else groups.push([n]);
   }
+  // Items that all go to exactly the same machines share one pipe too: every taker takes all of them (no filter), and a
+  // machine with several item inputs then needs one face for them, not one each.
+  const takers = (g: typeof items) => [...new Set(g.flatMap((n) => n.consumers))].sort().join('|');
+  for (let i = 0; i < groups.length; i++) {
+    for (let j = groups.length - 1; j > i; j--) {
+      if (takers(groups[i]) === takers(groups[j]) && !groups[i].some((n) => n.consumers.some((c) => c.startsWith('out:')))) {
+        groups[i].push(...groups[j]);
+        groups.splice(j, 1);
+      }
+    }
+  }
   for (const g of groups) {
     const flow = g.reduce((s, n) => s + n.flow, 0);
     const name = g.map((n) => n.name).join(' and ');

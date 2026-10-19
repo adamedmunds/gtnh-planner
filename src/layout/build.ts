@@ -1,4 +1,4 @@
-import { posKey } from '../model/directions';
+import { DIRS, addVec, posKey } from '../model/directions';
 import type { Build, PlacedBlock, Vec3 } from '../model/types';
 import { checkLine } from './check';
 import { cableLoss } from './loss';
@@ -220,13 +220,37 @@ export function buildLine(plan: LinePlan, name: string): { build: Build; warning
         ...(extra ? [`Added ${extra} extra generator${extra > 1 ? 's' : ''}${p.style === 'modular' ? ' in the core' : ''} to cover cable loss`] : []),
         ...(short ? [`The generators still fall short of what the machines use plus cable loss — add more`] : []),
       ];
-      out.build.notes = [...(out.build.notes ?? []), ...notes];
+      out.build.notes = [...(out.build.notes ?? []), ...notes, ...pullBackNote(out.build, p)];
       return out;
     }
     const missing = Math.ceil((used + lost - gens.length * genEut) / genEut - 1e-9);
     p = withExtraGenerators(p, missing);
     extra += missing;
   }
+}
+
+/**
+ * GT turns "input from output side" on for a machine placed by hand, so a machine whose output pipe also carries
+ * something machines of its kind take in would pull it back in (and starve whatever it was for). Names those machines.
+ */
+function pullBackNote(build: Build, plan: LinePlan): string[] {
+  const machines = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])];
+  const byNode = new Map(machines.map((m) => [m.nodeId, m]));
+  const takes = (mID: number) => new Set(machines.filter((m) => m.machine.mID === mID).flatMap((m) => m.inputs));
+  const at = new Map(build.blocks.map((b) => [posKey(b.pos), b]));
+  const risky = new Set<string>();
+  for (const b of build.blocks) {
+    const pm = byNode.get(b.role ?? '');
+    if (!pm || pm.generator || pm.multiblock || b.facing === undefined) continue;
+    const pipe = at.get(posKey(addVec(b.pos, DIRS[b.facing])));
+    if (!pipe?.net || pipe.net.startsWith('p:')) continue;
+    const carries = pipe.net.slice(2).split('+');
+    const accepted = takes(pm.machine.mID);
+    if (carries.some((k) => accepted.has(k))) risky.add(pm.title);
+  }
+  return risky.size
+    ? [`Turn off "input from output side" (screwdriver on the output face; GT turns it on) on every ${[...risky].join(' and ')}: their output pipes carry things they would pull back in`]
+    : [];
 }
 
 /**

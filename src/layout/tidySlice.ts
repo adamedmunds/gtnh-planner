@@ -30,6 +30,8 @@ export interface TidySlice {
   throughRuns: Map<string, Vec3[][]>;
   /** Every network the slice uses, including its local power networks. */
   nets: Net[];
+  /** Gap columns (beside machines that need a side face), where pipes may turn like in the service column. */
+  gaps?: number[];
 }
 
 export interface TidyOptions {
@@ -41,6 +43,8 @@ export interface TidyOptions {
   powerFirst?: boolean;
   /** How many copies of the slice the line has (to share each machine group's average use out per machine). */
   copies?: number;
+  /** Let joins turn anywhere along the slice, not only in service and gap columns (for lines too dense otherwise). */
+  relaxed?: boolean;
 }
 
 const fail = (why: string) => ({ fail: why });
@@ -53,10 +57,12 @@ const fail = (why: string) => ({ fail: why });
  * column; runs the core or other slices need carry straight through.
  */
 export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: TidyOptions = {}): TidySlice | { fail: string } {
-  const { serviceWidth = 1, straight = false, powerFirst = false, copies = 1 } = opts;
+  const { serviceWidth = 1, straight = false, powerFirst = false, copies = 1, relaxed = false } = opts;
   const C = arr.columns;
   const L = C + serviceWidth;
-  const svc = (x: number) => x >= C;
+  // Pipes leave a straight run only in the service column, or in a gap column beside a machine that needs a side face.
+  const gapCols = new Set(arr.gaps ?? []);
+  const svc = (x: number) => x >= C || gapCols.has(x);
   const sideOf = (z: number) => (z <= 0 ? -1 : 1);
   const units: Placed[] = [];
   const unitAt = new Map<string, Placed>();
@@ -187,9 +193,17 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
       localPower.set(net.id, net);
       return net;
     })();
+    // Fed from the core at the machines' own voltage, the layer goes only where a machine sits above or below (gaps stay
+    // free for pipes rising from side faces); each piece of it gets its own stub from the feed.
+    const fedDirect = !gens.length && step === 0 && !!feedNet;
+    const feeds = (pos: Vec3) => [0, 2].some((y) => {
+      const m = unitAt.get(posKey([pos[0], y, pos[2]]));
+      return !!m && consumers.includes(m);
+    });
     for (let x = 0; x < C; x++) {
       for (const side of [-1, 1]) {
         const pos: Vec3 = [x, 1, tidyZ(side, 1)];
+        if (fedDirect && !feeds(pos)) continue;
         const input = transformers.get(posKey(pos));
         if (input !== undefined) {
           const key = transformerKey(supply);
@@ -210,8 +224,25 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
       const [a, b]: Vec3[] = [[x, 1, 0], [x, 1, 1]];
       if (cellNet.get(posKey(a)) === layerNet.id && cellNet.get(posKey(b)) === layerNet.id) link(a, b);
     }
-    // Machines at the supply voltage fed from the core: a feed stub joins the layer.
-    if (!gens.length && step === 0 && feedNet) feedStubs.push([0, 1, tidyZ(-1, 2)]);
+    // Machines at the supply voltage fed from the core: a feed stub, on its own side, joins each piece of the layer.
+    if (fedDirect) {
+      const seen = new Set<string>();
+      for (let x = 0; x < C; x++) {
+        for (const side of [-1, 1]) {
+          const start = posKey([x, 1, tidyZ(side, 1)]);
+          if (seen.has(start) || cellNet.get(start) !== layerNet.id) continue;
+          feedStubs.push([x, 1, tidyZ(side, 2)]);
+          const stack = [start];
+          while (stack.length) {
+            const k = stack.pop()!;
+            if (seen.has(k) || cellNet.get(k) !== layerNet.id) continue;
+            seen.add(k);
+            const p = cellPos.get(k)!;
+            for (const nk of [[p[0] - 1, 1, p[2]], [p[0] + 1, 1, p[2]], [p[0], 1, 1 - p[2]]] as Vec3[]) stack.push(posKey(nk));
+          }
+        }
+      }
+    }
   }
   /** Layer cells and same-voltage transformers beside `p` in the power layer (along x, and across the columns). */
   const layerNeighbours = (p: Vec3, id: string) => [4, 5, 2, 3].map((side) => posKey(addVec(p, DIRS[side]))).filter((nk) => {
@@ -296,6 +327,25 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     }
   }
 
+  // Second inputs and outputs: a free face beside the machine (a gap column), placed before the through-runs so they are
+  // carried on and joined like any other run.
+  for (const { u, net, out } of extras) {
+    const faces = [-1, 1]
+      .map((dx): Vec3 => [u.pos[0] + dx, u.pos[1], u.pos[2]])
+      .filter((c) => c[0] >= 0 && c[0] < L && !unitAt.has(posKey(c)) && (!cellNet.has(posKey(c)) || cellNet.get(posKey(c)) === net.id));
+    // Prefer a face already carrying this network (a gap shared with a neighbour doing the same), then an empty one.
+    const cell = faces.find((c) => cellNet.get(posKey(c)) === net.id) ?? faces.find((c) => !cellNet.has(posKey(c)));
+    if (!cell) return fail(`no free face on the ${u.name} for ${net.name}`);
+    put(cell, net.id);
+    serve(cell, u);
+    if (out) {
+      const side = sideTo(u.pos, cell);
+      const kind = net.kind === 'fluidPipe' ? 'pump' : 'conveyor';
+      routed.covers.push({ pos: u.pos, side, kind });
+      routed.notes.push(`Put a ${kind} cover on the ${SIDE_NAME[side]} of the ${u.name} at (${u.pos.join(', ')}), set to export, so ${net.name} goes into its own pipe.`);
+    }
+  }
+
   // Through-runs: every run of a network the core or other slices need carries on straight across the whole slice
   // (into the next slice and the core, which joins them), so slices only join their own local runs.
   const allNets = [...goods, ...(feedNet ? [feedNet] : []), ...localPower.values()];
@@ -306,6 +356,13 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
   const spare: [number, number][] = [
     ...[-1, 3].flatMap((y) => [-1, 1].map((side): [number, number] => [y, tidyZ(side, 2)])),
     ...[-1, 0, 1, 2, 3].flatMap((y) => [-1, 1].map((side): [number, number] => [y, tidyZ(side, 3)])),
+    // With machines one high, the upper level over the power layer is free for runs too.
+    ...[2, 3].flatMap((y) => [-1, 1].map((side): [number, number] => [y, tidyZ(side, 1)])),
+    // Relaxed lines may grow a block outward in every direction.
+    ...(relaxed ? [
+      ...[-2, -1, 0, 1, 2, 3, 4].flatMap((y) => [-1, 1].map((side): [number, number] => [y, tidyZ(side, 4)])),
+      ...[-2, 4].flatMap((y) => [1, 2, 3].flatMap((d) => [-1, 1].map((side): [number, number] => [y, tidyZ(side, d)]))),
+    ] : []),
   ];
   const used = (id: string) => [...cellNet.values()].includes(id);
   const spans = (n: Net) => n.kind === 'cable' ? n.id === feedNet?.id : [...n.producers, ...n.consumers].some((r) => !sliceRoles.has(r));
@@ -325,12 +382,11 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
       }
       const runs: Vec3[][] = [];
       for (const { y, z, xs } of slots.values()) {
-        const lo = Math.min(...xs);
-        const hi = Math.max(...xs);
-        const toZero = Array.from({ length: lo }, (_, x): Vec3 => [x, y, z]);
-        if (!toZero.every((c) => !unitAt.has(posKey(c)) && (!cellNet.has(posKey(c)) || cellNet.get(posKey(c)) === n.id))) continue;
-        for (const c of toZero) put(c, n.id);
-        runs.push(Array.from({ length: hi + 1 }, (_, x): Vec3 => [x, y, z]).filter((c) => cellNet.get(posKey(c)) === n.id));
+        // The whole run from x = 0 to its far end, gaps between machines included, if those blocks are free.
+        const run = Array.from({ length: Math.max(...xs) + 1 }, (_, x): Vec3 => [x, y, z]);
+        if (!run.every((c) => !unitAt.has(posKey(c)) && (!cellNet.has(posKey(c)) || cellNet.get(posKey(c)) === n.id))) continue;
+        for (const c of run) put(c, n.id);
+        runs.push(run);
       }
       if (runs.length) throughRuns.set(n.id, runs);
     }
@@ -353,7 +409,7 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
 
   // Join the runs of each network, only inside the service column.
   const blocked = new Set<string>(unitAt.keys());
-  const canStep = (a: Vec3, b: Vec3) => a[0] !== b[0] || svc(a[0]);
+  const canStep = (a: Vec3, b: Vec3) => relaxed || a[0] !== b[0] || svc(a[0]);
   // A cable may not run beside a cable of another voltage, nor beside a power output of a higher one (burn risk when
   // built by hand: GT cables join whatever they're placed against).
   const keepApart = (id: string): Set<string> => {
@@ -371,7 +427,8 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     }
     return out;
   };
-  const bounds = { min: [0, TIDY_BOUNDS.yMin, TIDY_BOUNDS.zMin] as Vec3, max: [L - 1, TIDY_BOUNDS.yMax, TIDY_BOUNDS.zMax] as Vec3 };
+  const grow = relaxed ? 1 : 0;
+  const bounds = { min: [0, TIDY_BOUNDS.yMin - grow, TIDY_BOUNDS.zMin - grow] as Vec3, max: [L - 1, TIDY_BOUNDS.yMax + grow, TIDY_BOUNDS.zMax + grow] as Vec3 };
   const components = (id: string): Vec3[][] => {
     const cells = [...cellNet].filter(([, n]) => n === id).map(([k]) => k);
     const seen = new Set<string>();
@@ -438,27 +495,6 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     if ('fail' in r) return r;
   }
 
-  // Second inputs and outputs: a free face beside the machine, joined like any other run.
-  for (const { u, net, out } of extras) {
-    const faces = [-1, 1]
-      .map((dx): Vec3 => [u.pos[0] + dx, u.pos[1], u.pos[2]])
-      .filter((c) => c[0] >= 0 && c[0] < L && !unitAt.has(posKey(c)) && (!cellNet.has(posKey(c)) || cellNet.get(posKey(c)) === net.id));
-    if (!faces.length) return fail(`no free face on the ${u.name} for ${net.name}`);
-    let cell = faces[0];
-    if (!used(net.id)) put(cell, net.id);
-    else {
-      const r = join(net.id, [faces]);
-      if ('fail' in r) return r;
-      cell = r[0];
-    }
-    serve(cell, u);
-    if (out) {
-      const side = sideTo(u.pos, cell);
-      const kind = net.kind === 'fluidPipe' ? 'pump' : 'conveyor';
-      routed.covers.push({ pos: u.pos, side, kind });
-      routed.notes.push(`Put a ${kind} cover on the ${SIDE_NAME[side]} of the ${u.name} at (${u.pos.join(', ')}), set to export, so ${net.name} goes into its own pipe.`);
-    }
-  }
   itemFilters(routed, allNets);
 
   // Conduits connect along their run, to the blocks they serve, across the power layer, and freely in the service column.
@@ -482,5 +518,5 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     return { pos, key: byId.get(net)!.conduit, net, manualMask: { forcedOn: on, forcedOff: 63 & ~on } };
   });
 
-  return { length: L, serviceFrom: C, blocks: [...units.map(unitBlock), ...conduits], routed, throughRuns, nets: allNets };
+  return { length: L, serviceFrom: C, blocks: [...units.map(unitBlock), ...conduits], routed, throughRuns, nets: allNets, ...(gapCols.size ? { gaps: [...gapCols] } : {}) };
 }
