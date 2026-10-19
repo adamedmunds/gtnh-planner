@@ -284,3 +284,15 @@ building by hand, whatever our connection masks say. Decided (my calls within th
   one-block stub to each transformer's input face.
 - Machines that sit directly on a transformer take power from it (GT transformers power touching machines); every
   other machine touches its power run.
+
+### No walkway (2026-10-19, decided by the user)
+
+"we don't need a walkway get rid of it" (after "1 mv gen can power 4 lv machines" — the walkway kept the two sides'
+power apart, forcing a generator per side or an LV bridge over it). Tidy lines drop the walkway:
+
+- The two machine columns touch, fronts facing each other (GT machines open from any face; reach them from outside).
+- One power layer between the rows spans both columns: a transformer in it feeds the machines above, below and across,
+  and its LV cables reach the rest. One MV generator per 4 LV machines (4 A of LV per transformer), pushing straight
+  into its transformer from the row below or above.
+- Output runs on the outer backs, input runs under and over, as before: about 4 wide, 5 tall.
+- The old walkway layouts remain only as the fallback.
