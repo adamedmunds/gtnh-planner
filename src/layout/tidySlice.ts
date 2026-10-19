@@ -34,7 +34,17 @@ const fail = (why: string) => ({ fail: why });
  * runs under the lower and over the upper row, a power run sandwiched between the rows with step-down transformers in
  * it, the power feed behind that, and runs of one network joined only in the service column.
  */
-export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, serviceWidth = 1): TidySlice | { fail: string } {
+export interface TidyOptions {
+  /** Service columns per slice (more room for joins, a longer slice). */
+  serviceWidth?: number;
+  /** One slice with the core at x < 0 (a straight line): runs that reach x = 0 are joined by the core. */
+  straight?: boolean;
+  /** Bridge the two sides' power feeds in the service column before joining pipes (less EU lost, less room). */
+  feedFirst?: boolean;
+}
+
+export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: TidyOptions = {}): TidySlice | { fail: string } {
+  const { serviceWidth = 1, straight = false, feedFirst = false } = opts;
   const C = arr.columns;
   const L = C + serviceWidth;
   const svc = (x: number) => x >= C;
@@ -188,8 +198,34 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, service
   const spare: [number, number][] = [[-1, -2], [-1, 2], [3, -2], [3, 2], ...[-1, 0, 1, 2, 3].flatMap((y) => [[y, -3], [y, 3]] as [number, number][])];
   const used = (id: string) => [...cellNet.values()].includes(id);
   const spans = (n: Net) => n.kind === 'cable' ? n.id === feedId : [...n.producers, ...n.consumers].some((r) => !sliceRoles.has(r));
+  // A straight line has one slice with the core at x < 0: any run that can carry on straight to x = 0 is joined by
+  // the core, even one only this slice uses (a run stuck behind other machines in its row can't reach the service column).
+  if (straight) {
+    for (const n of allNets) {
+      if (!used(n.id) || (n.kind === 'cable' && n.id !== feedId)) continue;
+      const slots = new Map<string, { y: number; z: number; xs: number[] }>();
+      for (const [k, id] of cellNet) {
+        if (id !== n.id) continue;
+        const [x, y, z] = cellPos.get(k)!;
+        if (n.kind === 'cable' && y !== 1) continue;
+        const slot = slots.get(`${y},${z}`) ?? { y, z, xs: [] };
+        slot.xs.push(x);
+        slots.set(`${y},${z}`, slot);
+      }
+      const runs: Vec3[][] = [];
+      for (const { y, z, xs } of slots.values()) {
+        const lo = Math.min(...xs);
+        const hi = Math.max(...xs);
+        const toZero = Array.from({ length: lo }, (_, x): Vec3 => [x, y, z]);
+        if (!toZero.every((c) => !unitAt.has(posKey(c)) && (!cellNet.has(posKey(c)) || cellNet.get(posKey(c)) === n.id))) continue;
+        for (const c of toZero) put(c, n.id);
+        runs.push(Array.from({ length: hi + 1 }, (_, x): Vec3 => [x, y, z]));
+      }
+      if (runs.length) throughRuns.set(n.id, runs);
+    }
+  }
   for (const n of allNets) {
-    if (!used(n.id) || !spans(n)) continue;
+    if (!used(n.id) || !spans(n) || throughRuns.has(n.id)) continue;
     const own = new Map<string, [number, number]>();
     for (const [k, id] of cellNet) if (id === n.id) own.set(`${cellPos.get(k)![1]},${cellPos.get(k)![2]}`, [cellPos.get(k)![1], cellPos.get(k)![2]]);
     // Power carries on only along the feed; generator backs stay one-block links down/up to it.
@@ -260,10 +296,27 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, service
     // Local power runs need no joining: every stretch of one lies next to a transformer in it.
     ...(used(feedNet.id) ? [feedNet] : []),
   ];
+  // Bridging the two sides' feeds in the service column saves the power for one side going all the way round through
+  // the core; first (taking room from pipes) when asked, else only if there's room left.
+  const bridgeFeeds = () => {
+    const feeds = throughRuns.get(feedId) ?? [];
+    if (feeds.length < 2) return true;
+    const others = new Set(blocked);
+    for (const [k, n] of cellNet) if (n !== feedId) others.add(k);
+    try {
+      const res = routeNetwork({ terminals: feeds, blocked: others, bounds, canStep, bendPenalty: BEND_PENALTY });
+      for (const c of res.cells) put(c, feedId);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (feedFirst && !bridgeFeeds()) return fail('no room to bridge the power feeds');
   for (const n of order) {
     const r = join(n.id);
     if ('fail' in r) return r;
   }
+  if (!feedFirst) bridgeFeeds();
 
   // Second inputs and outputs: a free face beside the machine, joined like any other run.
   for (const { u, net, out } of extras) {

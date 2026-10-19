@@ -59,3 +59,21 @@ test('a straight line never says the generators cover the loss and fall short at
   expect(short && covered).toBe(false);
   expect(covered || short).toBe(true);
 });
+
+test('a transformer draws only what the machines it feeds use: 30 EU/t of LV is 30/128 A of MV', () => {
+  const run: PlacedBlock[] = Array.from({ length: 10 }, (_, i) => ({
+    pos: [i + 1, 0, 0], key: 'annealed_copper_cable_1x', manualMask: { forcedOn: (1 << 4) | (1 << 5), forcedOff: 63 & ~((1 << 4) | (1 << 5)) },
+  }));
+  const build: Build = {
+    version: 1, name: 't',
+    blocks: [
+      { pos: [0, 0, 0], key: 'marker_power_in', role: 'power' },
+      ...run,
+      { pos: [11, 0, 0], key: 'transformer_mv_lv', facing: 4 },
+      { pos: [12, 0, 0], key: 'fluid_extractor_lv', facing: 1, role: 'fe' },
+    ],
+  };
+  const plan = machinePlan(30);
+  const mv: LinePlan = { ...plan, power: { ...plan.power, tiers: ['LV', 'MV'], source: { kind: 'outside', tier: 'MV', eut: 30 } } };
+  expect(cableLoss(build, mv).total).toBeCloseTo((30 / 128) * 10);
+});

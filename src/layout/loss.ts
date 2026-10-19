@@ -5,11 +5,14 @@ import type { Build, Vec3 } from '../model/types';
 import { VOLTAGE } from './power';
 import type { LinePlan, PlanMachine, PowerTier } from './types';
 
+const TIER_ORDER: readonly PowerTier[] = ['LV', 'MV', 'HV'];
+
 interface Cell { pos: Vec3; entry: CatalogEntry; facing?: number; role?: string }
 
 /**
  * EU/t lost in cables: every machine draws EU/t ÷ voltage amps on average over its shortest cable run from a power source
- * (generator face, transformer low side, power marker), losing the cable's loss per block for each amp and block.
+ * (generator face, transformer low side, power marker), losing the cable's loss per block for each amp and block; a
+ * transformer draws what the machines it feeds use, ÷ its higher voltage, over the run to its input face.
  */
 export function cableLoss(build: Build, plan: LinePlan): { total: number; perMachine: Map<string, number> } {
   const cells = new Map<string, Cell>();
@@ -22,8 +25,8 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
   const isCable = (c?: Cell) => c?.entry.kind === 'cable';
   const connected = (c: Cell, side: number) => ((masks.get(posKey(c.pos)) ?? 0) & (1 << side)) !== 0;
 
-  // Cable cells next to a power source, on a face that gives power.
-  const sources: string[] = [];
+  // Cable cells next to a power source, on a face that gives power (and which source it is).
+  const sources: { cable: string; source: string }[] = [];
   for (const c of cells.values()) {
     const gen = byNode.get(c.role ?? '')?.generator;
     const transformer = c.entry.key.startsWith('transformer_');
@@ -32,13 +35,14 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
     DIRS.forEach((d, side) => {
       const gives = gen ? side === c.facing : transformer ? side !== c.facing : true;
       const n = cells.get(posKey(addVec(c.pos, d)));
-      if (gives && n && isCable(n) && connected(n, OPPOSITE[side])) sources.push(posKey(n.pos));
+      if (gives && n && isCable(n) && connected(n, OPPOSITE[side])) sources.push({ cable: posKey(n.pos), source: posKey(c.pos) });
     });
   }
 
   // Blocks from the nearest source, through connected cables.
-  const dist = new Map<string, number>(sources.map((k) => [k, 1]));
-  const queue = [...sources];
+  const dist = new Map<string, number>(sources.map((s) => [s.cable, 1]));
+  const origin = new Map<string, string>(sources.map((s) => [s.cable, s.source]));
+  const queue = sources.map((s) => s.cable);
   while (queue.length) {
     const k = queue.shift()!;
     const c = cells.get(k)!;
@@ -47,33 +51,55 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
       const n = cells.get(posKey(addVec(c.pos, d)));
       if (!n || !isCable(n) || dist.has(posKey(n.pos))) return;
       dist.set(posKey(n.pos), dist.get(k)! + 1);
+      origin.set(posKey(n.pos), origin.get(k)!);
       queue.push(posKey(n.pos));
     });
   }
 
-  const perMachine = new Map<string, number>();
-  let total = 0;
-  for (const c of cells.values()) {
-    const pm = byNode.get(c.role ?? '');
-    const transformerHigh = c.entry.key.startsWith('transformer_');
-    if ((!pm || pm.generator || !pm.eut) && !transformerHigh) continue;
-    let best: { d: number; loss: number } | undefined;
+  /** The nearest cable feeding `c` (machines: any face but their front/output; transformers: their input face). */
+  const nearest = (c: Cell, transformerHigh: boolean) => {
+    let best: { d: number; loss: number; from: string } | undefined;
     DIRS.forEach((d, side) => {
       if (transformerHigh ? side !== c.facing : side === c.facing) return;
       const n = cells.get(posKey(addVec(c.pos, d)));
       const nd = n && dist.get(posKey(n.pos));
       if (!n || !isCable(n) || nd === undefined || !connected(n, OPPOSITE[side])) return;
-      if (!best || nd < best.d) best = { d: nd, loss: n.entry.cable!.lossPerBlock };
+      if (!best || nd < best.d) best = { d: nd, loss: n.entry.cable!.lossPerBlock, from: origin.get(posKey(n.pos))! };
     });
-    if (!best) continue;
-    const { d, loss } = best;
-    // A transformer draws about one amp of the higher voltage; a machine draws its EU/t in packets of its own voltage.
-    const voltage = VOLTAGE[(pm?.tier === 'ULV' ? 'LV' : pm?.tier ?? 'LV') as PowerTier] ?? VOLTAGE.LV;
-    // Packets are a full voltage each; on average a machine draws EU/t ÷ voltage of them per tick.
-    const amps = transformerHigh ? 1 : pm!.eut / voltage;
-    const lost = d * loss * amps;
-    perMachine.set(posKey(c.pos), lost);
+    return best;
+  };
+  const isTransformer = (c?: Cell) => !!c && c.entry.key.startsWith('transformer_');
+  const tierOfVoltage = (t?: string) => (t === 'ULV' ? 'LV' : t ?? 'LV') as PowerTier;
+
+  // Machines draw EU/t ÷ their voltage amps on average; a transformer draws what the machines it feeds use, in
+  // packets of its higher voltage (lower-voltage transformers first, so a chain of steps adds up).
+  const fedEu = new Map<string, number>(); // transformer posKey -> EU/t it passes on
+  const perMachine = new Map<string, number>();
+  let total = 0;
+  for (const c of cells.values()) {
+    const pm = byNode.get(c.role ?? '');
+    if (!pm || pm.generator || !pm.eut || isTransformer(c)) continue;
+    const best = nearest(c, false);
+    if (best) {
+      const lost = best.d * best.loss * (pm.eut / (VOLTAGE[tierOfVoltage(pm.tier)] ?? VOLTAGE.LV));
+      perMachine.set(posKey(c.pos), lost);
+      total += lost;
+    }
+    // Who supplies it: the source of its nearest cable, else a transformer it touches directly.
+    const direct = DIRS.map((d) => cells.get(posKey(addVec(c.pos, d)))).find((n) => isTransformer(n) && n!.facing !== undefined);
+    const from = best?.from ?? (direct ? posKey(direct.pos) : undefined);
+    if (from && isTransformer(cells.get(from))) fedEu.set(from, (fedEu.get(from) ?? 0) + pm.eut);
+  }
+  const steps = [...cells.values()].filter(isTransformer).sort((a, b) => TIER_ORDER.indexOf(tierOfVoltage(a.entry.tier)) - TIER_ORDER.indexOf(tierOfVoltage(b.entry.tier)));
+  for (const t of steps) {
+    const eu = fedEu.get(posKey(t.pos)) ?? 0;
+    const best = nearest(t, true);
+    if (!best || !eu) continue;
+    const high = TIER_ORDER[TIER_ORDER.indexOf(tierOfVoltage(t.entry.tier)) + 1] ?? 'MV';
+    const lost = best.d * best.loss * (eu / VOLTAGE[high]);
+    perMachine.set(posKey(t.pos), lost);
     total += lost;
+    if (isTransformer(cells.get(best.from))) fedEu.set(best.from, (fedEu.get(best.from) ?? 0) + eu);
   }
   return { total, perMachine };
 }

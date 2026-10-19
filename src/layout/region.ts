@@ -222,7 +222,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
           return [];
         });
     const lanes = region.lanes.get(n.id) ?? [];
-    if (!ends.length || ends.length + lanes.length < 2) continue;
+    if (ends.length + lanes.length < 2) continue;
     const terminals: Vec3[][] = [...lanes];
     for (const { u, mode } of ends) {
       const sides = mode === 'facing' ? [u.facing!] : mode === 'any' ? [0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5].filter((s) => s !== u.facing);

@@ -21,7 +21,7 @@ beforeAll(async () => {
   const nets = [...planNets(plan, []), ...powerNets(plan, machineUnits([...plan.slice!, ...plan.core]), {}, [])];
   for (const arr of arrangeRows(plan.slice!)) {
     for (const w of [1, 2]) {
-      const r = tidySlice(arr, nets, plan, w);
+      const r = tidySlice(arr, nets, plan, { serviceWidth: w });
       if (!('fail' in r)) {
         slice = r;
         return;

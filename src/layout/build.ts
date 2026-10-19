@@ -265,7 +265,11 @@ function buildOnce(plan: LinePlan, name: string): { build: Build; warnings: stri
     warnings.push("Couldn't fit this line into identical slices, so it's laid out in a straight line instead.", ...reasons);
   }
   const straightPlan: LinePlan = plan.style === 'straight' ? plan : { ...plan, style: 'straight', straight: [...(plan.slice ?? []).map((m) => ({ ...m, count: m.count * plan.sliceCount })), ...plan.core] };
+  const tidy: string[] = [];
+  const t = buildTidy(straightPlan, name, [...warnings, ...tidy]);
+  if (t && !checkLine(t, straightPlan).length) return { build: t, warnings };
   const b = buildStraight(straightPlan, name, warnings);
+  if (b) b.notes = [UNTIDY_NOTE, ...(b.notes ?? [])];
   if (!b) throw new Error("Couldn't lay out this line: there isn't room to connect all its pipes and cables.");
   const problems = checkLine(b, straightPlan);
   if (problems.length) b.notes = [...(b.notes ?? []), 'Check these before building:', ...problems];
