@@ -49,6 +49,10 @@ test('the Iron III Chloride line lays out as modular slices and passes the check
   // The first reactor's output pipe also carries Iron Dust, which a Chemical Reactor takes in another recipe.
   expect(build.notes?.join(' ')).toMatch(/input from output side.*chemical_reactor_lv/);
   expect(build.notes).toContain(DENSE_NOTE);
+  // Power comes in from outside: the feed carries the whole line, a slice's layer only its own three machines.
+  const layer = build.generated!.template.filter((b) => b.net?.startsWith('p:') && b.pos[1] === 1 && (b.pos[2] === 0 || b.pos[2] === 1));
+  expect(layer.length).toBeGreaterThan(0);
+  expect([...new Set(layer.map((b) => b.key))]).toEqual(['tin_cable_4x']);
 });
 
 test('the Iron III Chloride line lays out straight and passes the checker', () => {

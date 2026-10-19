@@ -186,7 +186,9 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
         for (let k = 0; k < n; k++) transformers.set(posKey([Math.floor(((k + 0.5) * C) / n), 1, tidyZ(side, 1)]), outward(side));
       });
     }
-    const amps = step === 1 ? 4 * Math.max(transformers.size, 1) : Math.max(1, gens.length);
+    // A block of the layer carries at most one transformer's 4 A (each feeds the machines next to it); straight from
+    // generators, at most what they all push in.
+    const amps = step === 1 ? 4 : Math.max(1, gens.length);
     layerNet = step === 0 && feedNet ? feedNet : (() => {
       const base = nets.find((n) => n.id === `p:${layerTier}`) ?? nets.find((n) => n.kind === 'cable')!;
       const net: Net = { ...base, id: `p:${layerTier}:slice`, name: `${layerTier} power`, tier: layerTier, source: false, conduit: cableFor(layerTier, amps).key };
@@ -507,6 +509,8 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
 
   itemFilters(routed, allNets);
 
+  const sliceAmps = consumers.reduce((s, u) => s + Math.max(1, Math.ceil((u.pm?.eut ?? 0) / VOLTAGE[u.tier as PowerTier] - 1e-9)), 0);
+  const layerCable = feedNet ? cableFor(feedNet.tier!, Math.max(1, sliceAmps)).key : '';
   // Conduits connect along their run, to the blocks they serve, across the power layer, and freely in the service column.
   const through = new Set([...throughRuns.values()].flat(2).map(posKey));
   const conduits: PlacedBlock[] = [...cellNet].map(([k, net]) => {
@@ -525,7 +529,9 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
       if (pos[0] === 0) on |= 1 << 4;
       if (pos[0] === L - 1) on |= 1 << 5;
     }
-    return { pos, key: byId.get(net)!.conduit, net, manualMask: { forcedOn: on, forcedOff: 63 & ~on } };
+    // Fed from the core, the layer and its stubs carry only this slice's machines; the feed run carries the line.
+    const key = feedNet && net === feedNet.id && Math.abs(pos[2] - 0.5) < 2 ? layerCable : byId.get(net)!.conduit;
+    return { pos, key, net, manualMask: { forcedOn: on, forcedOff: 63 & ~on } };
   });
 
   return { length: L, serviceFrom: C, blocks: [...units.map(unitBlock), ...conduits], routed, throughRuns, nets: allNets, ...(gapCols.size ? { gaps: [...gapCols] } : {}) };

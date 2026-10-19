@@ -118,6 +118,12 @@ test('the core is compact: a column for the chests, one per machine, and at most
   expect(-coreMin).toBeLessThanOrEqual(1 + machines.length + 2);
 });
 
+test('cables are sized for what they carry: 1x from the core generator, 4x from each transformer', () => {
+  const kinds = (pred: (b: PlacedBlock) => boolean) => [...new Set(line.blocks.filter(pred).map((b) => b.key))];
+  expect(kinds((b) => !!b.net?.startsWith('p:MV'))).toEqual(['annealed_copper_cable_1x']);
+  expect(kinds((b) => !!b.net?.startsWith('p:LV'))).toEqual(['tin_cable_4x']);
+});
+
 test('the oil line fits the tidy cross-section and says what to dig', () => {
   const span = (a: number) => Math.max(...line.blocks.map((b) => b.pos[a])) - Math.min(...line.blocks.map((b) => b.pos[a])) + 1;
   expect(span(2)).toBeLessThanOrEqual(7);
@@ -159,6 +165,10 @@ describe('straight lines', () => {
     expect(cableLoss(build, straight).total).toBeLessThan(0.3 * demand);
     expect(build.notes?.join(' ')).not.toMatch(/fall short/);
     expect(build.notes).not.toContain(UNTIDY_NOTE);
+  });
+
+  test('a long LV layer is 4x: each block carries at most one transformer of 4 A', () => {
+    expect([...new Set(build.blocks.filter((b) => b.net?.startsWith('p:LV')).map((b) => b.key))]).toEqual(['tin_cable_4x']);
   });
 
   test('transformers sit next to what they feed', () => {

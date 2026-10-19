@@ -2,6 +2,7 @@ import { DIRS, addVec, posKey } from '../model/directions';
 import type { Build, PlacedBlock, Vec3 } from '../model/types';
 import { checkLine } from './check';
 import { cableLoss } from './loss';
+import { VOLTAGE, cableFor } from './power';
 import {
   assemble,
   conduitBlocks,
@@ -220,7 +221,13 @@ function withCore(
   const markerColumns = Math.ceil(markers.length / 4);
   const laneIds = new Set(slice.throughRuns.keys());
   const local = nets.map((n) => (n.kind === 'cable' && !n.source && !laneIds.has(n.id) ? { ...n, id: `${n.id}:core` } : n));
-  const coreNets = local.map((n) => slice.nets.find((s) => s.id === n.id) ?? n);
+  // A power network that stays in the core carries only the core's own generators: size its cable for those.
+  const coreGenEut = coreUnits.filter((u) => u.pm?.generator).reduce((s, u) => s + (u.pm?.eut ?? 0), 0);
+  const sized = (n: Net): Net =>
+    n.kind === 'cable' && n.source && !laneIds.has(n.id) && plan.power.source.kind === 'generators' && coreGenEut > 0
+      ? { ...n, conduit: cableFor(n.tier!, Math.max(1, coreGenEut / VOLTAGE[n.tier!])).key }
+      : n;
+  const coreNets = local.map((n) => sized(slice.nets.find((s) => s.id === n.id) ?? n));
   // A core machine sits on the side with more of the through-runs it uses.
   const coreSide = (u: Unit): -1 | 1 => {
     const uses = (z: number) => [...slice.throughRuns].filter(([id, runs]) => {
