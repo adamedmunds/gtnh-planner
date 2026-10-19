@@ -44,6 +44,8 @@ export interface ChainResult {
   euMade: number;
   /** EU/t the line can't make at each voltage (nothing gives that voltage), so it comes from outside. */
   euOutside: Partial<Record<string, number>>;
+  /** Power stepped between voltages through transformers (step-down, or step-up when `to` is the higher). */
+  steps: { from: string; to: string; eut: number }[];
 }
 
 const EPS = 1e-9;
@@ -119,20 +121,25 @@ export async function solveChain(chain: Chain, db: RecipeDb, solver: LpSolver): 
   const extraVars: Record<string, number> = {};
   if (hasGenerators) {
     for (let t = lo; t <= hi; t++) if (!net.has(euAt(TIER_NAMES[t]))) net.set(euAt(TIER_NAMES[t]), {});
-    // Outside power only at voltages above every generator's (nothing in the line can give them; no step up), and it
-    // stays at its own voltage: stepping down is only from voltages the generators reach.
-    const genTop = Math.max(...valid.filter((v) => [...v.perMachine].some(([k, c]) => k.startsWith('eu@') && c > 0)).map((v) => TIER_NAMES.indexOf(v.tier!)));
-    for (let t = lo + 1; t <= Math.min(hi, genTop); t++) {
+    // Power steps between neighbouring voltages: down through a transformer, or up through one set to step up (soft
+    // mallet: 4 A of the lower voltage in, 1 A of the higher out — the same EU/t).
+    // A generator matching each voltage gives every voltage it has a generator for its own: power only steps into a
+    // voltage without one.
+    const own = new Set(valid.filter((v) => v.parent).map((v) => v.tier!));
+    for (let t = lo + 1; t <= hi; t++) {
+      const [high, low] = [euAt(TIER_NAMES[t]), euAt(TIER_NAMES[t - 1])];
       const down = `d_${TIER_NAMES[t]}`;
-      net.get(euAt(TIER_NAMES[t]))![down] = -1;
-      net.get(euAt(TIER_NAMES[t - 1]))![down] = 1;
-      extraVars[down] = TIE;
-    }
-    for (const t of euTiers) {
-      if (TIER_NAMES.indexOf(t) <= genTop) continue;
-      const out = `o_${t}`;
-      net.get(euAt(t))![out] = 1;
-      extraVars[out] = TIE;
+      const up = `u_${TIER_NAMES[t]}`;
+      if (!own.has(TIER_NAMES[t - 1])) {
+        net.get(high)![down] = -1;
+        net.get(low)![down] = 1;
+        extraVars[down] = TIE;
+      }
+      if (!own.has(TIER_NAMES[t])) {
+        net.get(low)![up] = -1;
+        net.get(high)![up] = 1;
+        extraVars[up] = TIE;
+      }
     }
   }
   const externals = new Set(chain.externals);
@@ -184,7 +191,7 @@ export async function solveChain(chain: Chain, db: RecipeDb, solver: LpSolver): 
   };
 
   const empty = (status: ChainResult['status'], message?: string): ChainResult => ({
-    status, message, shortfalls: [], bindingLimits: [], bindingMachines: [], nodes: [...invalidNodes], inputs: new Map(), outputs: new Map(), byproducts: new Map(), euUsed: 0, euMade: 0, euOutside: {},
+    status, message, shortfalls: [], bindingLimits: [], bindingMachines: [], nodes: [...invalidNodes], inputs: new Map(), outputs: new Map(), byproducts: new Map(), euUsed: 0, euMade: 0, euOutside: {}, steps: [],
   });
 
   const name = (k: ResourceKey) => db.resource(k)?.name ?? k;
@@ -252,6 +259,13 @@ export async function solveChain(chain: Chain, db: RecipeDb, solver: LpSolver): 
     const o = values[`o_${t}`] ?? 0;
     if (o > 1e-6) euOutside[t] = o;
   }
+  const steps: ChainResult['steps'] = [];
+  for (let t = lo + 1; hasGenerators && t <= hi; t++) {
+    const down = values[`d_${TIER_NAMES[t]}`] ?? 0;
+    const up = values[`u_${TIER_NAMES[t]}`] ?? 0;
+    if (down > 1e-6) steps.push({ from: TIER_NAMES[t], to: TIER_NAMES[t - 1], eut: down });
+    if (up > 1e-6) steps.push({ from: TIER_NAMES[t - 1], to: TIER_NAMES[t], eut: up });
+  }
   const totals = new Map<ResourceKey, number>();
   let euUsed = 0;
   let euMade = 0;
@@ -285,5 +299,5 @@ export async function solveChain(chain: Chain, db: RecipeDb, solver: LpSolver): 
       : 'nothing in the chain can make more';
     message = `Can't reach ${short || 'the targets'}: ${why}.`;
   }
-  return { status, message, shortfalls, bindingLimits, bindingMachines, nodes: [...nodes, ...invalidNodes], inputs, outputs, byproducts, euUsed, euMade, euOutside };
+  return { status, message, shortfalls, bindingLimits, bindingMachines, nodes: [...nodes, ...invalidNodes], inputs, outputs, byproducts, euUsed, euMade, euOutside, steps };
 }

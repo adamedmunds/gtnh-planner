@@ -9,7 +9,7 @@ import { createLatest } from './solveState';
 const failed = (message: string): ScreenSolve => ({
   result: {
     status: 'error', message, shortfalls: [], bindingLimits: [], bindingMachines: [], nodes: [],
-    inputs: new Map(), outputs: new Map(), byproducts: new Map(), euUsed: 0, euMade: 0, euOutside: {},
+    inputs: new Map(), outputs: new Map(), byproducts: new Map(), euUsed: 0, euMade: 0, euOutside: {}, steps: [],
   } satisfies ChainResult,
   mode: 'max',
   shortfalls: [],

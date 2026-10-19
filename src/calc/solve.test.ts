@@ -151,10 +151,11 @@ describe('power per voltage', () => {
     expect(Object.keys(r.euOutside)).toEqual([]);
   });
 
-  test('a machine above every generator\'s voltage takes that voltage from outside', async () => {
+  test('a machine above every generator\'s voltage is powered through a step-up transformer, nothing from outside', async () => {
     const r = await solveChain(chain({ ...gen, machineMID: 1110 }), db, solver);
-    expect(r.euOutside.MV).toBeGreaterThan(0);
-    within(r.euOutside.MV!, -r.nodes.find((n) => n.id === 'el')!.eut, 1);
-    expect(r.euOutside.LV ?? 0).toBe(0);
+    expect(r.status).toBe('ok');
+    expect(r.euOutside).toEqual({});
+    within(r.euMade, r.euUsed, 0.5);
+    expect(r.steps.some((s) => s.from === 'LV' && s.to === 'MV' && s.eut > 0)).toBe(true);
   });
 });
