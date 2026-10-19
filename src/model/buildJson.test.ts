@@ -92,3 +92,15 @@ test('a malformed recipe machine is skipped with a warning', () => {
   expect(build.machines).toBeUndefined();
   expect(warnings).toEqual([expect.stringMatching(/machine/i)]);
 });
+
+test('pipe networks round-trip; builds without them still load', () => {
+  const b: Build = {
+    ...good,
+    blocks: [{ pos: [0, 0, 0], key: 'bronze_pipe_small', net: 'f:fluid:oil' }],
+    networks: [{ id: 'f:fluid:oil', name: 'Oil', kind: 'fluid', icon: 'fluid:oil', flow: 557, conduit: 'bronze_pipe_small' }],
+  };
+  const { build } = parseBuild(serializeBuild(b));
+  expect(build.blocks[0].net).toBe('f:fluid:oil');
+  expect(build.networks).toEqual(b.networks);
+  expect(parseBuild(serializeBuild(good)).build.networks).toBeUndefined();
+});

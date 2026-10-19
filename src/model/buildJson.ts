@@ -1,5 +1,5 @@
 import { registerMachines, type GeneratedMachine } from '../catalog';
-import type { Build, FaceSetting, Facing, ManualMask, PlacedBlock } from './types';
+import type { Build, FaceSetting, Facing, LineNetwork, ManualMask, PlacedBlock } from './types';
 
 export class BuildParseError extends Error {}
 
@@ -20,7 +20,7 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw) || (raw as { version?: unknown }).version !== 1) {
     throw new BuildParseError('Unsupported build file (expected version 1)');
   }
-  const obj = raw as { name?: unknown; blocks?: unknown; machines?: unknown; notes?: unknown; covers?: unknown; generated?: unknown };
+  const obj = raw as { name?: unknown; blocks?: unknown; machines?: unknown; notes?: unknown; covers?: unknown; generated?: unknown; networks?: unknown };
   if (!Array.isArray(obj.blocks)) throw new BuildParseError('Build file has no blocks list');
 
   const warnings: string[] = [];
@@ -38,6 +38,7 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
     }
     const block: PlacedBlock = { pos: [pos[0], pos[1], pos[2]], key: rb.key };
     if (typeof rb.role === 'string') block.role = rb.role;
+    if (typeof rb.net === 'string') block.net = rb.net;
     if (isInt(rb.mainFacing) && rb.mainFacing >= 2 && rb.mainFacing <= 5) block.mainFacing = rb.mainFacing as Facing;
     if (rb.facing !== undefined) {
       if (isInt(rb.facing) && rb.facing >= 0 && rb.facing <= 5) block.facing = rb.facing as Facing;
@@ -77,6 +78,12 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
       (r.kind === 'pump' || r.kind === 'conveyor' || r.kind === 'inputFromOutput' || (r.kind === 'itemFilter' && typeof r.item === 'string'));
   });
   if (covers.length) build.covers = covers;
+  const networks = (Array.isArray(obj.networks) ? obj.networks : []).filter((n): n is LineNetwork => {
+    const r = n as Record<string, unknown> | null;
+    return !!r && typeof r.id === 'string' && typeof r.name === 'string' && typeof r.conduit === 'string' &&
+      (r.kind === 'fluid' || r.kind === 'item' || r.kind === 'power');
+  });
+  if (networks.length) build.networks = networks;
   // A generated line is only kept when it looks whole; otherwise the build is just blocks.
   const g = obj.generated as Record<string, unknown> | undefined;
   if (g && typeof g === 'object' && (g.style === 'modular' || g.style === 'straight') && Array.isArray(g.template) &&

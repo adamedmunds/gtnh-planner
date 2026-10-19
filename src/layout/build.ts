@@ -1,7 +1,7 @@
 import { CATALOG, registerMachines } from '../catalog';
 import { DIRS, addVec, posKey } from '../model/directions';
 import { routeNetwork } from '../model/route';
-import type { Build, FaceSetting, Facing, PlacedBlock, Vec3 } from '../model/types';
+import type { Build, FaceSetting, Facing, LineNetwork, PlacedBlock, Vec3 } from '../model/types';
 import { checkLine } from './check';
 import { cableLoss } from './loss';
 import { VOLTAGE, cableFor, pipeFor } from './power';
@@ -302,7 +302,7 @@ function conduitBlocks(routed: Routed, nets: Net[], laneIds: Set<string>, laneCe
       if (routed.cells.get(nk)?.net === net || routed.attach.has(`${posKey(pos)}>${nk}`)) on |= 1 << side;
     });
     if (laneIds.has(net) && laneCells.has(posKey(pos))) on |= (1 << 4) | (1 << 5);
-    return { pos, key: byId.get(net)!.conduit, manualMask: { forcedOn: on, forcedOff: 63 & ~on } };
+    return { pos, key: byId.get(net)!.conduit, net, manualMask: { forcedOn: on, forcedOff: 63 & ~on } };
   });
 }
 
@@ -378,7 +378,22 @@ function powerNets(plan: LinePlan, units: Unit[], localTransformers: Partial<Rec
   });
 }
 
-function assemble(name: string, plan: LinePlan, blocks: PlacedBlock[], covers: FaceSetting[], notes: string[], generated?: GeneratedLine): Build {
+/** What each network in the blocks carries (local power networks keep their own ids, e.g. `p:LV:slice`). */
+function lineNetworks(blocks: PlacedBlock[], nets: Net[], plan: LinePlan): LineNetwork[] {
+  const ids = [...new Set(blocks.map((b) => b.net).filter((x): x is string => !!x))];
+  return ids.map((id) => {
+    const n = nets.find((x) => x.id === id || id.startsWith(`${x.id}:`))!;
+    if (n.kind === 'cable') {
+      const flow = n.source ? (plan.power.source.kind === 'outside' ? plan.power.source.eut : undefined) : undefined;
+      return { id, name: n.name, kind: 'power', tier: n.tier, conduit: n.conduit, ...(flow !== undefined ? { flow } : {}) };
+    }
+    const keys = n.parts?.map((p) => p.key) ?? [n.id.slice(2)];
+    const flow = plan.networks.filter((p) => keys.includes(p.key)).reduce((s, p) => s + p.flow, 0);
+    return { id, name: n.name, kind: n.kind === 'fluidPipe' ? 'fluid' : 'item', icon: keys[0], flow, conduit: n.conduit };
+  });
+}
+
+function assemble(name: string, plan: LinePlan, blocks: PlacedBlock[], covers: FaceSetting[], notes: string[], generated?: GeneratedLine, nets: Net[] = []): Build {
   const machines = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])]
     .filter((m) => m.key.startsWith('gt_'))
     .map((m) => m.machine);
@@ -392,6 +407,7 @@ function assemble(name: string, plan: LinePlan, blocks: PlacedBlock[], covers: F
     ...(notes.length ? { notes } : {}),
     ...(covers.length ? { covers } : {}),
     ...(generated ? { generated } : {}),
+    ...(nets.length ? { networks: lineNetworks(blocks, nets, plan) } : {}),
   };
 }
 
@@ -407,7 +423,7 @@ function buildStraight(plan: LinePlan, name: string, warnings: string[]): Build 
     const routed = routeRegion(region, nets, plan, true);
     if ('fail' in routed) continue;
     const blocks = [...placed.map(unitBlock), ...conduitBlocks(routed, nets, new Set(), new Set())];
-    return assemble(name, plan, blocks, routed.covers, [...plan.notes, ...routed.notes, ...warnings]);
+    return assemble(name, plan, blocks, routed.covers, [...plan.notes, ...routed.notes, ...warnings], undefined, nets);
   }
   return undefined;
 }
@@ -531,7 +547,7 @@ function buildModular(plan: LinePlan, name: string, warnings: string[], form: Fo
       ...(per && perNet ? { inputsPerSlice: { key: per.key, name: perNet.name, kind: perMarker?.kind === 'fluid' ? 'fluid' : 'item', amount: per.amount } } : {}),
     };
     const sliceNotes = sliceRouted.notes.length ? [`In every slice: ${sliceRouted.notes.join(' ')}`] : [];
-    return assemble(name, plan, blocks, covers, [...plan.notes, ...sliceNotes, ...coreRouted.notes, ...warnings], generated);
+    return assemble(name, plan, blocks, covers, [...plan.notes, ...sliceNotes, ...coreRouted.notes, ...warnings], generated, nets);
   }
   if (lastFail) warnings.push(`(${lastFail})`);
   return undefined;

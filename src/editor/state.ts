@@ -12,7 +12,7 @@ export interface EditorState {
   /** Highest visible Y level; null shows everything. */
   layer: number | null;
   /** Build-level data carried along with the blocks (recipe machines, notes). */
-  extras: Pick<Build, 'machines' | 'notes' | 'covers' | 'generated'>;
+  extras: Pick<Build, 'machines' | 'notes' | 'covers' | 'generated' | 'networks'>;
 }
 
 export type Action =
@@ -41,7 +41,7 @@ export function initialState(build?: Build): EditorState {
 
 function extrasOf(build?: Build): EditorState['extras'] {
   const out: EditorState['extras'] = {};
-  for (const k of ['machines', 'notes', 'covers', 'generated'] as const) if (build?.[k]) (out as Record<string, unknown>)[k] = build[k];
+  for (const k of ['machines', 'notes', 'covers', 'generated', 'networks'] as const) if (build?.[k]) (out as Record<string, unknown>)[k] = build[k];
   return out;
 }
 

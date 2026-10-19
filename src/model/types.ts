@@ -26,6 +26,23 @@ export interface PlacedBlock {
   manualMask?: ManualMask;
   /** Generated lines: which recipe node or marker this block is. */
   role?: string;
+  /** Generated pipes/cables: the network (`Build.networks` id) it belongs to. */
+  net?: string;
+}
+
+/** What one generated pipe or cable network carries, for labels, highlight and the legend. */
+export interface LineNetwork {
+  id: string;
+  name: string;
+  kind: 'fluid' | 'item' | 'power';
+  /** Resource key whose icon stands for it (items/fluids). */
+  icon?: string;
+  /** Power: the voltage. */
+  tier?: string;
+  /** Per second (L or items), or EU/t for power. */
+  flow?: number;
+  /** Catalog key of the pipe/cable used. */
+  conduit: string;
 }
 
 /** Something to set on a machine face in game: a cover, or GregTech's "input from output side" screwdriver toggle. */
@@ -47,6 +64,8 @@ export interface Build {
   notes?: string[];
   /** Covers and face settings the layout relies on. */
   covers?: FaceSetting[];
+  /** Generated lines: what each pipe/cable network carries. */
+  networks?: LineNetwork[];
   /** Present while the build is an untouched generated line (enables "+ slice" and "Export one slice"). */
   generated?: GeneratedLine;
 }

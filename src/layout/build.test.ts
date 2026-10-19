@@ -148,3 +148,15 @@ describe('compact layouts', () => {
     expect(checkLine(build, busy)).toEqual([]);
   });
 });
+
+test('every generated conduit names its network, and the build lists them', async () => {
+  const p = await plan(reference());
+  const { build } = buildLine(p, 'Light Fuel line');
+  const ids = new Set((build.networks ?? []).map((n) => n.id));
+  const conduits = build.blocks.filter((b) => /pipe|cable/.test(b.key));
+  expect(conduits.length).toBeGreaterThan(0);
+  for (const c of conduits) expect(ids.has(c.net!)).toBe(true);
+  const oil = build.networks!.find((n) => n.name === 'Oil')!;
+  expect(oil).toMatchObject({ kind: 'fluid', icon: K.oil });
+  expect(build.networks!.some((n) => n.kind === 'power' && n.tier === 'MV')).toBe(true);
+});

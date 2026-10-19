@@ -69,3 +69,11 @@ test('the one-slice export says exactly where its corner goes', () => {
   expect(one.notes![0]).toContain(`${-minY} below`);
   expect(one.notes![0]).toContain(`${-minZ} north`);
 });
+
+test('grown slices keep their pipe networks', () => {
+  const grown = addSlice(line, 'right');
+  const x0 = grown.generated!.rightStart + (grown.generated!.right - 1) * grown.generated!.sliceLength;
+  const added = grown.blocks.filter((b) => b.pos[0] >= x0 && /pipe|cable/.test(b.key));
+  expect(added.length).toBeGreaterThan(0);
+  for (const b of added) expect(b.net).toBeDefined();
+});
