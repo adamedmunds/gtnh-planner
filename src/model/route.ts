@@ -10,6 +10,10 @@ export interface RouteRequest {
   avoid?: ReadonlySet<string>;
   /** Extra cost of stepping onto an avoided cell (default 4). */
   avoidPenalty?: number;
+  /** Only moves this allows are taken (e.g. leave a straight run only in a service column). */
+  canStep?: (from: Vec3, to: Vec3) => boolean;
+  /** Extra cost each time a path changes direction (default 0), so routes come out as straight runs. */
+  bendPenalty?: number;
   bounds: { min: Vec3; max: Vec3 };
 }
 
@@ -37,6 +41,8 @@ export function routeNetwork(req: RouteRequest): RouteResult {
     c[2] >= bounds.min[2] && c[2] <= bounds.max[2];
   const free = (c: Vec3) => inBounds(c) && !blocked.has(posKey(c));
   const penalty = req.avoidPenalty ?? AVOID_PENALTY;
+  const bend = req.bendPenalty ?? 0;
+  const canStep = req.canStep ?? (() => true);
   const stepCost = (c: Vec3) => 1 + (avoid.has(posKey(c)) ? penalty : 0);
 
   for (const [i, cands] of terminals.entries()) {
@@ -67,17 +73,21 @@ export function routeNetwork(req: RouteRequest): RouteResult {
       }
     }
 
+    // Search states are (cell, direction it was entered from) so bends can cost extra; -1 = a starting cell.
+    const stateKey = (k: string, dir: number) => (bend ? `${k}|${dir}` : k);
     const dist = new Map<string, number>();
     const prev = new Map<string, string | null>();
     const cellOf = new Map<string, Vec3>();
+    const dirOf = new Map<string, number>();
     const buckets: string[][] = [];
     const push = (k: string, d: number) => (buckets[d] ??= []).push(k);
     for (const { cell, cost } of seeds) {
-      const k = posKey(cell);
+      const k = stateKey(posKey(cell), -1);
       if ((dist.get(k) ?? Infinity) <= cost) continue;
       dist.set(k, cost);
       prev.set(k, null);
       cellOf.set(k, cell);
+      dirOf.set(k, -1);
       push(k, cost);
     }
 
@@ -88,23 +98,27 @@ export function routeNetwork(req: RouteRequest): RouteResult {
       for (let i = 0; i < bucket.length; i++) {
         const k = bucket[i];
         if (dist.get(k) !== d) continue;
-        if (targets.has(k)) {
+        const cell = cellOf.get(k)!;
+        if (targets.has(posKey(cell))) {
           found = k;
           break;
         }
-        const cell = cellOf.get(k)!;
-        for (const dir of DIRS) {
+        const from = dirOf.get(k)!;
+        DIRS.forEach((dir, di) => {
           const n = addVec(cell, dir);
-          if (!free(n)) continue;
+          if (!free(n) || !canStep(cell, n)) return;
           const nk = posKey(n);
-          const nd = d + (tree.has(nk) ? 0 : stepCost(n));
-          if (nd < (dist.get(nk) ?? Infinity)) {
-            dist.set(nk, nd);
-            prev.set(nk, k);
-            cellOf.set(nk, n);
-            push(nk, nd);
+          const turn = bend && from >= 0 && from !== di ? bend : 0;
+          const nd = d + (tree.has(nk) ? 0 : stepCost(n)) + turn;
+          const ns = stateKey(nk, di);
+          if (nd < (dist.get(ns) ?? Infinity)) {
+            dist.set(ns, nd);
+            prev.set(ns, k);
+            cellOf.set(ns, n);
+            dirOf.set(ns, di);
+            push(ns, nd);
           }
-        }
+        });
       }
     }
     if (found === undefined) {
@@ -115,13 +129,15 @@ export function routeNetwork(req: RouteRequest): RouteResult {
     let k: string | null = found;
     let last = found;
     while (k !== null) {
-      tree.set(k, cellOf.get(k)!);
+      const c = cellOf.get(k)!;
+      tree.set(posKey(c), c);
       last = k;
       k = prev.get(k) ?? null;
     }
     if (chosen[0] === undefined) chosen[0] = cellOf.get(last)!;
-    for (const t of targets.get(found)!) {
-      chosen[t] = cellOf.get(found)!;
+    const reached = cellOf.get(found)!;
+    for (const t of targets.get(posKey(reached))!) {
+      chosen[t] = reached;
       remaining.delete(t);
     }
     seeds = [...tree.values()].map((cell) => ({ cell, cost: 0 }));
