@@ -14,6 +14,7 @@ import { toBuild } from './editor/state';
 import { Scene, type Hover } from './editor/scene/Scene';
 import { InfoPanel } from './editor/ui/InfoPanel';
 import { LineNotes } from './editor/ui/LineNotes';
+import { labelSpots, networkMembers } from './editor/labels';
 import { alignHint, sliceBuild } from './layout/grow';
 import { MaterialsPanel } from './editor/ui/MaterialsPanel';
 import { Palette } from './editor/ui/Palette';
@@ -29,6 +30,7 @@ const restoredChain = loadChain(safeStorage());
 
 type Tab = 'editor' | 'calculator';
 const TAB_KEY = 'gtnh-planner:tab';
+const LABELS_KEY = 'gtnh-planner:labels';
 function readTab(): Tab {
   try {
     return safeStorage()?.getItem(TAB_KEY) === 'calculator' ? 'calculator' : 'editor';
@@ -119,6 +121,38 @@ export function App() {
   const bom = useMemo(() => billOfMaterials(state.blocks.values()), [state.blocks]);
   const maxY = useMemo(() => Math.max(0, ...[...state.blocks.values()].map((b) => b.pos[1])), [state.blocks]);
   const hovered = hover && !hover.ground ? state.blocks.get(posKey(hover.pos)) : undefined;
+
+  // What's in the pipes: labels, the legend pick, and the network under the pointer.
+  const [showLabels, setShowLabelsState] = useState(() => {
+    try {
+      return safeStorage()?.getItem(LABELS_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const setShowLabels = (on: boolean) => {
+    setShowLabelsState(on);
+    try {
+      safeStorage()?.setItem(LABELS_KEY, on ? '1' : '0');
+    } catch {
+      // remembering the toggle is only a convenience
+    }
+  };
+  const [picked, setPicked] = useState<string>();
+  const networks = state.extras.networks;
+  const labels = useMemo(
+    () => (showLabels && networks?.length ? { spots: labelSpots(toBuild(state)), networks } : undefined),
+    [showLabels, networks, state.blocks], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const hoveredNetwork = hovered?.net ? networks?.find((n) => n.id === hovered.net) : undefined;
+  const activeName = picked ?? hoveredNetwork?.name;
+  const highlight = useMemo(() => {
+    if (!activeName || !networks) return undefined;
+    const blocks = [...state.blocks.values()];
+    const ids = networks.filter((n) => n.name === activeName).map((n) => n.id);
+    const members = new Set(ids.flatMap((id) => [...networkMembers(blocks, id)]));
+    return blocks.filter((b) => members.has(posKey(b.pos))).map((b) => b.pos);
+  }, [activeName, networks, state.blocks]);
   const hoveredMask = useMemo(
     () => (hovered ? computeConnections([...state.blocks.values()]).get(posKey(hovered.pos)) : undefined),
     [hovered, state.blocks],
@@ -243,10 +277,14 @@ export function App() {
         onUndo={() => dispatch({ type: 'undo' })}
         onRedo={() => dispatch({ type: 'redo' })}
         onLayer={(layer) => dispatch({ type: 'setLayer', layer })}
+        showLabels={showLabels}
+        onShowLabels={setShowLabels}
       />
       <Palette selectedKey={state.selectedKey} onSelect={(key) => dispatch({ type: 'select', key })} />
-      <main className="viewport">
+      <main className="viewport" data-highlight={activeName ?? ''}>
         <Scene
+          labels={labels}
+          highlight={highlight}
           blocks={state.blocks}
           layer={state.layer}
           selectedKey={state.selectedKey}
@@ -262,8 +300,11 @@ export function App() {
         />
       </main>
       <div className="side">
-        <InfoPanel block={hovered} mask={hoveredMask} />
+        <InfoPanel block={hovered} mask={hoveredMask} network={hoveredNetwork} />
         <LineNotes
+          networks={networks}
+          picked={picked}
+          onPick={setPicked}
           notes={state.extras.notes}
           generated={state.extras.generated}
           onAddSlice={(end) => dispatch({ type: 'addSlice', end })}

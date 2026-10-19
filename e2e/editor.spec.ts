@@ -142,3 +142,12 @@ test('Ctrl+Z undoes and Ctrl+Y redoes', async ({ page }) => {
   await page.keyboard.press('Control+y');
   await expect(page.getByTestId('materials')).toHaveText('1× LV Distillery');
 });
+
+test('a hand-placed pipe says nothing about what it carries', async ({ page }) => {
+  await page.getByTestId('palette-bronze_pipe_small').click();
+  const box = await canvasBox(page);
+  const at = { x: box.x + box.width / 2, y: box.y + box.height * 0.6 };
+  await page.mouse.click(at.x, at.y);
+  await findBlock(page, at, /Small Bronze Fluid Pipe/);
+  await expect(page.locator('.info')).not.toContainText('Carries');
+});

@@ -325,6 +325,23 @@ test.describe('with recipe data', () => {
     await expect(page.getByTestId('materials')).toContainText('6× LV Fluid Extractor');
   });
 
+  test('see what every pipe carries: labels, legend and highlight', async ({ page }) => {
+    test.setTimeout(120_000);
+    await buildOilLine(page);
+    await page.getByRole('button', { name: 'Build in 3D' }).click();
+    const notes = page.getByTestId('line-notes');
+    await expect(notes).toContainText('What the pipes carry');
+    const oil = notes.getByTestId('legend-row').filter({ hasText: /^Oil/ }).first();
+    await expect(oil).toBeVisible();
+    await expect(page.locator('.pipe-label').first()).toBeVisible();
+    await oil.click();
+    await expect(page.locator('main.viewport')).not.toHaveAttribute('data-highlight', '');
+    await oil.click();
+    await expect(page.locator('main.viewport')).toHaveAttribute('data-highlight', '');
+    await page.getByLabel("Show what's in pipes").uncheck();
+    await expect(page.locator('.pipe-label')).toHaveCount(0);
+  });
+
   test('Build in 3D as a straight line keeps the exact counts', async ({ page }) => {
     test.setTimeout(120_000);
     await buildOilLine(page);

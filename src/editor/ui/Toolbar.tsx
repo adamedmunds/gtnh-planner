@@ -17,6 +17,9 @@ export interface ToolbarProps {
   onUndo(): void;
   onRedo(): void;
   onLayer(layer: number | null): void;
+  /** Floating pipe labels on generated lines. */
+  showLabels: boolean;
+  onShowLabels(on: boolean): void;
 }
 
 export function Toolbar(p: ToolbarProps) {
@@ -42,6 +45,9 @@ export function Toolbar(p: ToolbarProps) {
         }}
       />
       <button onClick={p.onFrame} title="Fit the build in view (F)">Frame</button>
+      <label className="labels-toggle" title="Icons over the pipes saying what flows through them">
+        <input type="checkbox" checked={p.showLabels} onChange={(e) => p.onShowLabels(e.target.checked)} /> Show what's in pipes
+      </label>
       <button data-testid="export" className="primary" disabled={!p.canExport} onClick={p.onExport}>Export .schematic</button>
       <label className="layer">
         Layer

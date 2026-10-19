@@ -1,3 +1,5 @@
+import { HighlightBoxes, PipeLabelLayer, PipeLabelProjector } from './PipeLabels';
+import type { LineNetwork } from '../../model/types';
 import { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Grid, OrbitControls } from '@react-three/drei';
@@ -25,6 +27,10 @@ export interface SceneProps {
   onPlace(pos: Vec3, facing: Facing): void;
   onRemove(pos: Vec3): void;
   onToggleSide(pos: Vec3, side: number): void;
+  /** Floating "what's in this pipe" icons (generated lines). */
+  labels?: { spots: { net: string; pos: Vec3 }[]; networks: LineNetwork[] };
+  /** Blocks to highlight (the network under the pointer, or the one picked in the legend). */
+  highlight?: Vec3[];
 }
 
 function hoverFromEvent(e: ThreeEvent<PointerEvent | MouseEvent>): Hover | null {
@@ -171,18 +177,24 @@ function CameraRig({ blocks, frameToken }: { blocks: BlockMap; frameToken: numbe
 }
 
 export function Scene(props: SceneProps) {
+  const anchors = useRef(new Map<string, HTMLDivElement>());
   return (
-    <Canvas camera={{ position: [10, 9, 12], fov: 50 }} onContextMenu={(e) => e.preventDefault()}>
-      <color attach="background" args={['#1e2027']} />
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[8, 12, 6]} intensity={1.1} />
-      <Grid args={[200, 200]} cellSize={1} sectionSize={8} cellColor="#3a3d47" sectionColor="#555a66" infiniteGrid fadeDistance={80} />
-      <Blocks {...props} />
-      <CameraRig blocks={props.blocks} frameToken={props.frameToken} />
-      <OrbitControls
-        makeDefault
-        mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN }}
-      />
-    </Canvas>
+    <>
+      <Canvas camera={{ position: [10, 9, 12], fov: 50 }} onContextMenu={(e) => e.preventDefault()}>
+        <color attach="background" args={['#1e2027']} />
+        <ambientLight intensity={0.9} />
+        <directionalLight position={[8, 12, 6]} intensity={1.1} />
+        <Grid args={[200, 200]} cellSize={1} sectionSize={8} cellColor="#3a3d47" sectionColor="#555a66" infiniteGrid fadeDistance={80} />
+        <Blocks {...props} />
+        {props.labels && <PipeLabelProjector spots={props.labels.spots} anchors={anchors} />}
+        {props.highlight && <HighlightBoxes positions={props.highlight} />}
+        <CameraRig blocks={props.blocks} frameToken={props.frameToken} />
+        <OrbitControls
+          makeDefault
+          mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN }}
+        />
+      </Canvas>
+      {props.labels && <PipeLabelLayer spots={props.labels.spots} networks={props.labels.networks} anchors={anchors} />}
+    </>
   );
 }
