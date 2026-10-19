@@ -171,3 +171,93 @@ After trying Build in 3D on the dev server the user asked for:
      the info panel says what it carries, how much per second, and which pipe it is.
    - **A legend in the line notes** listing every network with its icon; clicking one highlights it in 3D.
    Generated pipes and cables remember what they carry (saved with the build).
+
+## Tidy routing (2026-10-19, decided by the user)
+
+After the refinements the user said the routing "looks off … a bunch of spaghetti cabling, no tidiness" (cables
+arching up and over machines). Cause: every pipe and cable is found by its own path search, one network at a time,
+power last, with nothing that prefers straight or parallel runs. The user approved replacing that with **fixed straight
+runs** ("yes that's the tidy I mean"), shown as a cross-section mockup (`.superpowers/brainstorm/…/tidy-routing.html`).
+Sharing was confirmed: everything carrying the same thing is one network that later branches join, never a second pipe.
+
+### The cross-section (decided)
+
+Looking down the walkway (z = 0, two blocks tall at y = 0..1), the same on both sides:
+
+| y \ side | back (z = ±2) | machine column (z = ±1) |
+|---|---|---|
+| 3 | spare | **input run** of the upper row (over its top) |
+| 2 | **output run** of the upper row | upper machine |
+| 1 | **power feed** (source side of the power) | **power run**, sandwiched: touches the top of the lower machine and the bottom of the upper one |
+| 0 | **output run** of the lower row | lower machine |
+| −1 | spare | **input run** of the lower row (in the floor) |
+
+- Machines face the walkway (front = picture), output on the back, main input on their outer face (under the lower
+  row, over the upper row). Rows are one block apart vertically (upper machines at y = 2) for the power run.
+- Every run is a straight line along the walkway. A run that several slices need continues straight through every
+  slice into the core.
+- Four rows per slice: north lower/upper, south lower/upper. Machines in a row sit side by side, touching.
+- The walkway (z = 0, y = 0..1) and the floor under it (y = −1, z = 0) stay clear. y = 2 at z = 0 is free air above
+  head height (bridges may use y = 3 at z = 0).
+- Footprint goal: 5 wide (z = −2..2) and 5 tall (y = −1..3) when no extra runs are needed; extra runs may use the
+  spare cells and z = ±3, growing to 7 wide.
+- Line notes say the floor runs sit one block below the walkway, so the player digs one layer for them.
+
+### Power (decided, and it fixes the straight-line loss the reviewer found)
+
+- The power run of each side carries the voltage of the machines on that side. Both rows of a side run at one
+  voltage (row assignment keeps it so).
+- Step-down transformers sit **in the power run itself**, input face toward the power feed behind it (z = ±2, y = 1),
+  so each transformer is right next to the machines it feeds: no long low-voltage runs. One per 4 A of the lower
+  voltage, per side, per slice (or per stretch of a straight line).
+- The power feed runs straight along the line at the source voltage (or one step below the source when the core steps
+  HV down first). Generators put power out of their back into their row's output run, which touches the feed.
+- Machines on a side at the source voltage take power straight from the feed through the power run (no transformer).
+- Cable sizes and loss as in the refinements (cableFor, cableLoss). A straight oil line must lose well under its
+  demand (target: under 15%) and never say "fall short".
+
+### Joining runs (decided)
+
+- Where one run feeds another (oil out → oil in), they are joined by a short crossover in the slice's **service
+  column** (one machine-free column at the same x in every slice), using the existing search router restricted to the
+  service column and spare cells, with a penalty for bends so crossovers are straight risers and bridges.
+- Outside the service column, every conduit block connects only along the walkway (to its neighbours in the run) or
+  to the machine it touches. That's the measurable meaning of "tidy".
+- The core (one-off machines: reactor, electrolyzer, extra generators, HV→MV steps, markers) uses the same rows and
+  runs where it can; anything else in the core is joined by the bend-penalised search. The core may be messier than a
+  slice but must stay within the line's cross-section bounds.
+
+### Which machines go in which row (decided)
+
+- Each row holds one kind of machine where possible, so its input and output runs are uniform. When a slice has more
+  kinds than rows, a row is split into stretches; the runs of a stretch belong to that stretch, and a run several slices
+  need gets its own spare-cell run (through-run) joined in the service column.
+- Pick the arrangement with the shortest slice, then the fewest extra through-runs, then the fewest crossover blocks.
+- Second inputs and second outputs (a machine that takes two things, or makes an item and a fluid) use a free face
+  at the end of a stretch or the service column, with the cover and note rules already in place (pump/conveyor cover,
+  Item Filter).
+
+### Straight lines and fallbacks (my calls)
+
+- A straight line is the same cross-section with no slices: one long stretch per kind, transformers in the power run
+  next to the machines they feed, the core at one end.
+- If a line can't be laid out tidily, the generator falls back to the current search-based layout and the notes say
+  "Couldn't keep this line tidy, so some pipes take detours". The checker still has the last word.
+- The previous compact/narrow/roomy forms become that fallback; the tidy layout is tried first for both styles.
+
+### Left to the builder
+
+- The exact row-assignment search, the service column's position in the slice, and the bend penalty's weight.
+- Which spare cell each through-run takes.
+- How second inputs/outputs pick their face, within the rules above.
+
+### Testing
+
+- Oil line (modular): passes the checker; outside the service column every conduit connects only along x or to its
+  machine; footprint 5–7 wide and ≤ 5 tall; generators cover use plus loss with no "fall short".
+- Oil line (straight): passes the checker; cable loss under 15% of demand; no "fall short"; transformers touch the
+  machines they feed or the power run next to them.
+- Each slice has the same blocks (paste still works); growing and one-slice export still work.
+- An HV-powered variant lays out (HV feed, HV→MV in the core or power runs, then MV→LV in the power runs).
+- A line that can't be tidy falls back with the note, and still passes the checker.
+- Screenshots before/after for the user, fresh schematics.
