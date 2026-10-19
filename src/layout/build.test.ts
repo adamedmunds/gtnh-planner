@@ -29,6 +29,14 @@ test('oil line (modular) passes the checker', async () => {
   for (const blk of build.blocks) expect(blk.pos[2] === 0 && (blk.pos[1] === 0 || blk.pos[1] === 1)).toBe(false);
 });
 
+test("a line that fits says nothing about the forms it tried first, and no note twice", async () => {
+  const p = await plan(reference());
+  const { build, warnings } = buildLine(p, 'Light Fuel line');
+  expect(build.notes?.filter((n) => n.startsWith('('))).toEqual([]);
+  expect(warnings.filter((n) => n.startsWith('('))).toEqual([]);
+  expect(new Set(build.notes).size).toBe(build.notes?.length);
+});
+
 test('oil line (straight) passes the checker with Calculator counts', async () => {
   const p = await plan(reference(), 'straight');
   const { build } = buildLine(p, 'Light Fuel line');

@@ -604,11 +604,15 @@ function withExtraGenerators(plan: LinePlan, n: number): LinePlan {
 function buildOnce(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
   const warnings: string[] = [];
   if (plan.style === 'modular') {
+    // Each form starts clean, so a line that fits never mentions why a tighter form didn't.
+    const reasons = new Set<string>();
     for (const form of [COMPACT, NARROW, ROOMY]) {
-      const b = buildModular(plan, name, warnings, form);
-      if (b && !checkLine(b, plan).length) return { build: b, warnings };
+      const tried: string[] = [];
+      const b = buildModular(plan, name, tried, form);
+      if (b && !checkLine(b, plan).length) return { build: b, warnings: tried };
+      for (const w of tried) if (w.startsWith('(')) reasons.add(w);
     }
-    warnings.push("Couldn't fit this line into identical slices, so it's laid out in a straight line instead.");
+    warnings.push("Couldn't fit this line into identical slices, so it's laid out in a straight line instead.", ...reasons);
   }
   const straightPlan: LinePlan = plan.style === 'straight' ? plan : { ...plan, style: 'straight', straight: [...(plan.slice ?? []).map((m) => ({ ...m, count: m.count * plan.sliceCount })), ...plan.core] };
   const b = buildStraight(straightPlan, name, warnings);
