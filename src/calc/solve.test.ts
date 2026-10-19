@@ -128,3 +128,33 @@ test('machine cap: 4 distilleries scale the reference line', async () => {
   expect(r.bindingMachines).toEqual([{ id: 'dist', maxMachines: 4 }]);
   expect(r.bindingLimits).toEqual([]);
 });
+
+describe('power per voltage', () => {
+  const chain = (generator: ChainNode): Chain => ({
+    ...emptyChain(),
+    nodes: [...line, generator],
+    targets: [{ key: K.lightFuel, maximise: true }],
+    limits: [{ key: K.oilBerry, maxRate: 5.57 }],
+  });
+
+  test('matching each voltage: LV generators for the LV machines, MV for the MV electrolyzer', async () => {
+    const r = await solveChain(chain({ ...gen, matchTiers: true } as ChainNode), db, solver);
+    expect(r.status).toBe('ok');
+    const g = r.nodes.find((n) => n.id === 'gen')!;
+    const tiers = new Map(g.tiers!.map((t) => [t.tier, t]));
+    expect([...tiers.keys()].sort()).toEqual(['LV', 'MV']);
+    expect(tiers.get('LV')!.machineMID).toBe(1110);
+    expect(tiers.get('MV')!.machineMID).toBe(1111);
+    const used = (ids: string[]) => -r.nodes.filter((n) => ids.includes(n.id)).reduce((s, n) => s + n.eut, 0);
+    within(tiers.get('LV')!.eut, used(['fe', 'dist', 'cr']), 1);
+    within(tiers.get('MV')!.eut, used(['el']), 1);
+    expect(Object.keys(r.euOutside)).toEqual([]);
+  });
+
+  test('a machine above every generator\'s voltage takes that voltage from outside', async () => {
+    const r = await solveChain(chain({ ...gen, machineMID: 1110 }), db, solver);
+    expect(r.euOutside.MV).toBeGreaterThan(0);
+    within(r.euOutside.MV!, -r.nodes.find((n) => n.id === 'el')!.eut, 1);
+    expect(r.euOutside.LV ?? 0).toBe(0);
+  });
+});

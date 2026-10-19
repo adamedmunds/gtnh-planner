@@ -5,7 +5,11 @@ export interface Position { x: number; y: number }
 /** A recipe step, or a generator burning a fuel. Machine counts are solved; `maxMachines` caps them. */
 export type ChainNode =
   | { id: string; kind: 'recipe'; recipeSig: string; machineMID: number; overclock: boolean; position: Position; maxMachines?: number }
-  | { id: string; kind: 'generator'; fuelMap: string; fuelKey: ResourceKey; machineMID: number; position: Position; maxMachines?: number };
+  | {
+      id: string; kind: 'generator'; fuelMap: string; fuelKey: ResourceKey; machineMID: number; position: Position; maxMachines?: number;
+      /** Generators of each voltage the machines need (burning this fuel), instead of only `machineMID`'s. */
+      matchTiers?: boolean;
+    };
 
 /** Produce `rate` per second of `key`, or as much as the limits allow. */
 export type Target = { key: ResourceKey; rate: number } | { key: ResourceKey; maximise: true };

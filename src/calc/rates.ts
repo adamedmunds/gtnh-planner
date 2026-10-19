@@ -1,7 +1,7 @@
 import type { RecipeDb } from '../recipes/db';
 import { EU, type MachineRef, type ResourceKey } from '../recipes/types';
 import type { ChainNode } from './chain';
-import { V, overclock, tierForEut } from './tiers';
+import { TIER_NAMES, V, overclock, tierForEut } from './tiers';
 
 export type NodeRates =
   | {
@@ -37,6 +37,15 @@ export function overclockCount(recipeEut: number, machineTier: number, amperage:
   const budget = V[machineTier] * Math.max(1, amperage);
   for (let e = Math.max(recipeEut, 32) * 4; e <= budget; e *= 4) byPower++;
   return Math.max(0, Math.min(byTier, byPower));
+}
+
+/** The voltage a node draws (machines) or gives (generators) at: "LV", "MV"…; ULV counts as LV; undefined if unknown. */
+export function nodeTier(node: ChainNode, db: RecipeDb): string | undefined {
+  const mapIndex = node.kind === 'generator' ? db.mapIndexById(node.fuelMap) : db.bySignature(node.recipeSig)?.map;
+  if (mapIndex === undefined) return undefined;
+  const machine = db.map(mapIndex).machines.find((m) => m.mID === node.machineMID);
+  const t = machine ? (machine.tier ?? (machine.voltage !== undefined ? tierForEut(machine.voltage) : undefined)) : undefined;
+  return t === undefined ? undefined : TIER_NAMES[Math.max(1, t)];
 }
 
 export function nodeRates(node: ChainNode, db: RecipeDb): NodeRates {
