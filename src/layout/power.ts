@@ -8,12 +8,16 @@ export const VOLTAGE: Record<PowerTier, number> = { LV: V[1], MV: V[2], HV: V[3]
 const amps = (e: CatalogEntry) => e.cable!.ampsPerSize * e.cable!.size;
 
 /**
- * The cable for a network at `tier` carrying `needed` amps: the lowest-tier cable rated for the voltage that
- * carries it (a higher-tier cable is fine at a lower voltage); otherwise the biggest one, with a warning.
+ * The cable for a network at `tier` carrying `needed` amps: rated for the voltage (a higher-tier cable is fine at a
+ * lower voltage), enough amps in one cable, then the least EU lost per block, the cheapest material and the thinnest
+ * size; otherwise the biggest one, with a warning.
  */
 export function cableFor(tier: PowerTier, needed: number): { key: string; warning?: string } {
   const ok = CATALOG_ENTRIES.filter((e) => e.cable && TIER_ORDER.indexOf(e.cable.tier as PowerTier) >= TIER_ORDER.indexOf(tier))
-    .sort((a, b) => TIER_ORDER.indexOf(a.cable!.tier as PowerTier) - TIER_ORDER.indexOf(b.cable!.tier as PowerTier) || amps(a) - amps(b));
+    .sort((a, b) =>
+      a.cable!.lossPerBlock - b.cable!.lossPerBlock ||
+      TIER_ORDER.indexOf(a.cable!.tier as PowerTier) - TIER_ORDER.indexOf(b.cable!.tier as PowerTier) ||
+      amps(a) - amps(b));
   const fit = ok.find((e) => amps(e) >= needed - 1e-9);
   if (fit) return { key: fit.key };
   const biggest = [...ok].sort((a, b) => amps(b) - amps(a))[0];

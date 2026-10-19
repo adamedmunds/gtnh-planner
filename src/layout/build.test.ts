@@ -69,6 +69,7 @@ test('pipe and cable sizes follow the flow', () => {
   expect(pipeFor('fluid', 557).key).toBe('bronze_pipe_small');
   expect(pipeFor('item', 5.57).key).toBe('tin_item_pipe_small');
   expect(cableFor('LV', 3).key).toBe('tin_cable_4x');
-  expect(cableFor('MV', 6).key).toBe('gold_cable_4x'); // more than 4 A at MV: a higher-tier cable carries it
+  expect(cableFor('MV', 6).key).toBe('annealed_copper_cable_8x'); // lowest loss that carries 6 A of MV in one cable
+  expect(cableFor('HV', 4).key).toBe('electrum_cable_2x');
   expect(cableFor('HV', 100).warning).toMatch(/more than/);
 });

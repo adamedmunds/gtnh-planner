@@ -58,9 +58,9 @@ test('getEntry returns undefined for unknown keys', () => {
 
 test('HV power parts and new pipes', () => {
   const gold = getEntry('gold_cable_4x')!;
-  expect(gold).toMatchObject({ mID: 1428, kind: 'cable', cable: { tier: 'HV', ampsPerSize: 3, size: 4 } });
-  expect(getEntry('tin_cable_1x')!.cable).toEqual({ tier: 'LV', ampsPerSize: 1, size: 1 });
-  expect(getEntry('annealed_copper_cable_4x')!.cable).toEqual({ tier: 'MV', ampsPerSize: 1, size: 4 });
+  expect(gold).toMatchObject({ mID: 1428, kind: 'cable', cable: { tier: 'HV', ampsPerSize: 3, size: 4, lossPerBlock: 2 } });
+  expect(getEntry('tin_cable_1x')!.cable).toEqual({ tier: 'LV', ampsPerSize: 1, size: 1, lossPerBlock: 1 });
+  expect(getEntry('annealed_copper_cable_4x')!.cable).toEqual({ tier: 'MV', ampsPerSize: 1, size: 4, lossPerBlock: 1 });
   expect(getEntry('transformer_hv_mv')).toMatchObject({ mID: 22, kind: 'machine', tier: 'MV' });
   expect(getEntry('stainless_steel_pipe_normal')).toMatchObject({ mID: 5142, kind: 'fluidPipe' });
   expect(getEntry('titanium_pipe_large')).toMatchObject({ mID: 5153, kind: 'fluidPipe' });
@@ -80,4 +80,12 @@ test('machines from recipe data are registered under gt_<mID>', () => {
   registerMachines([{ key: 'gt_1112', name: 'Turbo Combustion Generator', mID: 1112, tier: 'HV' }]);
   expect(getEntry('gt_1112')).toMatchObject({ kind: 'machine', mID: 1112, name: 'Turbo Combustion Generator', tier: 'HV', group: 'Recipe machines' });
   expect(getEntry('gt_1112')!.textures.side).toBe('blocks/iconsets/MACHINE_HV_SIDE.png');
+});
+
+test('every cable size exists with GT ids, amps and loss', () => {
+  expect(getEntry('copper_cable_8x')).toMatchObject({ mID: 1369, cable: { tier: 'MV', ampsPerSize: 1, size: 8, lossPerBlock: 2 } });
+  expect(getEntry('annealed_copper_cable_16x')).toMatchObject({ mID: 1391, cable: { tier: 'MV', size: 16, lossPerBlock: 1 } });
+  expect(getEntry('electrum_cable_2x')).toMatchObject({ mID: 1447, cable: { tier: 'HV', ampsPerSize: 2, size: 2, lossPerBlock: 1 } });
+  expect(getEntry('silver_cable_1x')).toMatchObject({ mID: 1466, cable: { tier: 'HV', ampsPerSize: 1, lossPerBlock: 1 } });
+  expect(getEntry('tin_cable_12x')).toMatchObject({ mID: 1250 });
 });

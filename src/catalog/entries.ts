@@ -33,20 +33,29 @@ function machineEntries(): CatalogEntry[] {
 }
 
 // GT WireCableBuilder: cable 1x = startId + 6, 4x = startId + 8. Insulated cable meta = 9.
-// Tier and amperage per 1x from GT LoaderMetaPipeEntities (WireCableBuilder).
+// Tier, amperage per 1x and EU lost per block per amp, from GT LoaderMetaPipeEntities (WireCableBuilder).
 const CABLES = [
-  { base: 'tin', name: 'Tin', start: 1240, color: '#dcdcdc', tier: 'LV', amps: 1 },
-  { base: 'copper', name: 'Copper', start: 1360, color: '#ff6400', tier: 'MV', amps: 1 },
-  { base: 'annealed_copper', name: 'Annealed Copper', start: 1380, color: '#ff7814', tier: 'MV', amps: 1 },
-  { base: 'gold', name: 'Gold', start: 1420, color: '#ffe650', tier: 'HV', amps: 3 },
+  { base: 'tin', name: 'Tin', start: 1240, color: '#dcdcdc', tier: 'LV', amps: 1, loss: 1 },
+  { base: 'copper', name: 'Copper', start: 1360, color: '#ff6400', tier: 'MV', amps: 1, loss: 2 },
+  { base: 'annealed_copper', name: 'Annealed Copper', start: 1380, color: '#ff7814', tier: 'MV', amps: 1, loss: 1 },
+  { base: 'gold', name: 'Gold', start: 1420, color: '#ffe650', tier: 'HV', amps: 3, loss: 2 },
+  { base: 'electrum', name: 'Electrum', start: 1440, color: '#ffff64', tier: 'HV', amps: 2, loss: 1 },
+  { base: 'silver', name: 'Silver', start: 1460, color: '#dcdcff', tier: 'HV', amps: 1, loss: 1 },
+] as const;
+
+// Cable n×: id = start + 6.. (1x, 2x, 4x, 8x, 12x, 16x); amps scale with size, loss per block doesn't.
+const CABLE_SIZES = [
+  { size: '1x', n: 1, offset: 6, thickness: 0.25, insulation: 'SMALL' },
+  { size: '2x', n: 2, offset: 7, thickness: 0.3125, insulation: 'SMALL' },
+  { size: '4x', n: 4, offset: 8, thickness: 0.4375, insulation: 'MEDIUM' },
+  { size: '8x', n: 8, offset: 9, thickness: 0.5625, insulation: 'MEDIUM_PLUS' },
+  { size: '12x', n: 12, offset: 10, thickness: 0.6875, insulation: 'LARGE' },
+  { size: '16x', n: 16, offset: 11, thickness: 0.8125, insulation: 'HUGE' },
 ] as const;
 
 function cableEntries(): CatalogEntry[] {
-  return CABLES.flatMap((c) => [
-    { size: '1x', n: 1, offset: 6, thickness: 0.25, insulation: 'SMALL' },
-    { size: '4x', n: 4, offset: 8, thickness: 0.5, insulation: 'MEDIUM' },
-  ].map((s): CatalogEntry => ({
-    cable: { tier: c.tier, ampsPerSize: c.amps, size: s.n },
+  return CABLES.flatMap((c) => CABLE_SIZES.map((s): CatalogEntry => ({
+    cable: { tier: c.tier, ampsPerSize: c.amps, size: s.n, lossPerBlock: c.loss },
     key: `${c.base}_cable_${s.size}`,
     name: `${s.size} ${c.name} Cable`,
     kind: 'cable',

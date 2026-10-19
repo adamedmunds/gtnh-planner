@@ -22,7 +22,7 @@ export interface CatalogEntry {
    */
   textures: { top?: string; side?: string; bottom?: string; front?: string; end?: string; core?: string };
   /** Cables: voltage tier and amps per 1x of thickness; `size` is the 1x/4x multiplier. */
-  cable?: { tier: Tier; ampsPerSize: number; size: number };
+  cable?: { tier: Tier; ampsPerSize: number; size: number; lossPerBlock: number };
   /** Fluid pipes: litres per second one pipe carries. */
   pipeCapacity?: number;
   /** Item pipes: items per second one pipe carries. */
