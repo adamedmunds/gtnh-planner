@@ -176,13 +176,27 @@ function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh: boole
     netOf.set(posKey(addVec(u.pos, DIRS[side])), primary.id);
   }
 
+  // Machines touching a transformer of their voltage (not on its input side or their own front) get power straight
+  // from it, with no cable.
+  const directlyPowered = new Set<string>();
+  for (const t of region.units) {
+    if (!t.transformer) continue;
+    DIRS.forEach((d, side) => {
+      if (side === t.facing) return;
+      const m = occupied.get(posKey(addVec(t.pos, d)));
+      if (!m || m.transformer || m.marker || m.pm?.generator || m.tier !== t.transformer!.to) return;
+      if (sideTo(m.pos, t.pos) === m.mainFacing) return;
+      directlyPowered.add(posKey(m.pos));
+    });
+  }
+
   // 2. Each network: its lane (if any) plus every block that uses it, on the faces it may use.
   const powerEnds = (n: Net) =>
     region.units.flatMap((u): { u: Placed; mode: 'facing' | 'other' | 'any' }[] => {
       if (u.pm?.generator) return n.source ? [{ u, mode: 'facing' }] : [];
       if (u.transformer) return u.transformer.from === n.tier ? [{ u, mode: 'facing' }] : u.transformer.to === n.tier ? [{ u, mode: 'other' }] : [];
       if (u.marker?.kind === 'power') return n.source ? [{ u, mode: 'any' }] : [];
-      if (u.tier === n.tier && !u.marker && !u.pm?.multiblock) return [{ u, mode: 'other' }];
+      if (u.tier === n.tier && !u.marker && !u.pm?.multiblock && !directlyPowered.has(posKey(u.pos))) return [{ u, mode: 'other' }];
       return [];
     });
   // Networks local to this region have the hardest paths (no long lane to land on), so they go first.
@@ -213,11 +227,20 @@ function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh: boole
     const blocked = new Set<string>(occupied.keys());
     for (const [k, id] of netOf) if (id !== n.id) blocked.add(k);
     for (let x = region.min[0]; x <= region.max[0]; x++) for (const y of [0, 1]) blocked.add(posKey([x, y, 0]));
+    // Steer clear of machine faces and of the cells around other machines' output faces, so no output gets boxed in.
     const avoid = new Set<string>();
-    for (const u of region.units) for (const d of DIRS) avoid.add(posKey(addVec(u.pos, d)));
+    for (const u of region.units) {
+      for (const d of DIRS) avoid.add(posKey(addVec(u.pos, d)));
+      if (u.facing !== undefined && u.facingNet !== n.id) {
+        const out = addVec(u.pos, DIRS[u.facing]);
+        for (const d of DIRS) avoid.add(posKey(addVec(out, d)));
+      }
+    }
     let res;
     try {
-      res = routeNetwork({ terminals, blocked, avoid, bounds: { min: region.min, max: region.max } });
+      // Machine faces are scarce: routes pass next to a machine only when there's no other way.
+      // Power goes last, when every pipe already has its faces, so cables can take the short way (less EU lost).
+      res = routeNetwork({ terminals, blocked, avoid, avoidPenalty: n.kind === 'cable' ? 2 : 40, bounds: { min: region.min, max: region.max } });
     } catch {
       return { fail: `no room to run ${n.name} in the ${region.name}` };
     }
@@ -293,10 +316,51 @@ const unitBlock = (u: Placed): PlacedBlock => ({
 const withFront = (u: Placed): Placed =>
   u.pm && !u.pm.generator && !u.pm.multiblock && !u.transformer ? { ...u, mainFacing: u.pos[2] < 0 ? 3 : 2 } : u;
 
-const LANE_SLOTS: readonly [number, number][] = [
-  [0, -3], [0, 3], [1, -3], [1, 3], [-1, -3], [-1, 3], [2, -3], [2, 3],
-  [0, -4], [0, 4], [1, -4], [1, 4], [-1, -4], [-1, 4], [2, -4], [2, 4],
-];
+/**
+ * A slice cross-section. Compact: machine columns in side-by-side pairs between service columns, lanes right behind
+ * the machines, 7 wide. Roomy: a gap column on both sides of every machine column, lanes further
+ * out, 11 wide — the fallback when the compact form can't route.
+ */
+interface Form {
+  name: 'compact' | 'narrow' | 'roomy';
+  lanes: readonly [number, number][];
+  zMax: number;
+  yMax: number;
+  machineX(column: number): number;
+  sliceLength(columns: number, extra: number): number;
+  marker(i: number, coreStart: number): Vec3;
+}
+
+const COMPACT: Form = {
+  name: 'compact',
+  // Lanes behind the machines; the rows under and over them stay free so branches can cross the walkway.
+  lanes: [
+    [0, -2], [0, 2], [1, -2], [1, 2], [-1, -2], [-1, 2], [2, -2], [2, 2],
+    [0, -3], [0, 3], [1, -3], [1, 3], [-1, -3], [-1, 3], [2, -3], [2, 3],
+  ],
+  zMax: 3,
+  yMax: 2,
+  // Service column, machine pair, service column: every machine has its own service column inside the slice.
+  machineX: (c) => 3 * Math.floor(c / 2) + 1 + (c % 2),
+  sliceLength: (columns, extra) => 3 * Math.ceil(columns / 2) + 1 + extra,
+  marker: (i, coreStart) => [coreStart + 1 + 2 * Math.floor(i / 2), 2, i % 2 ? 3 : -3],
+};
+
+/** Roomy's columns (a gap on both sides of every machine) with compact's lanes right behind them: 7 wide. */
+const NARROW: Form = { ...COMPACT, name: 'narrow', yMax: 3, machineX: (c) => 2 * c + 1, sliceLength: (columns, extra) => 2 * columns + 1 + extra };
+
+const ROOMY: Form = {
+  name: 'roomy',
+  lanes: [
+    [0, -3], [0, 3], [1, -3], [1, 3], [-1, -3], [-1, 3], [2, -3], [2, 3],
+    [0, -4], [0, 4], [1, -4], [1, 4], [-1, -4], [-1, 4], [2, -4], [2, 4],
+  ],
+  zMax: 5,
+  yMax: 3,
+  machineX: (c) => 2 * c + 1,
+  sliceLength: (columns, extra) => 2 * columns + 1 + extra,
+  marker: (i, coreStart) => [coreStart + 1 + 2 * Math.floor(i / 2), 0, i % 2 ? 5 : -5],
+};
 
 /** `localTransformers`: the most transformers stepping down to each voltage in any one region (that region's network). */
 function powerNets(plan: LinePlan, units: Unit[], localTransformers: Partial<Record<PowerTier, number>>, warnings: string[]): Net[] {
@@ -348,8 +412,29 @@ function buildStraight(plan: LinePlan, name: string, warnings: string[]): Build 
   return undefined;
 }
 
+/**
+ * Core machines one high in a row on one side of the walkway (so loops between them never cross it), every other
+ * column; each transformer goes in the column next to a machine of its lower voltage, which takes power straight from it.
+ */
+function placeCore(units: Unit[], coreStart: number, length: number, side: (u: Unit) => -1 | 1): Placed[] {
+  const machines = units.filter((u) => !u.transformer);
+  const placed: Placed[] = machines.map((u, i) => ({ ...u, pos: [coreStart + 1 + 2 * i, 0, side(u)] }));
+  const taken = new Set(placed.map((p) => posKey(p.pos)));
+  for (const t of units.filter((u) => u.transformer)) {
+    const host = placed.find((m) => m.tier === t.transformer!.to && !m.transformer && !taken.has(posKey([m.pos[0] + 1, 0, m.pos[2]])) && m.pos[0] + 1 < coreStart + length);
+    let pos: Vec3 | undefined = host ? [host.pos[0] + 1, 0, host.pos[2]] : undefined;
+    for (let x = coreStart + 1; !pos && x < coreStart + length; x++) {
+      for (const z of [-1, 1]) if (!pos && !taken.has(posKey([x, 0, z]))) pos = [x, 0, z];
+    }
+    if (!pos) pos = [coreStart, 0, -1];
+    taken.add(posKey(pos));
+    placed.push({ ...t, pos });
+  }
+  return placed;
+}
+
 /** Core + identical slices around a walkway, machines two high in the slices. */
-function buildModular(plan: LinePlan, name: string, warnings: string[]): Build | undefined {
+function buildModular(plan: LinePlan, name: string, warnings: string[], form: Form): Build | undefined {
   const source = plan.power.source.tier;
   const sliceMachines = machineUnits(plan.slice ?? []);
   const sliceUnits = [...sliceMachines, ...transformersFor(sliceMachines, source)];
@@ -368,22 +453,34 @@ function buildModular(plan: LinePlan, name: string, warnings: string[]): Build |
       ? n.source && sliceUnits.some((u) => u.pm?.generator || u.transformer?.from === n.tier || (u.tier === n.tier && !u.pm?.generator))
       : sliceUnits.some((u) => n.producers.has(u.role) || n.consumers.has(u.role));
   const laneNets = nets.filter(touches);
-  if (laneNets.length > LANE_SLOTS.length) return undefined;
+  if (laneNets.length > form.lanes.length) return undefined;
   const laneIds = new Set(laneNets.map((n) => n.id));
   const lanesFor = (x0: number, x1: number) =>
-    new Map(laneNets.map((n, i) => [n.id, Array.from({ length: x1 - x0 + 1 }, (_, k) => [x0 + k, LANE_SLOTS[i][0], LANE_SLOTS[i][1]] as Vec3)]));
+    new Map(laneNets.map((n, i) => [n.id, Array.from({ length: x1 - x0 + 1 }, (_, k) => [x0 + k, form.lanes[i][0], form.lanes[i][1]] as Vec3)]));
   // Local voltages (below the source) are separate networks in each slice and in the core.
   const local = (suffix: string) => nets.map((n) => (n.kind === 'cable' && !n.source ? { ...n, id: `${n.id}:${suffix}` } : n));
+
+  // A core machine sits on the side whose lane right behind it carries something it uses, so that lane plugs in.
+  const coreSide = (u: Unit): -1 | 1 => {
+    const uses = (k: number) => {
+      const lane = form.lanes.findIndex(([y, z]) => y === 0 && z === k * 2);
+      const n = laneNets[lane];
+      return !!n && (n.producers.has(u.role) || n.consumers.has(u.role));
+    };
+    return uses(1) && !uses(-1) ? 1 : -1;
+  };
 
   const columns = Math.ceil(sliceUnits.length / 4);
   let lastFail = '';
   for (let extra = 0; extra < WIDEN_TRIES; extra++) {
-    // Machine columns at odd x, so every machine has a free gap column on both sides inside its own slice.
-    const L = 2 * columns + 1 + extra;
+    const L = form.sliceLength(columns, extra);
     const slots: Vec3[] = [];
-    for (let c = 0; c < columns; c++) slots.push([2 * c + 1, 0, -1], [2 * c + 1, 1, -1], [2 * c + 1, 0, 1], [2 * c + 1, 1, 1]);
+    for (let c = 0; c < columns; c++) {
+      const x = form.machineX(c);
+      slots.push([x, 0, -1], [x, 1, -1], [x, 0, 1], [x, 1, 1]);
+    }
     const slicePlaced: Placed[] = sliceUnits.map((u, i) => withFront({ ...u, pos: slots[i] }));
-    const sliceRegion: Region = { name: 'slice', units: slicePlaced, min: [0, -1, -5], max: [L - 1, 3, 5], lanes: lanesFor(0, L - 1) };
+    const sliceRegion: Region = { name: 'slice', units: slicePlaced, min: [0, -1, -form.zMax], max: [L - 1, form.yMax, form.zMax], lanes: lanesFor(0, L - 1) };
     const sliceNets = local('slice');
     const sliceRouted = routeRegion(sliceRegion, sliceNets, plan, false);
     if ('fail' in sliceRouted) {
@@ -391,14 +488,15 @@ function buildModular(plan: LinePlan, name: string, warnings: string[]): Build |
       continue;
     }
 
-    const coreCount = Math.max(Math.ceil(coreUnits.length / 2), Math.ceil(markers.length / 2), 1);
+    const coreCount = Math.max(coreUnits.length, Math.ceil(markers.length / 2), 1);
     const C = 2 * coreCount + 2 + 2 * extra;
     const coreStart = -C;
     const corePlaced: Placed[] = [
-      ...coreUnits.map((u, i): Placed => withFront({ ...u, pos: [coreStart + 1 + 2 * Math.floor(i / 2), 0, i % 2 ? 1 : -1] })),
-      ...markers.map((u, i): Placed => ({ ...u, pos: [coreStart + 1 + 2 * Math.floor(i / 2), 0, i % 2 ? 5 : -5] })),
+      ...placeCore(coreUnits, coreStart, C, coreSide).map(withFront),
+      ...markers.map((u, i): Placed => ({ ...u, pos: form.marker(i, coreStart) })),
     ];
-    const coreRegion: Region = { name: 'core', units: corePlaced, min: [coreStart, -1, -5], max: [-1, 3, 5], lanes: lanesFor(coreStart, -1) };
+    // The core isn't repeated, so it may use the roomy bounds; only its lanes have to line up with the slices'.
+    const coreRegion: Region = { name: 'core', units: corePlaced, min: [coreStart, -1, -ROOMY.zMax], max: [-1, ROOMY.yMax, ROOMY.zMax], lanes: lanesFor(coreStart, -1) };
     const coreNets = local('core');
     const coreRouted = routeRegion(coreRegion, coreNets, plan, true);
     if ('fail' in coreRouted) {
@@ -460,23 +558,27 @@ export function buildLine(plan: LinePlan, name: string): { build: Build; warning
               ? `Cables lose about ${lost} EU/t (the generators cover it)`
               : `Cables lose about ${lost} EU/t — bring in ${Math.ceil(used + lost)} EU/t`]
           : []),
-        ...(extra ? [`Added ${extra} extra generator${extra > 1 ? 's' : ''} ${p.style === 'modular' ? 'per slice ' : ''}to cover cable loss`] : []),
+        ...(extra ? [`Added ${extra} extra generator${extra > 1 ? 's' : ''}${p.style === 'modular' ? ' in the core' : ''} to cover cable loss`] : []),
         ...(short ? [`The generators still fall short of what the machines use plus cable loss — add more`] : []),
       ];
       out.build.notes = [...(out.build.notes ?? []), ...notes];
       return out;
     }
-    p = withExtraGenerator(p);
-    extra++;
+    const missing = Math.ceil((used + lost - gens.length * genEut) / genEut - 1e-9);
+    p = withExtraGenerators(p, missing);
+    extra += missing;
   }
 }
 
-/** The plan with one more generator where the generators live (each slice, the core, or the straight line). */
-function withExtraGenerator(plan: LinePlan): LinePlan {
-  const bump = (ms?: PlanMachine[]) => ms?.map((m) => (m.generator ? { ...m, count: m.count + 1 } : m));
-  if (plan.slice?.some((m) => m.generator)) return { ...plan, slice: bump(plan.slice) };
-  if (plan.core.some((m) => m.generator)) return { ...plan, core: bump(plan.core)! };
-  return { ...plan, straight: bump(plan.straight) };
+/**
+ * The plan with `n` more generators: in the core for a modular line (slices must stay identical, and one core place
+ * takes exactly as many as needed), else in the straight line.
+ */
+function withExtraGenerators(plan: LinePlan, n: number): LinePlan {
+  const gen = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])].find((m) => m.generator)!;
+  const add = (ms: PlanMachine[]) =>
+    ms.some((m) => m.generator) ? ms.map((m) => (m.generator ? { ...m, count: m.count + n } : m)) : [...ms, { ...gen, count: n }];
+  return plan.style === 'modular' ? { ...plan, core: add(plan.core) } : { ...plan, straight: add(plan.straight ?? []) };
 }
 
 /**
@@ -486,8 +588,10 @@ function withExtraGenerator(plan: LinePlan): LinePlan {
 function buildOnce(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
   const warnings: string[] = [];
   if (plan.style === 'modular') {
-    const b = buildModular(plan, name, warnings);
-    if (b && !checkLine(b, plan).length) return { build: b, warnings };
+    for (const form of [COMPACT, NARROW, ROOMY]) {
+      const b = buildModular(plan, name, warnings, form);
+      if (b && !checkLine(b, plan).length) return { build: b, warnings };
+    }
     warnings.push("Couldn't fit this line into identical slices, so it's laid out in a straight line instead.");
   }
   const straightPlan: LinePlan = plan.style === 'straight' ? plan : { ...plan, style: 'straight', straight: [...(plan.slice ?? []).map((m) => ({ ...m, count: m.count * plan.sliceCount })), ...plan.core] };

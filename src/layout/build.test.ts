@@ -116,3 +116,35 @@ describe('things a player has to know to build it', () => {
     expect(cableFor('HV', 100).warning).toMatch(/3 /);
   });
 });
+
+describe('compact layouts', () => {
+  const box = (blocks: { pos: readonly number[] }[]) => {
+    const span = (a: number) => Math.max(...blocks.map((b) => b.pos[a])) - Math.min(...blocks.map((b) => b.pos[a])) + 1;
+    return { length: span(0), height: span(1), width: span(2) };
+  };
+
+  test('the oil line is compact', async () => {
+    const p = await plan(reference());
+    const { build } = buildLine(p, 'Light Fuel line');
+    const b = box(build.blocks);
+    expect(build.generated?.style).toBe('modular');
+    expect(b.width).toBeLessThanOrEqual(7); // was 11 with lanes 3–4 blocks out
+    expect(b.height).toBeLessThanOrEqual(5);
+    const t = build.generated!.template;
+    expect(Math.max(...t.map((x) => x.pos[2])) - Math.min(...t.map((x) => x.pos[2])) + 1).toBeLessThanOrEqual(7);
+    expect(checkLine(build, p)).toEqual([]);
+  });
+
+  test('a slice too busy for any form either builds correctly or says plainly that it cannot', async () => {
+    const p = await plan(reference());
+    const busy: LinePlan = { ...p, slice: [...(p.slice ?? []), ...p.core], core: [] };
+    let build;
+    try {
+      build = buildLine(busy, 'Light Fuel line').build;
+    } catch (e) {
+      expect((e as Error).message).toMatch(/^Couldn't lay out this line/);
+      return;
+    }
+    expect(checkLine(build, busy)).toEqual([]);
+  });
+});

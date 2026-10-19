@@ -8,7 +8,7 @@ import type { LinePlan, PlanMachine, PowerTier } from './types';
 interface Cell { pos: Vec3; entry: CatalogEntry; facing?: number; role?: string }
 
 /**
- * EU/t lost in cables: every machine draws ceil(EU/t ÷ voltage) amps over its shortest cable run from a power source
+ * EU/t lost in cables: every machine draws EU/t ÷ voltage amps on average over its shortest cable run from a power source
  * (generator face, transformer low side, power marker), losing the cable's loss per block for each amp and block.
  */
 export function cableLoss(build: Build, plan: LinePlan): { total: number; perMachine: Map<string, number> } {
@@ -69,7 +69,8 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
     const { d, loss } = best;
     // A transformer draws about one amp of the higher voltage; a machine draws its EU/t in packets of its own voltage.
     const voltage = VOLTAGE[(pm?.tier === 'ULV' ? 'LV' : pm?.tier ?? 'LV') as PowerTier] ?? VOLTAGE.LV;
-    const amps = transformerHigh ? 1 : Math.max(1, Math.ceil(pm!.eut / voltage - 1e-9));
+    // Packets are a full voltage each; on average a machine draws EU/t ÷ voltage of them per tick.
+    const amps = transformerHigh ? 1 : pm!.eut / voltage;
     const lost = d * loss * amps;
     perMachine.set(posKey(c.pos), lost);
     total += lost;

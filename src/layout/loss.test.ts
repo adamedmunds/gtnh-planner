@@ -17,7 +17,7 @@ const machinePlan = (eut: number): LinePlan => ({
   notes: [],
 });
 
-test('a 10-block LV tin run to a 30 EU/t machine loses 10 EU/t', () => {
+test('a 10-block LV tin run to a 30 EU/t machine loses about 9.4 EU/t', () => {
   const run: PlacedBlock[] = Array.from({ length: 10 }, (_, i) => ({
     pos: [i + 1, 0, 0], key: 'tin_cable_1x', manualMask: { forcedOn: (1 << 4) | (1 << 5), forcedOff: 63 & ~((1 << 4) | (1 << 5)) },
   }));
@@ -25,7 +25,7 @@ test('a 10-block LV tin run to a 30 EU/t machine loses 10 EU/t', () => {
     version: 1, name: 't',
     blocks: [{ pos: [0, 0, 0], key: 'marker_power_in', role: 'power' }, ...run, { pos: [11, 0, 0], key: 'fluid_extractor_lv', facing: 1, role: 'fe' }],
   };
-  expect(cableLoss(build, machinePlan(30)).total).toBe(10);
+  expect(cableLoss(build, machinePlan(30)).total).toBeCloseTo((30 / 32) * 10); // 30 EU/t is 0.94 of a 32 EU/t packet per tick
 });
 
 describe('the oil line', () => {

@@ -8,6 +8,8 @@ export interface RouteRequest {
   blocked: ReadonlySet<string>;
   /** Cells pipes may occupy but should avoid if a route of similar length exists. */
   avoid?: ReadonlySet<string>;
+  /** Extra cost of stepping onto an avoided cell (default 4). */
+  avoidPenalty?: number;
   bounds: { min: Vec3; max: Vec3 };
 }
 
@@ -34,7 +36,8 @@ export function routeNetwork(req: RouteRequest): RouteResult {
     c[1] >= bounds.min[1] && c[1] <= bounds.max[1] &&
     c[2] >= bounds.min[2] && c[2] <= bounds.max[2];
   const free = (c: Vec3) => inBounds(c) && !blocked.has(posKey(c));
-  const stepCost = (c: Vec3) => 1 + (avoid.has(posKey(c)) ? AVOID_PENALTY : 0);
+  const penalty = req.avoidPenalty ?? AVOID_PENALTY;
+  const stepCost = (c: Vec3) => 1 + (avoid.has(posKey(c)) ? penalty : 0);
 
   for (const [i, cands] of terminals.entries()) {
     if (!cands.some(free)) throw new Error(`Terminal ${i} is unreachable: no free candidate cell`);
