@@ -31,6 +31,8 @@ export const DENSE_NOTE = 'This line has many pipes per machine, so some pipes t
 /** Row arrangements tried per line, best first. */
 const ARRANGEMENTS_TRIED = 8;
 const CORE_WIDEN_TRIES = 6;
+/** A weak push away from machine faces in the core, for fewer detours. */
+const LOW_AVOID = 4;
 const BEND_PENALTY = 2;
 /** EU/t of cable loss that counts as a real difference between two layouts (half an MV generator). */
 const LOSS_STEP = 64;
@@ -65,7 +67,7 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
   const netWarnings: string[] = [];
   const nets = [...planNets(plan, netWarnings), ...powerNets(plan, everyMachine, countTransformers(transformersFor(coreMachines, source)), netWarnings)];
 
-  let best: { build: Build; score: number[]; relaxed: boolean } | undefined;
+  let best: { build: Build; score: number[]; relaxed: boolean; slice: TidySlice } | undefined;
   // The shortest arrangements, and those that keep every row to one kind (every run straight through).
   // Machines with more inputs or outputs than their two runs need side faces: they get gaps beside them.
   const sideFaces = new Map(rows.map((m) => {
@@ -94,7 +96,8 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
         for (const powerFirst of [true, false]) {
           const slice = tidySlice(arr, nets, plan, { serviceWidth, straight, powerFirst, copies: copies.left + copies.right, relaxed });
           if ('fail' in slice || coreFails.has(entries(slice))) continue;
-          const build = withCore(plan, name, slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings]);
+          // A quick core to compare slices by; the winner's core is made compact afterwards.
+          const build = withCore(plan, name, slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings], true);
           if (!build) coreFails.add(entries(slice));
           if (!build || checkLine(build, plan).length) continue;
           const span = (a: number) => Math.max(...build.blocks.map((b) => b.pos[a])) - Math.min(...build.blocks.map((b) => b.pos[a])) + 1;
@@ -102,12 +105,14 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
           // the fewest blocks.
           const generators = build.blocks.filter((b) => b.role === genRole).length;
           const score = [generators, Math.ceil(cableLoss(build, plan).total / LOSS_STEP), span(0), span(2), build.blocks.length];
-          if (!best || lessThan(score, best.score)) best = { build, score, relaxed };
+          if (!best || lessThan(score, best.score)) best = { build, score, relaxed, slice };
         }
       }
     }
   }
   if (!best) return undefined;
+  const compact = withCore(plan, name, best.slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings], false);
+  if (compact && !checkLine(compact, plan).length) best.build = compact;
   best.build.notes = (best.build.notes ?? []).map((n) => (n.startsWith('Place every machine with its front') ? FRONT_NOTE : n));
   if (best.relaxed) best.build.notes.push(DENSE_NOTE);
   // Say so when the line has more generators than the Calculator counted (each region powers itself).
@@ -137,7 +142,7 @@ const inBounds = (c: Vec3) => c[1] >= TIDY_BOUNDS.yMin && c[1] <= TIDY_BOUNDS.yM
  * (through-runs pass the core too); a step-down transformer goes right beside a machine of its lower voltage (direct
  * power), else in any free spot.
  */
-function placeTidyCore(units: Unit[], start: number, length: number, side: (u: Unit) => -1 | 1, taken: Set<string>): Placed[] | undefined {
+function placeTidyCore(units: Unit[], start: number, length: number, side: (u: Unit) => -1 | 1, taken: Set<string>, step: 1 | 2): Placed[] | undefined {
   const placed: Placed[] = [];
   const free = (c: Vec3) => !taken.has(posKey(c)) && inBounds(c);
   const faces = (p: Vec3) => DIRS.filter((d) => free(addVec(p, d))).length;
@@ -147,7 +152,7 @@ function placeTidyCore(units: Unit[], start: number, length: number, side: (u: U
   };
   const perSide = (z: number) => placed.filter((p) => p.pos[2] === z).length;
   for (const [i, u] of units.filter((x) => !x.transformer).entries()) {
-    const x = start + 1 + 2 * i;
+    const x = start + (step === 2 ? 1 : 0) + step * i;
     const spots = ROW_SPOTS.map(([y, z]): Vec3 => [x, y, z]).filter(free);
     if (!spots.length) return undefined;
     // Most free faces; then the side with fewer core machines (so one side doesn't crowd); then low; then its side.
@@ -203,7 +208,7 @@ function powerEachRegion(plan: LinePlan, rows: PlanMachine[], oneOffs: PlanMachi
 /** The core for a tidy slice, and the whole line assembled around it. */
 function withCore(
   plan: LinePlan, name: string, slice: TidySlice, copies: { left: number; right: number }, nets: Net[], coreMachines: Unit[], everyMachine: Unit[],
-  markers: Unit[], warnings: string[],
+  markers: Unit[], warnings: string[], quick: boolean,
 ): Build | undefined {
   const source = plan.power.source.tier;
   const feed = slice.nets.find((n) => n.kind === 'cable' && slice.throughRuns.has(n.id));
@@ -226,9 +231,17 @@ function withCore(
   };
 
   const L = slice.length;
+  // Machines packed side by side or every other column, routed keeping clear of machine faces or not; for each, the
+  // shortest core that routes. The shortest of those wins, then the one with the fewest pipe blocks.
+  const machineCount = Math.max(coreUnits.filter((u) => !u.transformer).length, 1);
+  let best: { build: Build; score: number[] } | undefined;
+  const shapes = quick
+    ? [{ step: 2 as const, avoid: undefined }]
+    : ([1, 2] as const).flatMap((step) => [undefined, LOW_AVOID].map((avoid) => ({ step, avoid })));
+  for (const { step, avoid } of shapes) {
   for (let extra = 0; extra < CORE_WIDEN_TRIES; extra++) {
-    const machineCount = Math.max(coreUnits.length, 1);
-    const C = markerColumns + 2 * machineCount + 2 + 2 * extra;
+    const C = markerColumns + step * machineCount + (step === 2 ? 2 : 1) + extra;
+    if (best && C > best.score[0]) break;
     const coreMin = -C;
     // Through-runs are fixed only where they meet the slices (both core ends, or just the slice end of a straight
     // line); the core joins them, straight where it can and around the core machines where it must.
@@ -252,7 +265,7 @@ function withCore(
       corePlaced.push({ ...u, pos });
       taken.add(posKey(pos));
     }
-    const core = placeTidyCore(coreUnits, coreMin + markerColumns, C - markerColumns, coreSide, taken);
+    const core = placeTidyCore(coreUnits, coreMin + markerColumns, C - markerColumns, coreSide, taken, step);
     if (!core) continue;
     corePlaced.push(...core.map(facingInward));
     // Nothing goes in front of a core machine.
@@ -262,7 +275,7 @@ function withCore(
       name: 'core', units: corePlaced,
       min: [coreMin, Math.min(TIDY_BOUNDS.yMin, ...laneYs), Math.min(TIDY_BOUNDS.zMin, ...laneZs)],
       max: [-1, Math.max(TIDY_BOUNDS.yMax, ...laneYs), Math.max(TIDY_BOUNDS.zMax, ...laneZs)],
-      lanes, keepClear, bendPenalty: BEND_PENALTY, walkway: false,
+      lanes, keepClear, bendPenalty: BEND_PENALTY, walkway: false, ...(avoid !== undefined ? { avoidPenalty: avoid } : {}),
     };
     const routed = routeRegion(region, coreNets, plan, true);
     if ('fail' in routed) continue;
@@ -295,7 +308,11 @@ function withCore(
     const sliceNotes = slice.routed.notes.length ? [`In every slice: ${slice.routed.notes.join(' ')}`] : [];
     const floor = blocks.some((b) => b.net && b.pos[1] === -1) ? [FLOOR_NOTE] : [];
     const allNets = [...coreNets, ...slice.nets.filter((n) => !coreNets.some((c) => c.id === n.id))];
-    return assemble(name, plan, blocks, covers, [...plan.notes, ...floor, ...sliceNotes, ...routed.notes, ...warnings], generated, allNets);
+    const build = assemble(name, plan, blocks, covers, [...plan.notes, ...floor, ...sliceNotes, ...routed.notes, ...warnings], generated, allNets);
+    const score = [C, routed.cells.size];
+    if (!best || lessThan(score, best.score)) best = { build, score };
+    break;
   }
-  return undefined;
+  }
+  return best?.build;
 }

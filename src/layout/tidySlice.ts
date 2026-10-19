@@ -395,10 +395,18 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
   }
   for (const n of allNets) {
     if (!used(n.id) || !spans(n) || throughRuns.has(n.id)) continue;
-    const own = new Map<string, [number, number]>();
-    for (const [k, id] of cellNet) if (id === n.id) own.set(`${cellPos.get(k)![1]},${cellPos.get(k)![2]}`, [cellPos.get(k)![1], cellPos.get(k)![2]]);
+    const own = new Map<string, { slot: [number, number]; cells: number }>();
+    for (const [k, id] of cellNet) {
+      if (id !== n.id) continue;
+      const [, y, z] = cellPos.get(k)!;
+      const o = own.get(`${y},${z}`) ?? { slot: [y, z] as [number, number], cells: 0 };
+      o.cells++;
+      own.set(`${y},${z}`, o);
+    }
     // Power carries on only along the feed itself (not its stubs).
-    const slots = [...own.values()].filter(([y, z]) => (n.kind !== 'cable' || Math.abs(z - 0.5) >= 2) && slotFree(y, z, n.id));
+    const fits = [...own.values()].sort((a, b) => b.cells - a.cells).map((o) => o.slot)
+      .filter(([y, z]) => (n.kind !== 'cable' || Math.abs(z - 0.5) >= 2) && slotFree(y, z, n.id));
+    const slots = fits;
     if (!slots.length) {
       const spareSlot = spare.find(([y, z]) => slotFree(y, z, n.id));
       if (!spareSlot) return fail(`no straight run left for ${n.name}`);

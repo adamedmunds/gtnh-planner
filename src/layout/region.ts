@@ -61,6 +61,8 @@ export interface Region {
   bendPenalty?: number;
   /** false: no walkway to keep clear (tidy lines). */
   walkway?: boolean;
+  /** Extra cost of a pipe passing next to a machine face (default 40; cables 2). */
+  avoidPenalty?: number;
 }
 
 export interface Routed {
@@ -273,7 +275,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
     try {
       // Machine faces are scarce: routes pass next to a machine only when there's no other way.
       // Power goes last, when every pipe already has its faces, so cables can take the short way (less EU lost).
-      res = routeNetwork({ terminals, blocked, avoid, avoidPenalty: n.kind === 'cable' ? 2 : 40, bendPenalty: region.bendPenalty, bounds: { min: region.min, max: region.max } });
+      res = routeNetwork({ terminals, blocked, avoid, avoidPenalty: n.kind === 'cable' ? 2 : region.avoidPenalty ?? 40, bendPenalty: region.bendPenalty, bounds: { min: region.min, max: region.max } });
     } catch {
       return { fail: `no room to run ${n.name} in the ${region.name}` };
     }

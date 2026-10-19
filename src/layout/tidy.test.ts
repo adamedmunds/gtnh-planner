@@ -110,6 +110,14 @@ test('no spare power cable: every cable that powers no machine is needed to reac
   }
 });
 
+test('the core is compact: a column for the chests, one per machine, and at most two spare', () => {
+  const g = line.generated!;
+  const coreMin = g.leftStart + g.left * g.sliceLength;
+  const core = line.blocks.filter((b) => b.pos[0] >= coreMin && b.pos[0] < 0);
+  const machines = core.filter((b) => !b.net && !b.key.startsWith('marker'));
+  expect(-coreMin).toBeLessThanOrEqual(1 + machines.length + 2);
+});
+
 test('the oil line fits the tidy cross-section and says what to dig', () => {
   const span = (a: number) => Math.max(...line.blocks.map((b) => b.pos[a])) - Math.min(...line.blocks.map((b) => b.pos[a])) + 1;
   expect(span(2)).toBeLessThanOrEqual(7);
