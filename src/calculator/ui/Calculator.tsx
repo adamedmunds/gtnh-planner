@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { LayoutFailure, type FailureReason } from '../../layout/why';
+import { LayoutFailure, explainFailures, type FailureReason } from '../../layout/why';
 import type { ResourceKey } from '../../recipes/types';
 import { driveText, screenProblems } from '../drive';
 import { summary } from '../overview';
@@ -131,7 +131,7 @@ function Workspace({ active, db, warning, history, dispatch, toast, onBuild3d }:
     if (!shown) return;
     setFailure(undefined);
     const p = planLine(chain, db, shown, straight ? 'straight' : 'modular');
-    if ('error' in p) return toast(p.error, 'error');
+    if ('error' in p) return setFailure(explainFailures([p.error], []));
     try {
       const product = shown.product ? resourceInfo(shown.product.key, db).name : 'Production';
       const { build } = buildLine(p, `${product} line`);
@@ -211,8 +211,12 @@ function BuildFailure({ reasons, straight, onClose }: { reasons: FailureReason[]
           <li key={r.text}>{r.text}{r.count > 1 ? <span className="hint"> · {r.count} times</span> : null}</li>
         ))}
       </ul>
-      <p className="hint">Things to try:</p>
-      <ul>{tries.map((a) => <li key={a}>{a}</li>)}</ul>
+      {tries.length > 0 && (
+        <>
+          <p className="hint">Things to try:</p>
+          <ul>{tries.map((a) => <li key={a}>{a}</li>)}</ul>
+        </>
+      )}
     </aside>
   );
 }

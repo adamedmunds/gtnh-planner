@@ -4,6 +4,8 @@ import { checkLine } from './check';
 import { cableLoss } from './loss';
 import { UNTIDY_NOTE, buildTidy } from './tidy';
 import { LayoutFailure } from './why';
+import { CATALOG } from '../catalog';
+import { TIER_NAMES } from '../calc/tiers';
 import type { GeneratedLine, LinePlan, PlanMachine } from './types';
 import {
   type Net,
@@ -205,6 +207,13 @@ function buildModular(plan: LinePlan, name: string, warnings: string[], form: Fo
  * lose, adding a generator per slice (or to the line) until they do.
  */
 export function buildLine(plan: LinePlan, name: string): { build: Build; warnings: string[] } {
+  // GT machines can't run below their recipe's voltage, and lines aren't stepped up: say so before trying to lay out.
+  const source = plan.power.source.tier;
+  const tooHigh = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])]
+    .filter((m) => !m.generator && !m.multiblock && m.tier && TIER_NAMES.indexOf(m.tier) > TIER_NAMES.indexOf(source));
+  if (tooHigh.length) {
+    throw new LayoutFailure(tooHigh.map((m) => `${CATALOG.get(m.key)?.name ?? m.machine.name} needs ${m.tier} power, but the line's power is ${source}`));
+  }
   let p = plan;
   let extra = 0;
   for (let attempt = 1; ; attempt++) {
@@ -303,7 +312,8 @@ function buildOnce(plan: LinePlan, name: string): { build: Build; warnings: stri
   const b = buildStraight(straightPlan, name, warnings, why);
   if (b) b.notes = [UNTIDY_NOTE, ...(b.notes ?? [])];
   if (!b) throw new LayoutFailure(why);
+  // A layout the checker rejects is never handed over as if it would work.
   const problems = checkLine(b, straightPlan);
-  if (problems.length) b.notes = [...(b.notes ?? []), 'Check these before building:', ...problems];
+  if (problems.length) throw new LayoutFailure([...problems.map((x) => `check: ${x}`), ...why]);
   return { build: b, warnings };
 }

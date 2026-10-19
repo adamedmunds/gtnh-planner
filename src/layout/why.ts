@@ -16,7 +16,16 @@ const FUEL = 'Give the line more fuel (raise what you have) so it gets more gene
 const VOLTS = 'Use one voltage for the machines that repeat in each slice, and generators of that voltage (or one above)';
 
 /** Patterns of the layout code's failure reasons, turned into plain words and advice. */
-const RULES: { test: RegExp; text: (m: RegExpMatchArray) => string; tips: string[] }[] = [
+const RULES: { test: RegExp; text: (m: RegExpMatchArray) => string; tips: string[] | ((m: RegExpMatchArray) => string[]) }[] = [
+  {
+    test: /^(.+) needs (\w+) power, but the line's power is (\w+)$/,
+    text: (m) => `The ${m[1]} needs ${m[2]} power, but the line's power is ${m[3]} (GT machines can't run below their recipe's voltage)`,
+    tips: (m) => [
+      `Use ${m[2]} generators instead of ${m[3]} ones`,
+      `Or remove the generator and bring ${m[2]} power in from outside`,
+      `Or pick a ${m[3]} machine and recipe for that step`,
+    ],
+  },
   {
     test: /no free face on the (.+?) for (.+)$/,
     text: (m) => `The ${m[1]} has more pipes than free sides (it needed one for ${m[2]})`,
@@ -59,15 +68,15 @@ const RULES: { test: RegExp; text: (m: RegExpMatchArray) => string; tips: string
   },
 ];
 
-/** Groups raw reasons, explains each, most common first. */
-export function explainFailures(raw: string[]): FailureReason[] {
+/** Groups raw reasons, explains each, most common first (`fallbackTips` for reasons no rule knows). */
+export function explainFailures(raw: string[], fallbackTips: string[] = [STRAIGHT, SPLIT]): FailureReason[] {
   const out = new Map<string, FailureReason>();
   for (const r of raw) {
     const reason = r.replace(/^(core|check|slice): /, '');
     const rule = RULES.find((x) => x.test.test(reason)) ?? RULES.find((x) => x.test.test(r));
     const m = rule ? reason.match(rule.test) ?? r.match(rule.test)! : undefined;
     const text = rule && m ? rule.text(m) : reason.charAt(0).toUpperCase() + reason.slice(1);
-    const tips = rule?.tips ?? [STRAIGHT, SPLIT];
+    const tips = !rule ? fallbackTips : typeof rule.tips === 'function' ? rule.tips(m!) : rule.tips;
     const prev = out.get(text);
     out.set(text, { text, tips, advice: tips.join('. '), count: (prev?.count ?? 0) + 1 });
   }
@@ -79,7 +88,8 @@ export class LayoutFailure extends Error {
   readonly reasons: FailureReason[];
   constructor(raw: string[]) {
     const reasons = explainFailures(raw).slice(0, 4);
-    super(`Couldn't lay out this line: ${reasons[0]?.text.toLowerCase() ?? "there isn't room to connect all its pipes and cables"}.`);
+    const first = reasons[0]?.text;
+    super(`Couldn't lay out this line: ${first ? first.charAt(0).toLowerCase() + first.slice(1) : "there isn't room to connect all its pipes and cables"}.`);
     this.name = 'LayoutFailure';
     this.reasons = reasons;
   }

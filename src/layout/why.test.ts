@@ -52,3 +52,33 @@ test('a line no layout can fit throws a LayoutFailure that says why and what to 
   expect(f.reasons.some((r) => /Mixer|Chemical Reactor/.test(r.text))).toBe(true);
   expect(f.reasons.every((r) => r.advice.length > 0)).toBe(true);
 }, 60_000);
+
+test('a machine above the line\'s power voltage stops the layout with why and what to do', () => {
+  const mixer: PlanMachine = {
+    nodeId: 'mix', key: 'gt_583', machine: { key: 'gt_583', name: 'Advanced Mixer II', mID: 583, tier: 'HV' }, tier: 'HV',
+    count: 1, eut: 480, avgEut: 480, title: 'Mixer', kept: [], inputs: [], outputs: [], generator: false, multiblock: false,
+  };
+  const gen: PlanMachine = {
+    nodeId: 'gen', key: 'combustion_generator_mv', machine: { key: 'combustion_generator_mv', name: 'Advanced Combustion Generator', mID: 1111, tier: 'MV' },
+    tier: 'MV', count: 4, eut: 128, avgEut: 501, title: 'Diesel generator', kept: [], inputs: [], outputs: [], generator: true, multiblock: false,
+  };
+  const plan: LinePlan = {
+    style: 'straight', sliceCount: 0, core: [], straight: [mixer, gen], notes: [], networks: [], markers: [],
+    power: { tiers: ['HV'], source: { kind: 'generators', tier: 'MV' }, demand: { HV: 480 }, transformers: [] },
+  };
+  let error: unknown;
+  try {
+    buildLine(plan, 'Diesel line');
+  } catch (e) {
+    error = e;
+  }
+  expect(error).toBeInstanceOf(LayoutFailure);
+  const [reason] = (error as LayoutFailure).reasons;
+  expect(reason.text).toMatch(/Advanced Mixer II needs HV power.*MV/);
+  expect(reason.tips.join(' ')).toMatch(/HV generators|from outside/);
+});
+
+test('a layout the checker rejects is never handed over: it fails with the problem', () => {
+  const [r] = explainFailures(['check: No power reaches the Advanced Mixer II at (0, 0, -1)']);
+  expect(r.text).toMatch(/No power reaches the Advanced Mixer II/);
+});
