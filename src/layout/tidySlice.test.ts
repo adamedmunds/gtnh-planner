@@ -20,8 +20,8 @@ beforeAll(async () => {
   plan = p;
   const nets = [...planNets(plan, []), ...powerNets(plan, machineUnits([...plan.slice!, ...plan.core]), {}, [])];
   for (const arr of arrangeRows(plan.slice!)) {
-    for (const w of [1, 2]) {
-      const r = tidySlice(arr, nets, plan, { serviceWidth: w });
+    for (const [w, powerFirst] of [[1, true], [1, false], [2, true], [2, false]] as const) {
+      const r = tidySlice(arr, nets, plan, { serviceWidth: w, powerFirst });
       if (!('fail' in r)) {
         slice = r;
         return;
@@ -72,8 +72,9 @@ test('the slice fits the cross-section and keeps the walkway clear', () => {
   }
 });
 
-test('berries, light fuel, sulfuric light fuel and the MV feed run straight through the slice', () => {
-  for (const id of [`i:${K.oilBerry}`, `f:${K.lightFuel}`, `f:${K.sulfuricLightFuel}`, 'p:MV']) {
+test('berries, light fuel and sulfuric light fuel run straight through the slice; power stays in it', () => {
+  expect(slice.throughRuns.has('p:MV')).toBe(false);
+  for (const id of [`i:${K.oilBerry}`, `f:${K.lightFuel}`, `f:${K.sulfuricLightFuel}`]) {
     const runs = slice.throughRuns.get(id);
     expect(runs?.length, id).toBeGreaterThan(0);
     for (const run of runs!) {
@@ -84,10 +85,13 @@ test('berries, light fuel, sulfuric light fuel and the MV feed run straight thro
   expect(slice.throughRuns.has(`f:${K.oil}`)).toBe(false);
 });
 
-test('the MV feed is the only MV run: generator backs stay one-block links down to it', () => {
-  const mv = slice.blocks.filter((b) => b.net === 'p:MV');
-  for (const b of mv) if (b.pos[0] < slice.serviceFrom && !(b.pos[1] === 1 && Math.abs(b.pos[2]) === 2)) {
-    expect(slice.blocks.some((g) => g.key.startsWith('combustion_generator') && g.pos[0] === b.pos[0] && g.pos[1] === b.pos[1]), `${b.pos}`).toBe(true);
+test('each generator pushes straight into a transformer, and no cable touches a generator', () => {
+  const at = new Map(slice.blocks.map((b) => [posKey(b.pos), b]));
+  const gens = slice.blocks.filter((b) => b.key.startsWith('combustion_generator'));
+  expect(gens.length).toBeGreaterThan(0);
+  for (const g of gens) {
+    expect(at.get(posKey(addVec(g.pos, DIRS[g.facing!])))?.key, `generator at ${g.pos}`).toBe('transformer_mv_lv');
+    for (const d of DIRS) expect(isConduit(at.get(posKey(addVec(g.pos, d)))) && at.get(posKey(addVec(g.pos, d)))!.key.includes('cable')).toBe(false);
   }
-  for (const run of slice.throughRuns.get('p:MV')!) expect(run[0][1]).toBe(1);
+  expect(slice.blocks.some((b) => b.net === 'p:MV')).toBe(false);
 });

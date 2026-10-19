@@ -234,6 +234,19 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
     for (const [k, id] of netOf) if (id !== n.id) blocked.add(k);
     for (let x = region.min[0]; x <= region.max[0]; x++) for (const y of [0, 1]) blocked.add(posKey([x, y, 0]));
     for (const k of region.keepClear ?? []) blocked.add(k);
+    // A cable never runs beside a cable of another voltage or a higher-voltage transformer: GT cables join whatever
+    // they're placed against, so touching is a burn risk when building by hand.
+    if (n.kind === 'cable') {
+      const apart = (c: Vec3) => DIRS.forEach((d) => {
+        const k = posKey(addVec(c, d));
+        if (netOf.get(k) !== n.id) blocked.add(k);
+      });
+      for (const [k, id] of netOf) {
+        const other = nets.find((x) => x.id === id);
+        if (other?.kind === 'cable' && other.tier !== n.tier) apart(routed.cells.get(k)?.pos ?? (k.split(',').map(Number) as unknown as Vec3));
+      }
+      for (const u of region.units) if (u.transformer && TIERS.indexOf(u.transformer.to) > TIERS.indexOf(n.tier!)) apart(u.pos);
+    }
     // Steer clear of machine faces and of the cells around other machines' output faces, so no output gets boxed in.
     const avoid = new Set<string>();
     for (const u of region.units) {

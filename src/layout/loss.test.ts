@@ -46,7 +46,7 @@ describe('the oil line', () => {
     const gens = billOfMaterials(build.blocks).find((l) => l.key === 'combustion_generator_mv')!.count;
     expect(gens).toBeGreaterThan(6);
     expect(checkLine(build, tight)).toEqual([]);
-    expect(build.notes?.join(' ')).toMatch(/extra generator/);
+    expect(build.notes?.join(' ')).toMatch(/extra generator|own generators/);
   });
 });
 

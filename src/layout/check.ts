@@ -220,6 +220,37 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
     const weakest = list.find((c) => tierIdx(c.entry.cable?.tier) < tier);
     if (weakest) problems.push(`The ${weakest.entry.name} at ${where(weakest.block.pos)} can't carry ${TIERS[tier]} power`);
   }
+  // Burn risk: GT cables join any other cable, and a cable placed against something connects to it, so a cable must not
+  // touch a live cable of a higher voltage or a power output of one — connected here or not.
+  const rated = (c: Cell) => tierIdx(c.entry.cable?.tier);
+  const warned = new Set<string>();
+  const burn = (c: Cell, what: string, tier: number) => {
+    const k = posKey(c.block.pos);
+    if (warned.has(k)) return;
+    warned.add(k);
+    problems.push(`The ${label(c)} touches ${what} carrying ${TIERS[tier]} — if they connect when you build it, the ${c.entry.name} burns. Keep them apart`);
+  };
+  for (const c of cells.values()) {
+    if (c.entry.kind !== 'cable') continue;
+    for (let side = 0; side < 6; side++) {
+      const n = neighbour(c, side);
+      if (!n) continue;
+      if (n.entry.kind === 'cable') {
+        const live = fed.get(`c${compOf.get(posKey(n.block.pos))}`);
+        if (live !== undefined && live > rated(c)) burn(c, `the ${label(n)}`, live);
+        continue;
+      }
+      // Faces of `n` that push power out toward `c`.
+      const toward = OPPOSITE[side];
+      const m = byNode.get(roleOf(n) ?? '');
+      let out: number | undefined;
+      if (m?.generator && n.block.facing === toward) out = machineTier(n);
+      else if (isTransformer(n.entry) && n.block.facing !== toward) out = tierIdx(n.entry.tier);
+      else if (n.entry.key === 'marker_power_in') out = tierIdx(plan.power.source.tier);
+      if (out !== undefined && out > rated(c)) burn(c, `the power output of the ${label(n)}`, out);
+    }
+  }
+
   for (const c of cells.values()) {
     if (c.entry.kind !== 'machine' || isTransformer(c.entry)) continue;
     const m = byNode.get(roleOf(c) ?? '');

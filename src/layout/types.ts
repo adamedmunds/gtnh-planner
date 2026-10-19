@@ -15,6 +15,8 @@ export interface PlanMachine {
   count: number;
   /** EU/t one machine uses at full speed (generators: EU/t one makes). */
   eut: number;
+  /** EU/t the whole group uses on average in the solved line (all its machines; generators: what they make). */
+  avgEut?: number;
   /** What the machine is called in notes ("Distillery"): its recipe type, or "<fuel> generator". */
   title: string;
   /** Inputs it needs but doesn't use up (programmed circuits, molds). */

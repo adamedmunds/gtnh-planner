@@ -155,3 +155,26 @@ describe('a network may be several pipes, each joining makers and users', () => 
     expect(checkLine(build([...pair(0), ...pair(5, false)]), plan).join('\n')).toMatch(/Oil is split into pipes that don't join/);
   });
 });
+
+describe('burn risk: higher voltage touching a lower-rated cable, connected or not', () => {
+  const plan: LinePlan = { ...presetPlan, straight: [pm('gen', 'combustion_generator_mv', 'MV', [], [], true)], networks: [] };
+  const build = (blocks: PlacedBlock[]): Build => ({ version: 1, name: 't', blocks });
+  const off = { forcedOn: 0, forcedOff: 0b111111 };
+  const gen: PlacedBlock = { pos: [0, 0, 0], key: 'combustion_generator_mv', role: 'gen', facing: 5 };
+  const mvRun: PlacedBlock[] = [1, 2, 3].map((x) => ({ pos: [x, 0, 0], key: 'annealed_copper_cable_1x', manualMask: { forcedOn: 0b110000, forcedOff: 0b001111 } }));
+
+  test('an LV cable beside a live MV cable is reported', () => {
+    const lv: PlacedBlock = { pos: [2, 0, 1], key: 'tin_cable_1x', manualMask: off };
+    expect(checkLine(build([gen, ...mvRun, lv]), plan).join('\n')).toMatch(/Tin Cable at \(2, 0, 1\).*burn/);
+  });
+
+  test("an LV cable against a generator's output face is reported", () => {
+    const lv: PlacedBlock = { pos: [1, 0, 0], key: 'tin_cable_1x', manualMask: off };
+    expect(checkLine(build([gen, lv]), plan).join('\n')).toMatch(/burn/);
+  });
+
+  test("an LV cable against a generator's other faces is fine", () => {
+    const lv: PlacedBlock = { pos: [0, 1, 0], key: 'tin_cable_1x', manualMask: off };
+    expect(checkLine(build([gen, ...mvRun, lv]), plan).join('\n')).not.toMatch(/burn/);
+  });
+});

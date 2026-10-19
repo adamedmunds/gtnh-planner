@@ -21,7 +21,7 @@ import {
 } from './region';
 import { arrangeRows } from './tidyRows';
 import { TIDY_BOUNDS, tidySlice, type TidySlice } from './tidySlice';
-import type { GeneratedLine, LinePlan } from './types';
+import type { GeneratedLine, LinePlan, PlanMachine } from './types';
 
 export const FLOOR_NOTE = 'The floor pipes sit one block below the walkway: dig one layer for them';
 export const UNTIDY_NOTE = "Couldn't keep this line tidy, so some pipes take detours";
@@ -50,10 +50,11 @@ const shift = (b: PlacedBlock, dx: number): PlacedBlock => ({ ...b, pos: [b.pos[
 export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Build | undefined {
   // A straight line is one long slice of every kind with two or more machines, its one-offs in the core at one end.
   const straight = plan.style === 'straight';
-  const rows = straight ? (plan.straight ?? []).filter((m) => m.count >= 2 && !m.multiblock) : plan.slice ?? [];
-  const oneOffs = straight ? (plan.straight ?? []).filter((m) => !rows.includes(m)) : plan.core;
+  let rows = straight ? (plan.straight ?? []).filter((m) => m.count >= 2 && !m.multiblock) : plan.slice ?? [];
+  let oneOffs = straight ? (plan.straight ?? []).filter((m) => !rows.includes(m)) : plan.core;
   if (!rows.length) return undefined;
   const copies = straight ? { left: 0, right: 1 } : { left: plan.sliceCount - Math.ceil(plan.sliceCount / 2), right: Math.ceil(plan.sliceCount / 2) };
+  ({ rows, oneOffs } = powerEachRegion(plan, rows, oneOffs, copies.left + copies.right));
   const source = plan.power.source.tier;
   const sliceMachines = machineUnits(rows);
   const coreMachines = machineUnits(oneOffs);
@@ -65,8 +66,8 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
   let best: { build: Build; score: number[] } | undefined;
   for (const arr of arrangeRows(rows).slice(0, ARRANGEMENTS_TRIED)) {
     for (const serviceWidth of [1, 2]) {
-      for (const feedFirst of [true, false]) {
-        const slice = tidySlice(arr, nets, plan, { serviceWidth, straight, feedFirst });
+      for (const powerFirst of [true, false]) {
+        const slice = tidySlice(arr, nets, plan, { serviceWidth, straight, powerFirst });
         if ('fail' in slice) continue;
         const build = withCore(plan, name, slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings]);
         if (!build || checkLine(build, plan).length) continue;
@@ -78,7 +79,20 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
       }
     }
   }
-  return best?.build;
+  if (!best) return undefined;
+  // Say so when the line has more generators than the Calculator counted (each region powers itself).
+  const gen = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])].find((m) => m.generator);
+  if (gen) {
+    const planned = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])]
+      .filter((m) => m.generator)
+      .reduce((s, m) => s + m.count * ((plan.slice ?? []).includes(m) ? plan.sliceCount : 1), 0);
+    const built = best.build.blocks.filter((b) => b.role === gen.nodeId).length;
+    if (built > planned) {
+      best.build.notes = [...(best.build.notes ?? []),
+        `Each slice and the core have their own generators so power never travels far: ${built} in all (the Calculator counted ${planned}). Idle generators burn no fuel`];
+    }
+  }
+  return best.build;
 }
 
 const ROW_SPOTS: readonly [number, number][] = [[0, -1], [0, 1], [2, -1], [2, 1]];
@@ -122,6 +136,29 @@ function placeTidyCore(units: Unit[], start: number, length: number, side: (u: U
     put(t, pos);
   }
   return placed;
+}
+
+/** Generators a region needs for what its machines use on average, with a margin for cable loss. */
+const GENERATOR_MARGIN = 1.1;
+
+/**
+ * Every slice and the core power themselves (no long feed between them): the generators go where the power is used,
+ * as many in each slice as its machines need and the rest (plus any added for cable loss) in the core. Slices without
+ * generators in the plan take power from the core through a feed.
+ */
+function powerEachRegion(plan: LinePlan, rows: PlanMachine[], oneOffs: PlanMachine[], copies: number): { rows: PlanMachine[]; oneOffs: PlanMachine[] } {
+  const gen = [...rows, ...oneOffs].find((m) => m.generator);
+  if (!gen || plan.power.source.kind !== 'generators' || !gen.eut) return { rows, oneOffs };
+  const uses = (ms: PlanMachine[], per: number) => ms.filter((m) => !m.generator && !m.multiblock).reduce((s, m) => s + (m.avgEut ?? m.eut * m.count * per) / per, 0);
+  const need = (eu: number) => (eu > 0 ? Math.ceil((eu * GENERATOR_MARGIN) / gen.eut - 1e-9) : 0);
+  const planned = [...rows, ...oneOffs].filter((m) => m.generator).reduce((s, m) => s + m.count * (rows.includes(m) ? copies : 1), 0);
+  const inRows = rows.some((m) => m.generator);
+  const perSlice = inRows ? need(uses(rows, copies)) : 0;
+  const coreOwn = need(uses(oneOffs, 1) + (inRows ? 0 : uses(rows, copies) * copies));
+  // Generators added to the plan for cable loss stay in the core.
+  const core = Math.max(coreOwn, planned - perSlice * copies);
+  const withGen = (ms: PlanMachine[], count: number) => [...ms.filter((m) => !m.generator), ...(count > 0 ? [{ ...gen, count }] : [])];
+  return { rows: withGen(rows, perSlice), oneOffs: withGen(oneOffs, core) };
 }
 
 /** The core for a tidy slice, and the whole line assembled around it. */

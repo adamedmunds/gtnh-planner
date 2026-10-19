@@ -72,6 +72,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     ...(i.tier ? { tier: i.tier } : {}),
     count,
     eut: i.perMachineEut,
+    avgEut: i.eut,
     title: i.title,
     kept: i.kept,
     inputs: i.inputs,

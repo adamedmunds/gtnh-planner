@@ -1,5 +1,5 @@
 import { CATALOG } from '../catalog';
-import { DIRS, addVec, posKey } from '../model/directions';
+import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
 import { routeNetwork } from '../model/route';
 import type { Facing, PlacedBlock, Vec3 } from '../model/types';
 import { VOLTAGE, cableFor } from './power';
@@ -39,12 +39,12 @@ export interface TidyOptions {
   serviceWidth?: number;
   /** One slice with the core at x < 0 (a straight line): runs that reach x = 0 are joined by the core. */
   straight?: boolean;
-  /** Bridge the two sides' power feeds in the service column before joining pipes (less EU lost, less room). */
-  feedFirst?: boolean;
+  /** Join power (side-to-side bridges, the feed) in the service column before the pipes, so it gets the room. */
+  powerFirst?: boolean;
 }
 
 export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: TidyOptions = {}): TidySlice | { fail: string } {
-  const { serviceWidth = 1, straight = false, feedFirst = false } = opts;
+  const { serviceWidth = 1, straight = false, powerFirst = false } = opts;
   const C = arr.columns;
   const L = C + serviceWidth;
   const svc = (x: number) => x >= C;
@@ -83,38 +83,53 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
   }
   const sliceRoles = new Set(units.map((u) => u.role));
 
-  // Power: the feed runs at the source voltage, or one step lower when the core steps HV down first.
+  // Power. A slice with generators powers itself: each generator pushes straight into the power run between the rows
+  // (through a transformer in it when the machines run a voltage lower). Without generators, a feed from the core runs
+  // at z = 3 or -3, behind everything, with a one-block stub to each transformer. Nothing of a higher voltage ever
+  // touches a lower voltage's cable.
   const source = plan.power.source.tier;
   const si = TIERS.indexOf(source);
   const consumers = units.filter((u) => u.pm && !u.pm.generator && !u.pm.multiblock && u.tier);
+  const gens = units.filter((u) => u.pm?.generator);
+  const goods = nets.filter((n) => n.kind !== 'cable');
   const lowest = Math.min(si, ...consumers.map((u) => TIERS.indexOf(u.tier!)));
-  let feedTier: PowerTier = source;
-  if (lowest < si - 1) {
-    if (units.some((u) => u.pm?.generator)) return fail("generators in a slice can't feed machines two voltages below them");
-    feedTier = TIERS[si - 1];
+  let supply: PowerTier = gens.length ? tierOf(gens[0].pm) ?? source : source;
+  if (!gens.length && lowest < si - 1) {
+    supply = TIERS[si - 1]; // the core steps HV down to MV for the feed
     if (lowest < si - 2) return fail('machines three voltages below the source');
   }
-  const feedId = `p:${feedTier}`;
-  const given = nets.find((n) => n.id === feedId);
-  if (!given) return fail(`no ${feedTier} power network`);
-  const belowSource = TIERS.slice(0, si).reduce((s, t) => s + (plan.power.demand[t] ?? 0), 0);
-  const feedNet: Net = feedTier === source ? given : { ...given, conduit: cableFor(feedTier, Math.max(1, belowSource / VOLTAGE[feedTier])).key };
   const localPower = new Map<string, Net>();
-  const goods = nets.filter((n) => n.kind !== 'cable');
+  const powerNet = (tier: PowerTier, id: string, amps: number): Net => {
+    const base = nets.find((n) => n.id === `p:${tier}`) ?? nets.find((n) => n.kind === 'cable')!;
+    const prev = localPower.get(id);
+    const need = Math.max(amps, prev ? CATALOG.get(prev.conduit)!.cable!.ampsPerSize * CATALOG.get(prev.conduit)!.cable!.size : 1);
+    const net: Net = { ...base, id, name: `${tier} power`, tier, source: false, conduit: cableFor(tier, need).key };
+    localPower.set(id, net);
+    return net;
+  };
+  const feedId = `p:${supply}`;
+  const belowSource = TIERS.slice(0, si).reduce((s, t) => s + (plan.power.demand[t] ?? 0), 0);
+  const given = nets.find((n) => n.id === feedId);
+  const feedNet: Net | undefined = gens.length || !given
+    ? undefined
+    : supply === source ? given : { ...given, conduit: cableFor(supply, Math.max(1, belowSource / VOLTAGE[supply])).key };
+  if (!gens.length && consumers.length && !feedNet) return fail(`no ${supply} power network`);
+  const transformerKey = (from: PowerTier) => (from === 'MV' ? 'transformer_mv_lv' : 'transformer_hv_mv');
+  const addTransformer = (pos: Vec3, from: PowerTier, to: PowerTier, facing: Facing) => {
+    const key = transformerKey(from);
+    const t: Placed = { role: `xf:${from}-${to}`, key, name: CATALOG.get(key)!.name, transformer: { from, to }, tier: to, pos, facing };
+    units.push(t);
+    unitAt.set(posKey(pos), t);
+  };
 
-  // Output and input runs, one cell per machine; anything beyond the first of each is an extra face.
+  // Output and input runs, one cell per machine; anything beyond the first of each is an extra face. Generators face
+  // the power run instead (their output goes nowhere else).
   const extras: { u: Placed; net: Net; out: boolean }[] = [];
-  const feedNeeded = new Set<number>();
   for (const u of units) {
     const [x, y, side] = u.pos;
     if (u.pm!.generator) {
-      if (feedTier !== source) return fail('generators need the feed at their own voltage');
-      const cell: Vec3 = [x, y, 2 * side];
-      if (!put(cell, feedId)) return fail('no room behind a generator');
-      serve(cell, u);
-      link(cell, [x, 1, 2 * side]);
-      feedNeeded.add(side);
-      u.facingNet = feedId;
+      if (tierOf(u.pm) !== supply) return fail('generators of different voltages in one slice');
+      u.facing = y === 0 ? 1 : 0;
     } else {
       const outs = goods.filter((n) => n.producers.has(u.role));
       const out = outs.find((n) => n.kind === 'itemPipe') ?? outs[0];
@@ -135,41 +150,53 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     for (const i of ins.slice(1)) extras.push({ u, net: i, out: false });
   }
 
-  // Power runs: sandwiched between the rows of each side, at that side's voltage, with transformers in them.
+  // Power runs: one per side at its machines' voltage, sandwiched between the rows.
+  const sideTier = new Map<number, PowerTier>();
   for (const side of [-1, 1]) {
     const here = consumers.filter((u) => u.pos[2] === side);
-    if (!here.length) continue;
-    const tier = here[0].tier!;
-    const demand = here.reduce((s, u) => s + (u.pm?.eut ?? 0), 0);
-    let runNet = feedNet;
-    const transformerAt = new Set<number>();
-    if (tier === feedTier) {
-      for (let x = 0; x < C; x++) link([x, 1, side], [x, 1, 2 * side]);
-    } else if (TIERS.indexOf(tier) === TIERS.indexOf(feedTier) - 1) {
+    if (here.length) sideTier.set(side, here[0].tier!);
+    else if (gens.some((g) => g.pos[2] === side)) sideTier.set(side, consumers[0]?.tier ?? supply);
+  }
+  // A side with machines but no generators of its own takes power across the service column (same voltage only).
+  const bridge = gens.length > 0 && [-1, 1].some((side) => consumers.some((u) => u.pos[2] === side) && !gens.some((g) => g.pos[2] === side));
+  if (bridge && new Set(sideTier.values()).size > 1) return fail('one side has no generators and runs a different voltage from the other');
+  const feedStubs: Vec3[] = [];
+  for (const [side, tier] of sideTier) {
+    const step = TIERS.indexOf(supply) - TIERS.indexOf(tier);
+    if (step < 0 || step > 1) return fail(`${tier} machines two voltages below the ${supply} supply`);
+    const here = consumers.filter((u) => u.pos[2] === side);
+    const transformerAt = new Map<number, Facing>(); // x -> the transformer's input face
+    const genAt = new Map<number, Placed>();
+    if (gens.length) {
+      for (const g of gens.filter((x) => x.pos[2] === side)) {
+        if (genAt.has(g.pos[0])) return fail('two generators would push into one power-run block');
+        genAt.set(g.pos[0], g);
+        if (step === 1) transformerAt.set(g.pos[0], g.pos[1] === 0 ? 0 : 1);
+      }
+    } else if (step === 1) {
+      const demand = here.reduce((s, u) => s + (u.pm?.eut ?? 0), 0);
       const count = Math.ceil(demand / (VOLTAGE[tier] * 4) - 1e-9);
       if (count > C) return fail(`${count} transformers don't fit in one power run`);
-      for (let i = 0; i < count; i++) transformerAt.add(Math.floor(((i + 0.5) * C) / count));
-      // Each side's run is its own network, fed by the transformers in it (they never touch the other side's).
-      const id = `p:${tier}:slice${side < 0 ? 'N' : 'S'}`;
-      const base = nets.find((n) => n.id === `p:${tier}`) ?? feedNet;
-      runNet = { ...base, id, name: `${tier} power`, tier, source: false, conduit: cableFor(tier, count * 4).key };
-      localPower.set(id, runNet);
-    } else return fail(`${tier} machines two voltages below the ${feedTier} feed`);
-    feedNeeded.add(side);
+      for (let i = 0; i < count; i++) transformerAt.set(Math.floor(((i + 0.5) * C) / count), side < 0 ? 2 : 3);
+    }
+    const amps = step === 1 ? 4 * Math.max(transformerAt.size, gens.length) : Math.max(1, gens.length);
+    const id = step === 0 && feedNet ? feedNet.id : bridge || step === 0 ? `p:${tier}:slice` : `p:${tier}:slice${side < 0 ? 'N' : 'S'}`;
+    const run = id === feedNet?.id ? feedNet : powerNet(tier, id, amps);
     for (let x = 0; x < C; x++) {
       const pos: Vec3 = [x, 1, side];
-      if (transformerAt.has(x)) {
-        const key = feedTier === 'MV' ? 'transformer_mv_lv' : 'transformer_hv_mv';
-        const t: Placed = { role: `xf:${feedTier}-${tier}`, key, name: CATALOG.get(key)!.name, transformer: { from: feedTier, to: tier }, tier, pos, facing: back(side) };
-        units.push(t);
-        unitAt.set(posKey(pos), t);
+      const input = transformerAt.get(x);
+      if (input !== undefined) {
+        addTransformer(pos, supply, tier, input);
+        if (!gens.length) feedStubs.push([x, 1, 2 * side]);
         continue;
       }
-      if (!put(pos, runNet.id)) return fail('no room for the power run');
+      if (!put(pos, run.id)) return fail('no room for the power run');
       for (const y of [0, 2]) {
         const m = unitAt.get(posKey([x, y, side]));
         if (m && consumers.includes(m)) serve(pos, m);
       }
+      const g = genAt.get(x);
+      if (g) serve(pos, g); // a generator at the run's voltage pushes straight into it
     }
     for (let x = 0; x < C; x++) {
       if (transformerAt.has(x)) continue;
@@ -178,26 +205,34 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
         if (t?.transformer) serve([x, 1, side], t);
       }
     }
+    // Machines at the supply voltage with no generators here: a feed stub joins their run.
+    if (!gens.length && step === 0) feedStubs.push([0, 1, 2 * side]);
   }
-  for (const side of feedNeeded) {
-    for (let x = 0; x < C; x++) {
-      const pos: Vec3 = [x, 1, 2 * side];
-      if (!put(pos, feedId)) return fail('no room for the power feed');
-      const t = unitAt.get(posKey([x, 1, side]));
-      if (t?.transformer) serve(pos, t);
+  // The feed from the core (slices without generators): along z = 3 or -3, a stub to each transformer or run.
+  if (feedNet) {
+    for (const side of new Set(feedStubs.map((c) => Math.sign(c[2])))) {
+      for (let x = 0; x < L; x++) if (!put([x, 1, 3 * side], feedNet.id)) return fail('no room for the power feed');
+    }
+    for (const stub of feedStubs) {
+      const side = Math.sign(stub[2]);
+      if (!put(stub, feedNet.id)) return fail('no room for a feed stub');
+      const t = unitAt.get(posKey([stub[0], 1, side]));
+      if (t?.transformer) serve(stub, t);
+      else link(stub, [stub[0], 1, side]);
+      link(stub, [stub[0], 1, 3 * side]);
     }
   }
 
   // Through-runs: every run of a network the core or other slices need carries on straight across the whole slice
   // (into the next slice and the core, which joins them), so slices only join their own local runs.
-  const allNets = [...goods, feedNet, ...localPower.values()];
+  const allNets = [...goods, ...(feedNet ? [feedNet] : []), ...localPower.values()];
   const byId = new Map(allNets.map((n) => [n.id, n]));
   const throughRuns = new Map<string, Vec3[][]>();
   const slotFree = (y: number, z: number, net: string) =>
     Array.from({ length: L }, (_, x) => posKey([x, y, z])).every((k) => !unitAt.has(k) && (!cellNet.has(k) || cellNet.get(k) === net));
   const spare: [number, number][] = [[-1, -2], [-1, 2], [3, -2], [3, 2], ...[-1, 0, 1, 2, 3].flatMap((y) => [[y, -3], [y, 3]] as [number, number][])];
   const used = (id: string) => [...cellNet.values()].includes(id);
-  const spans = (n: Net) => n.kind === 'cable' ? n.id === feedId : [...n.producers, ...n.consumers].some((r) => !sliceRoles.has(r));
+  const spans = (n: Net) => n.kind === 'cable' ? n.id === feedNet?.id : [...n.producers, ...n.consumers].some((r) => !sliceRoles.has(r));
   // A straight line has one slice with the core at x < 0: any run that can carry on straight to x = 0 is joined by
   // the core, even one only this slice uses (a run stuck behind other machines in its row can't reach the service column).
   if (straight) {
@@ -247,6 +282,23 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     for (let y = 0; y <= TIDY_BOUNDS.yMax; y++) if (y <= 1 || !svc(x)) blocked.add(posKey([x, y, 0]));
   }
   const canStep = (a: Vec3, b: Vec3) => a[0] !== b[0] || svc(a[0]);
+  // A cable may not run beside a cable of another voltage, nor beside a power output of a higher one (burn risk when
+  // built by hand: GT cables join whatever they're placed against).
+  const keepApart = (id: string): Set<string> => {
+    const out = new Set<string>();
+    const tier = byId.get(id)?.tier;
+    if (!tier || byId.get(id)?.kind !== 'cable') return out;
+    const around = (c: Vec3) => DIRS.forEach((d) => out.add(posKey(addVec(c, d))));
+    for (const [k, n] of cellNet) {
+      const other = byId.get(n);
+      if (other?.kind === 'cable' && other.tier !== tier) around(cellPos.get(k)!);
+    }
+    for (const u of unitAt.values()) {
+      if (u.transformer && TIERS.indexOf(u.transformer.to) > TIERS.indexOf(tier)) around(u.pos);
+      if (u.pm?.generator && u.facing !== undefined && TIERS.indexOf(supply) > TIERS.indexOf(tier)) out.add(posKey(addVec(u.pos, DIRS[u.facing])));
+    }
+    return out;
+  };
   const bounds = { min: [0, TIDY_BOUNDS.yMin, -TIDY_BOUNDS.zMax] as Vec3, max: [L - 1, TIDY_BOUNDS.yMax, TIDY_BOUNDS.zMax] as Vec3 };
   const components = (id: string): Vec3[][] => {
     const cells = [...cellNet].filter(([, n]) => n === id).map(([k]) => k);
@@ -262,7 +314,10 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
         const p = cellPos.get(k)!;
         comp.push(p);
         DIRS.forEach((d, side) => {
-          const nk = posKey(addVec(p, d));
+          let nk = posKey(addVec(p, d));
+          // A transformer in a power run gives its voltage on both sides, so it joins the run's cells either side.
+          const t = unitAt.get(nk);
+          if (side >= 4 && t?.transformer && t.transformer.to === byId.get(id)?.tier) nk = posKey(addVec(addVec(p, d), d));
           if (seen.has(nk) || cellNet.get(nk) !== id) return;
           if (side < 4 && !svc(p[0]) && !links.has(`${k}|${nk}`)) return;
           seen.add(nk);
@@ -277,11 +332,19 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     // Through-runs are joined in the core, so together they count as one end here.
     const runs = throughRuns.get(id) ?? [];
     const runCells = new Set(runs.flat().map(posKey));
-    const local = components(id).filter((c) => !c.some((p) => runCells.has(posKey(p))));
+    const tier = byId.get(id)?.kind === 'cable' ? byId.get(id)?.tier : undefined;
+    const besideTransformers = (comp: Vec3[]): Vec3[] => !tier ? [] : comp.flatMap((p) => [4, 5].flatMap((side) => {
+      const t = unitAt.get(posKey(addVec(p, DIRS[side])));
+      if (!t?.transformer || t.transformer.to !== tier) return [];
+      const beyond = addVec(t.pos, DIRS[side]);
+      return !unitAt.has(posKey(beyond)) && !cellNet.has(posKey(beyond)) && !blocked.has(posKey(beyond)) ? [beyond] : [];
+    }));
+    const local = components(id).filter((c) => !c.some((p) => runCells.has(posKey(p)))).map((c) => [...c, ...besideTransformers(c)]);
     const terminals = [...extra, ...(runs.length ? [runs.flat()] : []), ...local];
     if (terminals.length < 2) return [];
     const others = new Set(blocked);
     for (const [k, n] of cellNet) if (n !== id) others.add(k);
+    for (const k of keepApart(id)) others.add(k);
     try {
       const res = routeNetwork({ terminals, blocked: others, bounds, canStep, bendPenalty: BEND_PENALTY });
       for (const c of res.cells) put(c, id);
@@ -290,11 +353,14 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
       return fail(`no room to join the ${byId.get(id)?.name ?? id} runs`);
     }
   };
-  const order = [
+  const goodsOrder = [
     ...goods.filter((n) => used(n.id) && !throughRuns.has(n.id)),
     ...goods.filter((n) => throughRuns.has(n.id)),
-    // Local power runs need no joining: every stretch of one lies next to a transformer in it.
-    ...(used(feedNet.id) ? [feedNet] : []),
+  ];
+  // Power runs fed by their own transformers need no joining; a side without generators is bridged to the other.
+  const powerOrder = [
+    ...[...localPower.values()].filter((n) => bridge && n.id.endsWith(':slice')),
+    ...(feedNet && used(feedNet.id) ? [feedNet] : []),
   ];
   // Bridging the two sides' feeds in the service column saves the power for one side going all the way round through
   // the core; first (taking room from pipes) when asked, else only if there's room left.
@@ -303,6 +369,7 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     if (feeds.length < 2) return true;
     const others = new Set(blocked);
     for (const [k, n] of cellNet) if (n !== feedId) others.add(k);
+    for (const k of keepApart(feedId)) others.add(k);
     try {
       const res = routeNetwork({ terminals: feeds, blocked: others, bounds, canStep, bendPenalty: BEND_PENALTY });
       for (const c of res.cells) put(c, feedId);
@@ -311,12 +378,13 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
       return false;
     }
   };
-  if (feedFirst && !bridgeFeeds()) return fail('no room to bridge the power feeds');
-  for (const n of order) {
+  // Power joins first (taking room from pipes) when asked, else after the pipes.
+  for (const n of powerFirst ? [...powerOrder, ...goodsOrder] : [...goodsOrder, ...powerOrder]) {
     const r = join(n.id);
     if ('fail' in r) return r;
   }
-  if (!feedFirst) bridgeFeeds();
+  if (powerFirst && !bridgeFeeds()) return fail('no room to bridge the power feeds');
+  if (!powerFirst) bridgeFeeds();
 
   // Second inputs and outputs: a free face beside the machine, joined like any other run.
   for (const { u, net, out } of extras) {
@@ -352,6 +420,8 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
       const same = cellNet.get(nk) === net;
       if (same && (side >= 4 || svc(pos[0]) || links.has(`${k}|${nk}`))) on |= 1 << side;
       if (routed.attach.has(`${k}>${nk}`)) on |= 1 << side;
+      const t = unitAt.get(nk);
+      if (t?.transformer && t.transformer.to === byId.get(net)?.tier && OPPOSITE[side] !== t.facing) on |= 1 << side;
     });
     if (through.has(k)) {
       if (pos[0] === 0) on |= 1 << 4;
