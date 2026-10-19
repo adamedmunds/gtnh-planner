@@ -67,8 +67,11 @@ const score = (a: Arrangement) => {
   return [a.columns, a.stretches.length, shared];
 };
 
-/** Candidate arrangements, best first: fewest columns, then fewest stretches, then fewest rows shared by two kinds. */
-export function arrangeRows(machines: PlanMachine[], maxColumns?: number): Arrangement[] {
+/**
+ * Candidate arrangements, best first: fewest columns, then fewest stretches, then fewest rows shared by two kinds; or,
+ * with `unmixed`, fewest shared rows first (every run straight through, at the cost of a longer slice).
+ */
+export function arrangeRows(machines: PlanMachine[], maxColumns?: number, unmixed = false): Arrangement[] {
   const kinds = machines.filter((m) => m.count > 0);
   const total = kinds.reduce((n, m) => n + m.count, 0);
   if (!total) return [];
@@ -91,8 +94,9 @@ export function arrangeRows(machines: PlanMachine[], maxColumns?: number): Arran
   const cmp = (a: number[], b: number[]) => a.findIndex((v, i) => v !== b[i]);
   return out
     .sort((a, b) => {
-      const sa = score(a);
-      const sb = score(b);
+      const order = (v: number[]) => (unmixed ? [v[2], v[0], v[1]] : v);
+      const sa = order(score(a));
+      const sb = order(score(b));
       const i = cmp(sa, sb);
       return i < 0 ? 0 : sa[i] - sb[i];
     })

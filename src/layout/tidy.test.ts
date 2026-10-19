@@ -56,6 +56,27 @@ test('the modular oil line loses under 20% of what it uses in its cables', () =>
   expect(cableLoss(line, plan).total).toBeLessThan(0.2 * demand);
 });
 
+test('each side of a slice has its own generator: no power crosses the walkway', () => {
+  const t = line.generated!.template;
+  expect(t.some((b) => b.net?.startsWith('p:') && b.pos[2] === 0)).toBe(false);
+  for (const side of [-1, 1]) {
+    const machines = t.filter((b) => Math.sign(b.pos[2]) === side && ['fluid_extractor_lv', 'distillery_lv'].includes(b.key));
+    if (machines.length) expect(t.some((b) => Math.sign(b.pos[2]) === side && b.key.startsWith('combustion_generator')), `side ${side}`).toBe(true);
+  }
+});
+
+test('no power cable is a dead end in the oil line', () => {
+  const t = line.generated!.template;
+  const at = new Map(t.map((b) => [posKey(b.pos), b]));
+  const masks = computeConnections(t);
+  for (const c of t.filter((b) => b.net?.startsWith('p:'))) {
+    const links = DIRS.map((d, side) => ({ n: at.get(posKey(addVec(c.pos, d))), on: ((masks.get(posKey(c.pos)) ?? 0) >> side) & 1 }))
+      .filter(({ n, on }) => n && on);
+    const powersMachine = links.some(({ n }) => !isConduit(n) && !n!.key.startsWith('transformer'));
+    expect(powersMachine || links.length >= 2, `dead-end cable at ${c.pos}`).toBe(true);
+  }
+});
+
 test('the oil line fits the tidy cross-section and says what to dig', () => {
   const span = (a: number) => Math.max(...line.blocks.map((b) => b.pos[a])) - Math.min(...line.blocks.map((b) => b.pos[a])) + 1;
   expect(span(2)).toBeLessThanOrEqual(7);

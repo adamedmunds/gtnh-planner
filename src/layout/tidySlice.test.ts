@@ -21,7 +21,7 @@ beforeAll(async () => {
   const nets = [...planNets(plan, []), ...powerNets(plan, machineUnits([...plan.slice!, ...plan.core]), {}, [])];
   for (const arr of arrangeRows(plan.slice!)) {
     for (const [w, powerFirst] of [[1, true], [1, false], [2, true], [2, false]] as const) {
-      const r = tidySlice(arr, nets, plan, { serviceWidth: w, powerFirst });
+      const r = tidySlice(arr, nets, plan, { serviceWidth: w, powerFirst, copies: plan.sliceCount });
       if (!('fail' in r)) {
         slice = r;
         return;
@@ -94,4 +94,16 @@ test('each generator pushes straight into a transformer, and no cable touches a 
     for (const d of DIRS) expect(isConduit(at.get(posKey(addVec(g.pos, d)))) && at.get(posKey(addVec(g.pos, d)))!.key.includes('cable')).toBe(false);
   }
   expect(slice.blocks.some((b) => b.net === 'p:MV')).toBe(false);
+});
+
+test('no power cable is a dead end: every LV cable touches a machine it powers or leads on to one', () => {
+  const at = new Map(slice.blocks.map((b) => [posKey(b.pos), b]));
+  const masks = computeConnections(slice.blocks);
+  const lv = slice.blocks.filter((b) => b.net?.startsWith('p:LV'));
+  for (const c of lv) {
+    const links = DIRS.map((d, side) => ({ n: at.get(posKey(addVec(c.pos, d))), on: ((masks.get(posKey(c.pos)) ?? 0) >> side) & 1 }))
+      .filter(({ n, on }) => n && on);
+    const powersMachine = links.some(({ n }) => !isConduit(n) && !n!.key.startsWith('transformer'));
+    expect(powersMachine || links.length >= 2, `dead-end LV cable at ${c.pos}`).toBe(true);
+  }
 });

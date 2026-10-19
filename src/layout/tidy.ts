@@ -19,7 +19,7 @@ import {
   type Region,
   type Unit,
 } from './region';
-import { arrangeRows } from './tidyRows';
+import { ROWS, arrangeRows, type Arrangement } from './tidyRows';
 import { TIDY_BOUNDS, tidySlice, type TidySlice } from './tidySlice';
 import type { GeneratedLine, LinePlan, PlanMachine } from './types';
 
@@ -64,17 +64,32 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
   const nets = [...planNets(plan, netWarnings), ...powerNets(plan, everyMachine, countTransformers(transformersFor(coreMachines, source)), netWarnings)];
 
   let best: { build: Build; score: number[] } | undefined;
-  for (const arr of arrangeRows(rows).slice(0, ARRANGEMENTS_TRIED)) {
+  // The slice's generators as one kind, or split in two so each side can have its own (no power across the walkway).
+  const rowGen = rows.find((m) => m.generator);
+  const variants: { rows: PlanMachine[]; perSide: boolean }[] = [{ rows, perSide: false }];
+  if (rowGen) {
+    const total = Math.max(rowGen.count, 2);
+    for (let a = 1; a <= total / 2; a++) {
+      variants.push({ rows: [...rows.filter((m) => m !== rowGen), { ...rowGen, count: a }, { ...rowGen, count: total - a }], perSide: true });
+    }
+  }
+  const eachSidePowered = (arr: Arrangement) => [-1, 1].every((side) => {
+    const here = arr.stretches.filter((st) => ROWS[st.row].side === side);
+    return !here.some((st) => !st.machine.generator) || here.some((st) => st.machine.generator);
+  });
+  const arrangements = variants.flatMap((v) =>
+    arrangeRows(v.rows, undefined, v.perSide).filter((arr) => !v.perSide || eachSidePowered(arr)).slice(0, ARRANGEMENTS_TRIED));
+  for (const arr of arrangements) {
     for (const serviceWidth of [1, 2]) {
       for (const powerFirst of [true, false]) {
-        const slice = tidySlice(arr, nets, plan, { serviceWidth, straight, powerFirst });
+        const slice = tidySlice(arr, nets, plan, { serviceWidth, straight, powerFirst, copies: copies.left + copies.right });
         if ('fail' in slice) continue;
         const build = withCore(plan, name, slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings]);
         if (!build || checkLine(build, plan).length) continue;
         const span = (a: number) => Math.max(...build.blocks.map((b) => b.pos[a])) - Math.min(...build.blocks.map((b) => b.pos[a])) + 1;
-        // Any width up to 7 is tidy; EU lost (in half-generator steps) comes first, so a wider or longer line wins only
-        // when it saves real power; then narrowest, shortest, fewest blocks.
-        const score = [Math.ceil(cableLoss(build, plan).total / LOSS_STEP), span(2), slice.length, build.blocks.length];
+        // EU lost in cables (in half-generator steps) first, so a bigger line wins only when it saves real power; then
+        // the shortest slice, the narrowest line, the fewest blocks.
+        const score = [Math.ceil(cableLoss(build, plan).total / LOSS_STEP), slice.length, span(2), build.blocks.length];
         if (!best || lessThan(score, best.score)) best = { build, score };
       }
     }

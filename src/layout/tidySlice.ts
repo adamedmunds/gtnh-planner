@@ -41,10 +41,12 @@ export interface TidyOptions {
   straight?: boolean;
   /** Join power (side-to-side bridges, the feed) in the service column before the pipes, so it gets the room. */
   powerFirst?: boolean;
+  /** How many copies of the slice the line has (to share each machine group's average use out per machine). */
+  copies?: number;
 }
 
 export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: TidyOptions = {}): TidySlice | { fail: string } {
-  const { serviceWidth = 1, straight = false, powerFirst = false } = opts;
+  const { serviceWidth = 1, straight = false, powerFirst = false, copies = 1 } = opts;
   const C = arr.columns;
   const L = C + serviceWidth;
   const svc = (x: number) => x >= C;
@@ -160,6 +162,14 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
   // A side with machines but no generators of its own takes power across the service column (same voltage only).
   const bridge = gens.length > 0 && [-1, 1].some((side) => consumers.some((u) => u.pos[2] === side) && !gens.some((g) => g.pos[2] === side));
   if (bridge && new Set(sideTier.values()).size > 1) return fail('one side has no generators and runs a different voltage from the other');
+  // Each side's generators must cover what its machines use on average (both sides together when bridged).
+  const avg = (u: Placed) => (u.pm!.avgEut ?? u.pm!.eut * u.pm!.count * copies) / (u.pm!.count * copies);
+  const genEut = gens[0]?.pm?.eut ?? 0;
+  for (const side of bridge ? [0] : [-1, 1]) {
+    const users = consumers.filter((u) => !side || u.pos[2] === side);
+    const makers = gens.filter((g) => !side || g.pos[2] === side);
+    if (gens.length && users.length && users.reduce((s, u) => s + avg(u), 0) > makers.length * genEut + 1e-9) return fail('not enough generators on one side');
+  }
   const feedStubs: Vec3[] = [];
   for (const [side, tier] of sideTier) {
     const step = TIERS.indexOf(supply) - TIERS.indexOf(tier);
@@ -208,6 +218,32 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     // Machines at the supply voltage with no generators here: a feed stub joins their run.
     if (!gens.length && step === 0) feedStubs.push([0, 1, 2 * side]);
   }
+  // Cut power cable that powers nothing: a run block with no machine of its own and at most one neighbour in its run
+  // (a cable or a transformer of its voltage), over and over until none is left.
+  for (let cut = true; cut; ) {
+    cut = false;
+    for (const [k, id] of [...cellNet]) {
+      const net = localPower.get(id);
+      const p = cellPos.get(k)!;
+      if (!net || p[0] >= C) continue;
+      const powers = [0, 2].some((y) => {
+        const m = unitAt.get(posKey([p[0], y, p[2]]));
+        return !!m && consumers.includes(m);
+      });
+      if (powers) continue;
+      const along = [4, 5].filter((side) => {
+        const nk = posKey(addVec(p, DIRS[side]));
+        return cellNet.get(nk) === id || unitAt.get(nk)?.transformer?.to === net.tier;
+      }).length;
+      if (along > 1) continue;
+      cellNet.delete(k);
+      cellPos.delete(k);
+      for (const a of [...routed.attach]) if (a.startsWith(`${k}>`)) routed.attach.delete(a);
+      routed.ends = routed.ends.filter((e) => posKey(e.cell) !== k);
+      cut = true;
+    }
+  }
+
   // The feed from the core (slices without generators): along z = 3 or -3, a stub to each transformer or run.
   if (feedNet) {
     for (const side of new Set(feedStubs.map((c) => Math.sign(c[2])))) {
