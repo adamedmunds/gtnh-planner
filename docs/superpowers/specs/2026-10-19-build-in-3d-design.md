@@ -149,3 +149,25 @@ My calls (the user can override):
   schematic; Ctrl+Z restores the previous build.
 - In game (the user): load the exported schematic in `GT_New_Horizons_2.9.0-RC-1`, build one slice + core, confirm
   berries → Light Fuel flows; paste a second slice and confirm it connects.
+
+## Refinements after the first preview (2026-10-19, decided by the user)
+
+After trying Build in 3D on the dev server the user asked for:
+
+1. **More compact layouts.** "A lot of empty space … a lot of places where I [could] compact things." Keep the
+   approved shape (walkway, machines two high, copy-paste slices) but drop the waste: shared lanes directly behind /
+   under / over the machines instead of 3–4 blocks out, no gap column after every machine column, a tighter core and
+   markers. Smallest footprint that still passes the build checker.
+2. **Cable loss.** GregTech cables lose EU per block for every amp they carry (Tin 1, Copper 2, Annealed Copper 1,
+   Gold 2, Electrum 1, Silver 1 — GT LoaderMetaPipeEntities). Cables come in 1x, 2x, 4x, 8x, 12x and 16x; amps scale
+   with size, loss per block doesn't (e.g. 4x Copper = 4 A of MV at 2 EU/block). Choose the cable by: voltage tier ≥
+   the network's, enough amps in one cable (pick the size), then the lowest loss. Keep power runs short (generators and
+   transformers next to what they feed). Count the EU lost along each run in the power budget (generators) and show
+   it in the line notes.
+3. **See what's in each pipe** — all three of:
+   - **Floating icons** over each pipe run (item/fluid icon from the game; a power symbol with the voltage for
+     cables), about once per slice, with a toolbar toggle "Show what's in pipes".
+   - **Hover to highlight**: pointing at a pipe lights up its whole network (pipes and the machines it connects) and
+     the info panel says what it carries, how much per second, and which pipe it is.
+   - **A legend in the line notes** listing every network with its icon; clicking one highlights it in 3D.
+   Generated pipes and cables remember what they carry (saved with the build).
