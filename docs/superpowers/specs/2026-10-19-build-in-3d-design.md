@@ -296,3 +296,18 @@ power apart, forcing a generator per side or an LV bridge over it). Tidy lines d
   into its transformer from the row below or above.
 - Output runs on the outer backs, input runs under and over, as before: about 4 wide, 5 tall.
 - The old walkway layouts remain only as the fallback.
+
+### Generators matched to each machine's voltage (2026-10-19, decided by the user)
+
+"is there any way to add multiple generator tiers … if one area only requires 1 Amp of LV 1 LV gen, and others 1 Amp of
+HV 1 hv gen". Decided: keep one generator box (one fuel) with a switch **Generators: one tier / match each machine's
+voltage**. With "match", the line uses a generator of every voltage its machines need, burning that fuel, sized per
+voltage (the card lists each voltage's generator and count).
+
+My calls:
+- The Calculator tracks power per voltage. Machines draw at their own voltage; generators give at theirs; a higher
+  voltage may step down to a lower one (a transformer), never up. Power a line can't make at some voltage is shown as
+  coming from outside at that voltage (so an HV machine with only MV generators is no longer silently "covered").
+- With "match", a voltage the fuel has no generator for uses the next generator up (stepped down).
+- The layout gives each slice and the core generators of each voltage their machines use, each pushing into that
+  voltage's power; the planner and checker treat each voltage's generators as that voltage's source.
