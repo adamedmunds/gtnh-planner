@@ -124,6 +124,13 @@ test('cables are sized for what they carry: 1x from the core generator, 4x from 
   expect(kinds((b) => !!b.net?.startsWith('p:LV'))).toEqual(['tin_cable_4x']);
 });
 
+test('no detours: the oil line stays within its known-good pipe and cable counts', () => {
+  // Guards the tidy-up pass that re-routes each network once everything is in place (pipes dipped a block too far).
+  const count = (pred: (b: PlacedBlock) => boolean) => line.blocks.filter(pred).length;
+  expect(count((b) => b.key === 'bronze_pipe_small')).toBeLessThanOrEqual(151);
+  expect(count((b) => !!b.net?.startsWith('p:MV'))).toBeLessThanOrEqual(4);
+});
+
 test('the oil line fits the tidy cross-section and says what to dig', () => {
   const span = (a: number) => Math.max(...line.blocks.map((b) => b.pos[a])) - Math.min(...line.blocks.map((b) => b.pos[a])) + 1;
   expect(span(2)).toBeLessThanOrEqual(7);

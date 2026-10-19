@@ -227,6 +227,28 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
     ...goods.filter((n) => region.lanes.has(n.id)),
     ...nets.filter((n) => n.kind === 'cable').reverse(),
   ];
+  /** Cells a route for `n` may not use: blocks, other networks, the walkway, kept-clear cells, other voltages. */
+  const blockedFor = (n: Net) => {
+    const blocked = new Set<string>(occupied.keys());
+    for (const [k, id] of netOf) if (id !== n.id) blocked.add(k);
+    if (region.walkway !== false) for (let x = region.min[0]; x <= region.max[0]; x++) for (const y of [0, 1]) blocked.add(posKey([x, y, 0]));
+    for (const k of region.keepClear ?? []) blocked.add(k);
+    // A cable never runs beside a cable of another voltage or a higher-voltage transformer: GT cables join whatever
+    // they're placed against, so touching is a burn risk when building by hand.
+    if (n.kind === 'cable') {
+      const apart = (c: Vec3) => DIRS.forEach((d) => {
+        const k = posKey(addVec(c, d));
+        if (netOf.get(k) !== n.id) blocked.add(k);
+      });
+      for (const [k, id] of netOf) {
+        const other = nets.find((x) => x.id === id);
+        if (other?.kind === 'cable' && other.tier !== n.tier) apart(routed.cells.get(k)?.pos ?? (k.split(',').map(Number) as unknown as Vec3));
+      }
+      for (const u of region.units) if (u.transformer && TIERS.indexOf(u.transformer.to) > TIERS.indexOf(n.tier!)) apart(u.pos);
+    }
+    return blocked;
+  };
+  const done: { n: Net; ends: Vec3[]; lanes: Vec3[][] }[] = [];
   for (const n of order) {
     const ends = n.kind === 'cable'
       ? powerEnds(n)
@@ -245,23 +267,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
     }
     const stuck = terminals.findIndex((t) => !t.length);
     if (stuck >= 0) return { fail: `no free face on the ${ends[stuck - lanes.length]?.u.name ?? 'line'} for ${n.name}` };
-    const blocked = new Set<string>(occupied.keys());
-    for (const [k, id] of netOf) if (id !== n.id) blocked.add(k);
-    if (region.walkway !== false) for (let x = region.min[0]; x <= region.max[0]; x++) for (const y of [0, 1]) blocked.add(posKey([x, y, 0]));
-    for (const k of region.keepClear ?? []) blocked.add(k);
-    // A cable never runs beside a cable of another voltage or a higher-voltage transformer: GT cables join whatever
-    // they're placed against, so touching is a burn risk when building by hand.
-    if (n.kind === 'cable') {
-      const apart = (c: Vec3) => DIRS.forEach((d) => {
-        const k = posKey(addVec(c, d));
-        if (netOf.get(k) !== n.id) blocked.add(k);
-      });
-      for (const [k, id] of netOf) {
-        const other = nets.find((x) => x.id === id);
-        if (other?.kind === 'cable' && other.tier !== n.tier) apart(routed.cells.get(k)?.pos ?? (k.split(',').map(Number) as unknown as Vec3));
-      }
-      for (const u of region.units) if (u.transformer && TIERS.indexOf(u.transformer.to) > TIERS.indexOf(n.tier!)) apart(u.pos);
-    }
+    const blocked = blockedFor(n);
     // Steer clear of machine faces and of the cells around other machines' output faces, so no output gets boxed in.
     const avoid = new Set<string>();
     for (const u of region.units) {
@@ -283,6 +289,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
       netOf.set(posKey(c), n.id);
       routed.cells.set(posKey(c), { pos: c, net: n.id });
     }
+    done.push({ n, ends: res.chosen.slice(lanes.length), lanes });
     ends.forEach(({ u, mode }, i) => {
       const cell = res.chosen[i + lanes.length];
       routed.attach.add(`${posKey(cell)}>${posKey(u.pos)}`);
@@ -294,6 +301,33 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
         routed.notes.push(`Put a ${kind} cover on the ${SIDE_NAME[side]} of the ${u.name} at (${u.pos.join(', ')}), set to export, so ${n.name} goes into its own pipe.`);
       }
     });
+  }
+
+  // Tidy-up: re-route each network on its own between the same end blocks, now that everything else is in place and
+  // without the push away from machine faces (which made early routes dip round later ones); keep it if shorter.
+  for (let round = 0, shorter = true; shorter && round < 3; round++) {
+  shorter = false;
+  for (const { n, ends: endCells, lanes } of done) {
+    const fixed = new Set([...lanes.flat(), ...endCells].map(posKey));
+    const old = [...routed.cells].filter(([k, c]) => c.net === n.id && !fixed.has(k)).map(([k]) => k);
+    if (!old.length) continue;
+    for (const k of old) netOf.delete(k);
+    let res;
+    try {
+      res = routeNetwork({ terminals: [...lanes, ...endCells.map((c) => [c])], blocked: blockedFor(n), bendPenalty: region.bendPenalty, bounds: { min: region.min, max: region.max } });
+    } catch {
+      res = undefined;
+    }
+    const added = res ? res.cells.filter((c) => !fixed.has(posKey(c))) : [];
+    if (res && added.length < old.length) {
+      for (const k of old) routed.cells.delete(k);
+      for (const c of added) {
+        netOf.set(posKey(c), n.id);
+        routed.cells.set(posKey(c), { pos: c, net: n.id });
+      }
+      shorter = true;
+    } else for (const k of old) netOf.set(k, n.id);
+  }
   }
 
   // Machines with nothing to push out still need an output side: any free side but the front.

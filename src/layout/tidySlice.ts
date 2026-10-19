@@ -479,6 +479,8 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     }
     return out;
   };
+  /** Blocks each network's joins added (re-routed below once everything is in place). */
+  const joined = new Map<string, Set<string>>();
   const join = (id: string, extra: Vec3[][] = []): Vec3[] | { fail: string } => {
     // Through-runs are joined in the core, so together they count as one end here.
     const runs = throughRuns.get(id) ?? [];
@@ -491,7 +493,12 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     for (const k of keepApart(id)) others.add(k);
     try {
       const res = routeNetwork({ terminals, blocked: others, bounds, canStep, bendPenalty: BEND_PENALTY });
-      for (const c of res.cells) put(c, id);
+      const mine = joined.get(id) ?? new Set<string>();
+      for (const c of res.cells) {
+        if (!cellNet.has(posKey(c))) mine.add(posKey(c));
+        put(c, id);
+      }
+      joined.set(id, mine);
       return res.chosen;
     } catch {
       return fail(`no room to join the ${byId.get(id)?.name ?? id} runs`);
@@ -507,6 +514,34 @@ export function tidySlice(arr: Arrangement, nets: Net[], plan: LinePlan, opts: T
     if ('fail' in r) return r;
   }
 
+  // Tidy-up: join each network again on its own, now that everything else is in place; keep it if shorter.
+  for (let round = 0, shorter = true; shorter && round < 3; round++) {
+    shorter = false;
+    for (const [id, cells] of [...joined]) {
+      const served = new Set([...routed.attach].map((a) => a.split('>')[0]));
+      const old = [...cells].filter((k) => cellNet.get(k) === id && !served.has(k));
+      if (!old.length) continue;
+      const saved = old.map((k) => [k, cellPos.get(k)!] as const);
+      for (const k of old) {
+        cellNet.delete(k);
+        cellPos.delete(k);
+      }
+      joined.set(id, new Set());
+      const r = join(id);
+      const added = joined.get(id)!;
+      if ('fail' in r || added.size >= old.length) {
+        for (const k of added) {
+          cellNet.delete(k);
+          cellPos.delete(k);
+        }
+        for (const [k, pos] of saved) {
+          cellNet.set(k, id);
+          cellPos.set(k, pos);
+        }
+        joined.set(id, new Set(old));
+      } else shorter = true;
+    }
+  }
   itemFilters(routed, allNets);
 
   const sliceAmps = consumers.reduce((s, u) => s + Math.max(1, Math.ceil((u.pm?.eut ?? 0) / VOLTAGE[u.tier as PowerTier] - 1e-9)), 0);
