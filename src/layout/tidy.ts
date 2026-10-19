@@ -12,23 +12,24 @@ import {
   powerNets,
   routeRegion,
   transformersFor,
+  TIERS,
   unitBlock,
-  withFront,
   type Net,
   type Placed,
   type Region,
   type Unit,
 } from './region';
-import { ROWS, arrangeRows, type Arrangement } from './tidyRows';
+import { arrangeRows } from './tidyRows';
 import { TIDY_BOUNDS, tidySlice, type TidySlice } from './tidySlice';
-import type { GeneratedLine, LinePlan, PlanMachine } from './types';
+import type { GeneratedLine, LinePlan, PlanMachine, PowerTier } from './types';
 
-export const FLOOR_NOTE = 'The floor pipes sit one block below the walkway: dig one layer for them';
+export const FLOOR_NOTE = 'The floor pipes sit one block below the machines: dig one layer for them';
+const FRONT_NOTE = 'Place every machine with its front (the face with its picture) against the machine facing it, then wrench its output to the side shown in the 3D view. There is no walkway: GT machines open from any face, so reach them from outside.';
 export const UNTIDY_NOTE = "Couldn't keep this line tidy, so some pipes take detours";
 
 /** Row arrangements tried per line, best first. */
 const ARRANGEMENTS_TRIED = 8;
-const CORE_WIDEN_TRIES = 12;
+const CORE_WIDEN_TRIES = 6;
 const BEND_PENALTY = 2;
 /** EU/t of cable loss that counts as a real difference between two layouts (half an MV generator). */
 const LOSS_STEP = 64;
@@ -64,37 +65,33 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
   const nets = [...planNets(plan, netWarnings), ...powerNets(plan, everyMachine, countTransformers(transformersFor(coreMachines, source)), netWarnings)];
 
   let best: { build: Build; score: number[] } | undefined;
-  // The slice's generators as one kind, or split in two so each side can have its own (no power across the walkway).
-  const rowGen = rows.find((m) => m.generator);
-  const variants: { rows: PlanMachine[]; perSide: boolean }[] = [{ rows, perSide: false }];
-  if (rowGen) {
-    const total = Math.max(rowGen.count, 2);
-    for (let a = 1; a <= total / 2; a++) {
-      variants.push({ rows: [...rows.filter((m) => m !== rowGen), { ...rowGen, count: a }, { ...rowGen, count: total - a }], perSide: true });
-    }
-  }
-  const eachSidePowered = (arr: Arrangement) => [-1, 1].every((side) => {
-    const here = arr.stretches.filter((st) => ROWS[st.row].side === side);
-    return !here.some((st) => !st.machine.generator) || here.some((st) => st.machine.generator);
-  });
-  const arrangements = variants.flatMap((v) =>
-    arrangeRows(v.rows, undefined, v.perSide).filter((arr) => !v.perSide || eachSidePowered(arr)).slice(0, ARRANGEMENTS_TRIED));
+  // The shortest arrangements, and those that keep every row to one kind (every run straight through).
+  const arrangements = [...arrangeRows(rows).slice(0, ARRANGEMENTS_TRIED), ...arrangeRows(rows, undefined, true).slice(0, ARRANGEMENTS_TRIED)];
+  const genRole = [...rows, ...oneOffs].find((m) => m.generator)?.nodeId;
+  // The core only sees where the slices' through-runs enter it: one that can't be routed for a set of entries can't for
+  // any slice with the same entries.
+  const coreFails = new Set<string>();
+  const entries = (slice: TidySlice) => [...slice.throughRuns]
+    .map(([id, runs]) => `${id}:${runs.map((r) => `${r[0][1]},${r[0][2]}`).sort().join(';')}`).sort().join('|');
   for (const arr of arrangements) {
     for (const serviceWidth of [1, 2]) {
       for (const powerFirst of [true, false]) {
         const slice = tidySlice(arr, nets, plan, { serviceWidth, straight, powerFirst, copies: copies.left + copies.right });
-        if ('fail' in slice) continue;
+        if ('fail' in slice || coreFails.has(entries(slice))) continue;
         const build = withCore(plan, name, slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings]);
+        if (!build) coreFails.add(entries(slice));
         if (!build || checkLine(build, plan).length) continue;
         const span = (a: number) => Math.max(...build.blocks.map((b) => b.pos[a])) - Math.min(...build.blocks.map((b) => b.pos[a])) + 1;
-        // EU lost in cables (in half-generator steps) first, so a bigger line wins only when it saves real power; then
-        // the shortest slice, the narrowest line, the fewest blocks.
-        const score = [Math.ceil(cableLoss(build, plan).total / LOSS_STEP), slice.length, span(2), build.blocks.length];
+        // Fewest generators; then EU lost in cables (in half-generator steps); then the shortest line, the narrowest,
+        // the fewest blocks.
+        const generators = build.blocks.filter((b) => b.role === genRole).length;
+        const score = [generators, Math.ceil(cableLoss(build, plan).total / LOSS_STEP), span(0), span(2), build.blocks.length];
         if (!best || lessThan(score, best.score)) best = { build, score };
       }
     }
   }
   if (!best) return undefined;
+  best.build.notes = (best.build.notes ?? []).map((n) => (n.startsWith('Place every machine with its front') ? FRONT_NOTE : n));
   // Say so when the line has more generators than the Calculator counted (each region powers itself).
   const gen = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])].find((m) => m.generator);
   if (gen) {
@@ -110,7 +107,12 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[]): Bui
   return best.build;
 }
 
-const ROW_SPOTS: readonly [number, number][] = [[0, -1], [0, 1], [2, -1], [2, 1]];
+/** Machine spots in a core column: (y, z) of the lower and upper rows of both columns. */
+const ROW_SPOTS: readonly [number, number][] = [[0, 0], [0, 1], [2, 0], [2, 1]];
+/** A core machine's front faces the other column (fronts take nothing in, and stay clear). */
+const facingInward = (u: Placed): Placed =>
+  u.pm && !u.pm.generator && !u.pm.multiblock && !u.transformer ? { ...u, mainFacing: u.pos[2] <= 0 ? 3 : 2 } : u;
+const inBounds = (c: Vec3) => c[1] >= TIDY_BOUNDS.yMin && c[1] <= TIDY_BOUNDS.yMax && c[2] >= TIDY_BOUNDS.zMin && c[2] <= TIDY_BOUNDS.zMax;
 
 /**
  * Core machines every other column, each at whichever of its column's four row spots leaves it the most free faces
@@ -119,7 +121,7 @@ const ROW_SPOTS: readonly [number, number][] = [[0, -1], [0, 1], [2, -1], [2, 1]
  */
 function placeTidyCore(units: Unit[], start: number, length: number, side: (u: Unit) => -1 | 1, taken: Set<string>): Placed[] | undefined {
   const placed: Placed[] = [];
-  const free = (c: Vec3) => !taken.has(posKey(c)) && !(c[2] === 0 && c[1] <= 1) && c[1] >= TIDY_BOUNDS.yMin && c[1] <= TIDY_BOUNDS.yMax;
+  const free = (c: Vec3) => !taken.has(posKey(c)) && inBounds(c);
   const faces = (p: Vec3) => DIRS.filter((d) => free(addVec(p, d))).length;
   const put = (u: Unit, pos: Vec3) => {
     placed.push({ ...u, pos });
@@ -131,7 +133,8 @@ function placeTidyCore(units: Unit[], start: number, length: number, side: (u: U
     const spots = ROW_SPOTS.map(([y, z]): Vec3 => [x, y, z]).filter(free);
     if (!spots.length) return undefined;
     // Most free faces; then the side with fewer core machines (so one side doesn't crowd); then low; then its side.
-    spots.sort((a, b) => faces(b) - faces(a) || perSide(a[2]) - perSide(b[2]) || a[1] - b[1] || (a[2] === side(u) ? -1 : 0) - (b[2] === side(u) ? -1 : 0));
+    const own = side(u) < 0 ? 0 : 1;
+    spots.sort((a, b) => faces(b) - faces(a) || perSide(a[2]) - perSide(b[2]) || a[1] - b[1] || (a[2] === own ? -1 : 0) - (b[2] === own ? -1 : 0));
     put(u, spots[0]);
   }
   // A transformer gives its lower voltage on every face but its input, so it may touch only machines of that voltage.
@@ -168,7 +171,10 @@ function powerEachRegion(plan: LinePlan, rows: PlanMachine[], oneOffs: PlanMachi
   const need = (eu: number) => (eu > 0 ? Math.ceil((eu * GENERATOR_MARGIN) / gen.eut - 1e-9) : 0);
   const planned = [...rows, ...oneOffs].filter((m) => m.generator).reduce((s, m) => s + m.count * (rows.includes(m) ? copies : 1), 0);
   const inRows = rows.some((m) => m.generator);
-  const perSlice = inRows ? need(uses(rows, copies)) : 0;
+  // A transformer gives 4 A of the lower voltage: one generator (through one transformer) per 4 machines a step down.
+  const stepDown = rows.some((m) => !m.generator && m.tier && TIERS.indexOf(m.tier as PowerTier) < TIERS.indexOf(gen.tier as PowerTier));
+  const machinesPerSlice = rows.filter((m) => !m.generator && !m.multiblock).reduce((s, m) => s + m.count, 0);
+  const perSlice = inRows ? Math.max(need(uses(rows, copies)), stepDown ? Math.ceil(machinesPerSlice / 4) : 0) : 0;
   const coreOwn = need(uses(oneOffs, 1) + (inRows ? 0 : uses(rows, copies) * copies));
   // Generators added to the plan for cable loss stay in the core.
   const core = Math.max(coreOwn, planned - perSlice * copies);
@@ -196,7 +202,7 @@ function withCore(
   const coreSide = (u: Unit): -1 | 1 => {
     const uses = (z: number) => [...slice.throughRuns].filter(([id, runs]) => {
       const n = coreNets.find((x) => x.id === id);
-      return n && (n.producers.has(u.role) || n.consumers.has(u.role)) && runs.some((r) => Math.sign(r[0][2]) === z);
+      return n && (n.producers.has(u.role) || n.consumers.has(u.role)) && runs.some((r) => (r[0][2] <= 0 ? -1 : 1) === z);
     }).length;
     return uses(1) > uses(-1) ? 1 : -1;
   };
@@ -210,31 +216,30 @@ function withCore(
     // line); the core joins them, straight where it can and around the core machines where it must.
     const ends = (r: Vec3[]): Vec3[][] => [...(copies.left ? [[[coreMin, r[0][1], r[0][2]] as Vec3]] : []), [[-1, r[0][1], r[0][2]]]];
     const lanes = new Map([...slice.throughRuns].map(([id, runs]) => [id, runs.flatMap(ends)]));
-    const keepClear = new Set(Array.from({ length: C }, (_, k) => posKey([coreMin + k, -1, 0])));
+    const keepClear = new Set<string>();
     const taken = new Set([...keepClear, ...[...lanes.values()].flat(2).map(posKey)]);
     // A marker sits right beside the through-run it fills or empties (no pipe needed), else in the end column.
     const corePlaced: Placed[] = [];
-    const roomy = (c: Vec3) => !taken.has(posKey(c)) && !(c[2] === 0 && c[1] <= 1) && c[0] >= coreMin && c[0] < 0 &&
-      c[1] >= TIDY_BOUNDS.yMin && c[1] <= TIDY_BOUNDS.yMax && Math.abs(c[2]) <= TIDY_BOUNDS.zMax;
+    const roomy = (c: Vec3) => !taken.has(posKey(c)) && c[0] >= coreMin && c[0] < 0 && inBounds(c);
     for (const [i, u] of markers.entries()) {
       const net = coreNets.find((n) => n.producers.has(u.role) || n.consumers.has(u.role));
       const beside = (lanes.get(net?.id ?? '') ?? []).flat()
         .flatMap((c) => DIRS.map((d) => addVec(c, d)))
         .filter(roomy)
         .sort((a, b) => a[0] - b[0])[0];
-      const end = Array.from({ length: 8 }, (_, k): Vec3 => [coreMin + Math.floor(k / 4), [0, 0, 2, 2][k % 4], [-1, 1, -1, 1][k % 4]]).find(roomy);
-      const pos = beside ?? end ?? [coreMin, 0, i % 2 ? 1 : -1];
+      const end = Array.from({ length: 8 }, (_, k): Vec3 => [coreMin + Math.floor(k / 4), ROW_SPOTS[k % 4][0], ROW_SPOTS[k % 4][1]]).find(roomy);
+      const pos = beside ?? end ?? [coreMin, 0, i % 2];
       corePlaced.push({ ...u, pos });
       taken.add(posKey(pos));
     }
     const core = placeTidyCore(coreUnits, coreMin + markerColumns, C - markerColumns, coreSide, taken);
     if (!core) continue;
-    corePlaced.push(...core.map(withFront));
-    // Nothing goes in front of a core machine (upper-row fronts face open air above the walkway).
+    corePlaced.push(...core.map(facingInward));
+    // Nothing goes in front of a core machine.
     for (const u of corePlaced) if (u.mainFacing !== undefined) keepClear.add(posKey(addVec(u.pos, DIRS[u.mainFacing])));
     const region: Region = {
-      name: 'core', units: corePlaced, min: [coreMin, TIDY_BOUNDS.yMin, -TIDY_BOUNDS.zMax], max: [-1, TIDY_BOUNDS.yMax, TIDY_BOUNDS.zMax],
-      lanes, keepClear, bendPenalty: BEND_PENALTY,
+      name: 'core', units: corePlaced, min: [coreMin, TIDY_BOUNDS.yMin, TIDY_BOUNDS.zMin], max: [-1, TIDY_BOUNDS.yMax, TIDY_BOUNDS.zMax],
+      lanes, keepClear, bendPenalty: BEND_PENALTY, walkway: false,
     };
     const routed = routeRegion(region, coreNets, plan, true);
     if ('fail' in routed) continue;
@@ -259,7 +264,7 @@ function withCore(
     const perMarker = per && plan.markers.find((m) => m.key === per.key);
     const generated: GeneratedLine | undefined = plan.style === 'straight' ? undefined : {
       style: 'modular', sliceLength: L, sliceCount: plan.sliceCount, left, right, leftStart, rightStart: 0, template: slice.blocks,
-      serviceFrom: slice.serviceFrom,
+      serviceFrom: slice.serviceFrom, walkway: false,
       ...(sliceCovers.length ? { templateCovers: sliceCovers } : {}),
       ...(plan.coreServes !== undefined ? { coreServes: plan.coreServes } : {}),
       ...(per && perNet ? { inputsPerSlice: { key: per.key, name: perNet.name, kind: perMarker?.kind === 'fluid' ? 'fluid' : 'item', amount: per.amount } } : {}),

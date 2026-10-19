@@ -26,7 +26,7 @@ test('oil line (modular) passes the checker', async () => {
   expect(b.combustion_generator_mv).toBeGreaterThanOrEqual(6); // more when cable loss needs them
   expect(build.generated).toMatchObject({ style: 'modular', sliceCount: 6 });
   expect(build.generated!.left + build.generated!.right).toBe(6);
-  for (const blk of build.blocks) expect(blk.pos[2] === 0 && (blk.pos[1] === 0 || blk.pos[1] === 1)).toBe(false);
+  expect(build.generated?.walkway).toBe(false); // tidy lines: the machine columns touch
 });
 
 test("a line that fits says nothing about the forms it tried first, and no note twice", async () => {
@@ -85,16 +85,16 @@ test('pipe and cable sizes follow the flow', () => {
 });
 
 describe('things a player has to know to build it', () => {
-  test('every machine faces the walkway and outputs elsewhere', async () => {
+  test('every machine faces the machine across from it and outputs elsewhere', async () => {
     const p = await plan(reference());
     const { build } = buildLine(p, 'Light Fuel line');
     const machines = build.blocks.filter((b) => /fluid_extractor|distillery|chemical_reactor|electrolyzer/.test(b.key));
     for (const m of machines) {
-      expect(m.mainFacing).toBe(m.pos[2] < 0 ? 3 : 2);
+      expect(m.mainFacing).toBe(m.pos[2] <= 0 ? 3 : 2);
       expect(m.facing).not.toBe(m.mainFacing);
     }
     expect(checkLine(build, p)).toEqual([]);
-    expect(build.notes?.join(' ')).toMatch(/front .*walkway/i);
+    expect(build.notes?.join(' ')).toMatch(/front .*against the machine facing it/i);
   });
 
   test('notes say to turn on auto-output and which programmed circuit each machine needs', async () => {

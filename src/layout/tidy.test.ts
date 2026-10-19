@@ -23,7 +23,7 @@ beforeAll(async () => {
 });
 
 const isConduit = (b?: PlacedBlock) => !!b && ['cable', 'fluidPipe', 'itemPipe'].includes(CATALOG.get(b.key)!.kind);
-const isFeed = (b: PlacedBlock) => b.pos[1] === 1 && Math.abs(b.pos[2]) === 2;
+const powerLink = (b: PlacedBlock, n: PlacedBlock) => !!b.net?.startsWith('p:') && !!n.net?.startsWith('p:') && b.pos[0] === n.pos[0];
 
 /** Where each slice's machine columns are (outside them: service columns and the core). */
 function inMachineColumns(build: Build, x: number): boolean {
@@ -45,7 +45,7 @@ test('the oil line is tidy: passes the checker, straight runs outside service co
     DIRS.forEach((d, side) => {
       if (side >= 4 || !((masks.get(posKey(b.pos)) ?? 0) & (1 << side))) return;
       const n = cells.get(posKey(addVec(b.pos, d)));
-      const ok = (n && !isConduit(n)) || (n && (isFeed(b) || isFeed(n)) && b.net?.startsWith('p:') && n.net?.startsWith('p:'));
+      const ok = (n && !isConduit(n)) || (n && powerLink(b, n));
       expect(ok, `${b.key} at ${b.pos} connects ${side} to ${n?.key}`).toBe(true);
     });
   }
@@ -56,13 +56,13 @@ test('the modular oil line loses under 20% of what it uses in its cables', () =>
   expect(cableLoss(line, plan).total).toBeLessThan(0.2 * demand);
 });
 
-test('each side of a slice has its own generator: no power crosses the walkway', () => {
+test('one MV generator per 4 LV machines in a slice, each pushing straight into its transformer', () => {
   const t = line.generated!.template;
-  expect(t.some((b) => b.net?.startsWith('p:') && b.pos[2] === 0)).toBe(false);
-  for (const side of [-1, 1]) {
-    const machines = t.filter((b) => Math.sign(b.pos[2]) === side && ['fluid_extractor_lv', 'distillery_lv'].includes(b.key));
-    if (machines.length) expect(t.some((b) => Math.sign(b.pos[2]) === side && b.key.startsWith('combustion_generator')), `side ${side}`).toBe(true);
-  }
+  const lv = t.filter((b) => ['fluid_extractor_lv', 'distillery_lv'].includes(b.key)).length;
+  const gens = t.filter((b) => b.key.startsWith('combustion_generator'));
+  expect(gens).toHaveLength(Math.ceil(lv / 4));
+  const at = new Map(t.map((b) => [posKey(b.pos), b]));
+  for (const g of gens) expect(at.get(posKey(addVec(g.pos, DIRS[g.facing!])))?.key).toBe('transformer_mv_lv');
 });
 
 test('no power cable is a dead end in the oil line', () => {
@@ -74,6 +74,39 @@ test('no power cable is a dead end in the oil line', () => {
       .filter(({ n, on }) => n && on);
     const powersMachine = links.some(({ n }) => !isConduit(n) && !n!.key.startsWith('transformer'));
     expect(powersMachine || links.length >= 2, `dead-end cable at ${c.pos}`).toBe(true);
+  }
+});
+
+test('no spare power cable: every cable that powers no machine is needed to reach one', () => {
+  const t = line.generated!.template;
+  const at = new Map(t.map((b) => [posKey(b.pos), b]));
+  const masks = computeConnections(t);
+  const isPower = (b?: PlacedBlock) => !!b && (!!b.net?.startsWith('p:') || b.key.startsWith('transformer'));
+  const machinesReached = (without?: string) => {
+    const seen = new Set<string>();
+    const stack = t.filter((b) => b.key.startsWith('transformer')).map((b) => posKey(b.pos));
+    const reached = new Set<string>();
+    while (stack.length) {
+      const k = stack.pop()!;
+      if (seen.has(k) || k === without) continue;
+      seen.add(k);
+      const b = at.get(k)!;
+      DIRS.forEach((d, side) => {
+        const nk = posKey(addVec(b.pos, d));
+        const n = at.get(nk);
+        if (!n) return;
+        const linked = b.key.startsWith('transformer') ? side !== b.facing : ((masks.get(k) ?? 0) >> side) & 1;
+        if (!linked) return;
+        if (isPower(n)) stack.push(nk);
+        else if (!isConduit(n) && !n.key.startsWith('combustion')) reached.add(nk);
+      });
+    }
+    return reached.size;
+  };
+  const all = machinesReached();
+  for (const c of t.filter((b) => b.net?.startsWith('p:'))) {
+    const powersMachine = DIRS.some((d) => { const n = at.get(posKey(addVec(c.pos, d))); return n && !isConduit(n) && !n.key.startsWith('transformer') && !n.key.startsWith('combustion'); });
+    if (!powersMachine) expect(machinesReached(posKey(c.pos)), `spare cable at ${c.pos}`).toBeLessThan(all);
   }
 });
 

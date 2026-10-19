@@ -77,3 +77,10 @@ test('grown slices keep their pipe networks', () => {
   expect(added.length).toBeGreaterThan(0);
   for (const b of added) expect(b.net).toBeDefined();
 });
+
+test('the one-slice hint lines up against a machine, not a walkway, on a line without one', () => {
+  expect(line.generated?.walkway).toBe(false);
+  const hint = sliceBuild(line).notes!.join(' ');
+  expect(hint).not.toMatch(/walkway/);
+  expect(hint).toMatch(/bottom row, north column/);
+});

@@ -264,8 +264,10 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
   const g = build.generated;
   if (g) {
     const xs = build.blocks.map((b) => b.pos[0]);
-    for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
-      for (const y of [0, 1]) if (cells.has(posKey([x, y, 0]))) problems.push(`Something is in the walkway at ${where([x, y, 0])}`);
+    if (g.walkway !== false) {
+      for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
+        for (const y of [0, 1]) if (cells.has(posKey([x, y, 0]))) problems.push(`Something is in the walkway at ${where([x, y, 0])}`);
+      }
     }
     if (g.style === 'modular') {
       const sig = (blocks: PlacedBlock[], x0: number) =>

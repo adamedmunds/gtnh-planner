@@ -59,6 +59,8 @@ export interface Region {
   keepClear?: Set<string>;
   /** Extra cost per bend, so routes come out straight (default 0). */
   bendPenalty?: number;
+  /** false: no walkway to keep clear (tidy lines). */
+  walkway?: boolean;
 }
 
 export interface Routed {
@@ -159,7 +161,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
   for (const [id, runs] of region.lanes) for (const c of runs.flat()) routed.cells.set(posKey(c), { pos: c, net: id });
   const usable = (c: Vec3, net: string) => {
     const k = posKey(c);
-    return inBounds(c) && !occupied.has(k) && !isWalkway(c) && !region.keepClear?.has(k) && (netOf.get(k) === undefined || netOf.get(k) === net);
+    return inBounds(c) && !occupied.has(k) && !(region.walkway !== false && isWalkway(c)) && !region.keepClear?.has(k) && (netOf.get(k) === undefined || netOf.get(k) === net);
   };
 
   const sourceNet = (t: PowerTier) => nets.find((n) => n.kind === 'cable' && n.tier === t)!;
@@ -232,7 +234,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
     if (stuck >= 0) return { fail: `no free face on the ${ends[stuck - lanes.length]?.u.name ?? 'line'} for ${n.name}` };
     const blocked = new Set<string>(occupied.keys());
     for (const [k, id] of netOf) if (id !== n.id) blocked.add(k);
-    for (let x = region.min[0]; x <= region.max[0]; x++) for (const y of [0, 1]) blocked.add(posKey([x, y, 0]));
+    if (region.walkway !== false) for (let x = region.min[0]; x <= region.max[0]; x++) for (const y of [0, 1]) blocked.add(posKey([x, y, 0]));
     for (const k of region.keepClear ?? []) blocked.add(k);
     // A cable never runs beside a cable of another voltage or a higher-voltage transformer: GT cables join whatever
     // they're placed against, so touching is a burn risk when building by hand.

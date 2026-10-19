@@ -85,6 +85,8 @@ export interface GeneratedLine {
   rightStart: number;
   /** Tidy lines: x (within a slice) of the first service column, where runs are joined. */
   serviceFrom?: number;
+  /** false: the line has no walkway (tidy lines: the machine columns touch). */
+  walkway?: boolean;
   /** Slice 0's blocks, relative to its own x = 0. */
   template: PlacedBlock[];
   /** Slice 0's covers and face settings, relative to its own x = 0. */

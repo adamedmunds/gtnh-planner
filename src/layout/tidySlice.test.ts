@@ -33,7 +33,7 @@ beforeAll(async () => {
 
 const at = (b: PlacedBlock[]) => new Map(b.map((x) => [posKey(x.pos), x]));
 const isConduit = (b?: PlacedBlock) => !!b && ['cable', 'fluidPipe', 'itemPipe'].includes(CATALOG.get(b.key)!.kind);
-const isFeed = (b: PlacedBlock) => b.pos[1] === 1 && Math.abs(b.pos[2]) === 2;
+const powerLink = (b: PlacedBlock, n: PlacedBlock) => !!b.net?.startsWith('p:') && !!n.net?.startsWith('p:') && b.pos[0] === n.pos[0];
 
 test('oil slice is tidy: outside the service column conduits connect only along x, to what they serve, or to the feed', () => {
   const cells = at(slice.blocks);
@@ -43,7 +43,7 @@ test('oil slice is tidy: outside the service column conduits connect only along 
     DIRS.forEach((d, side) => {
       if (side >= 4 || !((masks.get(posKey(b.pos)) ?? 0) & (1 << side))) return;
       const n = cells.get(posKey(addVec(b.pos, d)));
-      const ok = (n && !isConduit(n)) || (n && (isFeed(b) || isFeed(n)) && b.net?.startsWith('p:') && n.net?.startsWith('p:'));
+      const ok = (n && !isConduit(n)) || (n && powerLink(b, n));
       expect(ok, `${b.key} at ${b.pos} connects ${side} to ${n?.key}`).toBe(true);
     });
   }
@@ -63,12 +63,13 @@ test('every slice machine touches its input run, its output run and power', () =
   }
 });
 
-test('the slice fits the cross-section and keeps the walkway clear', () => {
+test('the slice fits the cross-section: machine columns at z 0 and 1, everything within z -2..3 and y -1..3', () => {
   for (const b of slice.blocks) {
-    expect(Math.abs(b.pos[2])).toBeLessThanOrEqual(3);
+    expect(b.pos[2]).toBeGreaterThanOrEqual(-2);
+    expect(b.pos[2]).toBeLessThanOrEqual(3);
     expect(b.pos[1]).toBeGreaterThanOrEqual(-1);
     expect(b.pos[1]).toBeLessThanOrEqual(3);
-    if (b.pos[2] === 0) expect(b.pos[1] >= 2 && b.pos[0] >= slice.serviceFrom, `${b.key} at ${b.pos}`).toBe(true);
+    if (CATALOG.get(b.key)!.kind === 'machine' && !b.key.startsWith('transformer')) expect([0, 1]).toContain(b.pos[2]);
   }
 });
 
