@@ -263,3 +263,24 @@ Looking down the walkway (z = 0, two blocks tall at y = 0..1), the same on both 
 - An HV-powered variant lays out (HV feed, HV→MV in the core or power runs, then MV→LV in the power runs).
 - A line that can't be tidy falls back with the note, and still passes the checker.
 - Screenshots before/after for the user, fresh schematics.
+
+### Power correction (2026-10-19, from the user after seeing it)
+
+The user: "the cables don't attach to all machines, the generators don't go into transformers. if you put MV amps
+through LV cables they'll burn". The tidy power layout put the LV power run right against the MV feed for its whole
+length and sometimes on an MV generator. GT cables join any other cable regardless of material, and with GT6-style
+cables (on in the user's config) a cable placed against something connects to it — so touching is a burn risk when
+building by hand, whatever our connection masks say. Decided (my calls within the user's three points):
+
+- **Nothing of a higher voltage touches a cable of a lower one**: no MV cable, MV generator output face or transformer
+  output face next to an LV cable, connected or not. The checker reports any such contact as a burn risk.
+- **Generators push straight into their transformer** (output face against the transformer's input face, no cable),
+  or straight into the power run when the side's machines run at the generator's voltage. A generator's output face
+  never touches anything else.
+- **Every slice powers itself**: its generators feed its own power run(s); the two sides' LV runs are joined by an LV
+  bridge in the service column when only one side has generators. The core gets its own generators. No long MV feed
+  when slices have their own generators.
+- When slices have no generators (power from outside), the feed runs at z = ±3 (not touching any power run) with a
+  one-block stub to each transformer's input face.
+- Machines that sit directly on a transformer take power from it (GT transformers power touching machines); every
+  other machine touches its power run.
