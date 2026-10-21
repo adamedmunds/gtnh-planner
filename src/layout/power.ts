@@ -28,10 +28,18 @@ export function cableFor(tier: PowerTier, needed: number): { key: string; warnin
   };
 }
 
-/** The smallest pipe that carries `flow` per second (litres for fluids, items for items). */
+/**
+ * The smallest pipe that carries `flow` per second (litres for fluids, items for items). Item pipes are all of the
+ * fastest material: it costs little more and never backs up.
+ */
 export function pipeFor(kind: 'fluid' | 'item', flow: number): { key: string; warning?: string } {
-  const pipes = CATALOG_ENTRIES.filter((e) => (kind === 'fluid' ? e.kind === 'fluidPipe' : e.kind === 'itemPipe'));
   const cap = (e: CatalogEntry) => (kind === 'fluid' ? e.pipeCapacity : e.itemCapacity) ?? 0;
+  const material = (e: CatalogEntry) => e.key.split('_item_pipe')[0];
+  let pipes = CATALOG_ENTRIES.filter((e) => (kind === 'fluid' ? e.kind === 'fluidPipe' : e.kind === 'itemPipe'));
+  if (kind === 'item') {
+    const fastest = material(pipes.reduce((a, b) => (cap(b) > cap(a) ? b : a)));
+    pipes = pipes.filter((e) => material(e) === fastest);
+  }
   const sorted = [...pipes].sort((a, b) => cap(a) - cap(b) || a.thickness! - b.thickness!);
   const fit = sorted.find((e) => cap(e) >= flow - 1e-9);
   if (fit) return { key: fit.key };

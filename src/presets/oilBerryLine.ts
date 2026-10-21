@@ -50,9 +50,9 @@ const FACING: Record<string, Facing> = {
 const PIPES = {
   oil: 'bronze_pipe_normal',
   sulfuric: 'bronze_pipe_normal',
-  berries: 'tin_item_pipe_normal',
+  berries: 'electrum_item_pipe_small',
   fuel: 'steel_pipe_small',
-  cells: 'tin_item_pipe_small',
+  cells: 'electrum_item_pipe_small',
 } as const;
 type Net = keyof typeof PIPES;
 

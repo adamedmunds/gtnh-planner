@@ -110,22 +110,24 @@ function fluidPipeEntries(): CatalogEntry[] {
   );
 }
 
-// GT ItemPipeBuilder: tiny, small, normal, ... in idList order.
+// GT ItemPipeBuilder: tiny, small, normal, ... in idList order. `huge`: its invSlotsForHugePipe, which sets every size's speed.
 const ITEM_PIPES = [
-  { base: 'tin', name: 'Tin', small: 5590, normal: 5591, meta: 7, color: '#dcdcdc' },
-  { base: 'electrum', name: 'Electrum', small: 5611, normal: 5612, meta: 6, color: '#ffff64' },
+  { base: 'tin', name: 'Tin', small: 5590, normal: 5591, meta: 7, color: '#dcdcdc', huge: 2 },
+  { base: 'electrum', name: 'Electrum', small: 5611, normal: 5612, meta: 6, color: '#ffff64', huge: 8 },
 ] as const;
+
+/** Items per second: GT moves max(huge / div, 1) stacks every max(div / huge, 1) seconds (div 8 small, 4 normal). */
+const itemsPerSecond = (huge: number, div: number) => (Math.max(Math.floor(huge / div), 1) * 64) / Math.max(Math.floor(div / huge), 1);
 
 function itemPipeEntries(): CatalogEntry[] {
   return ITEM_PIPES.flatMap((p) => [
-    { size: 'small', label: 'Small', mID: p.small, thickness: 0.375, icon: 'pipeSmall' },
-    { size: 'normal', label: 'Normal', mID: p.normal, thickness: 0.5, icon: 'pipeMedium' },
+    { size: 'small', label: 'Small', mID: p.small, thickness: 0.375, icon: 'pipeSmall', div: 8 },
+    { size: 'normal', label: 'Normal', mID: p.normal, thickness: 0.5, icon: 'pipeMedium', div: 4 },
   ].map((s): CatalogEntry => ({
     key: `${p.base}_item_pipe_${s.size}`,
     name: `${s.label} ${p.name} Item Pipe`,
     kind: 'itemPipe',
-    // GT item pipes move whole stacks; far more than any line's item flow.
-    itemCapacity: 64,
+    itemCapacity: itemsPerSecond(p.huge, s.div),
     mID: s.mID,
     meta: p.meta,
     group: 'Item pipes',

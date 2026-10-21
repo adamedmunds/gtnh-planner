@@ -65,7 +65,11 @@ test('HV power parts and new pipes', () => {
   expect(getEntry('stainless_steel_pipe_normal')).toMatchObject({ mID: 5142, kind: 'fluidPipe' });
   expect(getEntry('titanium_pipe_large')).toMatchObject({ mID: 5153, kind: 'fluidPipe' });
   expect(getEntry('bronze_pipe_small')!.pipeCapacity).toBe(120 * 2 * 20);
-  expect(getEntry('tin_item_pipe_small')!.itemCapacity).toBeGreaterThan(0);
+  // GT item pipes move a few stacks per so many ticks: Tin 1 stack per 4 s (small) / 2 s, Electrum 1 / 2 stacks per s.
+  expect(getEntry('tin_item_pipe_small')!.itemCapacity).toBe(16);
+  expect(getEntry('tin_item_pipe_normal')!.itemCapacity).toBe(32);
+  expect(getEntry('electrum_item_pipe_small')!.itemCapacity).toBe(64);
+  expect(getEntry('electrum_item_pipe_normal')!.itemCapacity).toBe(128);
 });
 
 test('markers', () => {
