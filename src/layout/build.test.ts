@@ -76,11 +76,17 @@ test('markers stand where things come in and go out', async () => {
 });
 
 test('pipe and cable sizes follow the flow', () => {
+  // Fluids: the cheapest metal that carries the flow (never plastic: hot fluids melt it), its smallest size that does.
   expect(pipeFor('fluid', 557).key).toBe('bronze_pipe_small');
-  // Item pipes are always the fastest material there is (Electrum), the smallest size that carries the flow.
-  expect(pipeFor('item', 5.57).key).toBe('electrum_item_pipe_small');
+  expect(pipeFor('fluid', 3000).key).toBe('bronze_pipe_large');
+  expect(pipeFor('fluid', 12000).key).toBe('steel_pipe_huge');
+  expect(pipeFor('fluid', 50000).warning).toMatch(/more than/);
+  // Items: Electrum, the smallest size that carries the flow.
+  expect(pipeFor('item', 5.57).key).toBe('electrum_item_pipe_tiny');
+  expect(pipeFor('item', 50).key).toBe('electrum_item_pipe_small');
   expect(pipeFor('item', 100).key).toBe('electrum_item_pipe_normal');
-  expect(pipeFor('item', 500).warning).toMatch(/more than/);
+  expect(pipeFor('item', 300).key).toBe('electrum_item_pipe_huge');
+  expect(pipeFor('item', 600).warning).toMatch(/more than/);
   expect(cableFor('LV', 3).key).toBe('tin_cable_4x');
   expect(cableFor('MV', 6).key).toBe('annealed_copper_cable_8x'); // lowest loss that carries 6 A of MV in one cable
   expect(cableFor('HV', 4).key).toBe('electrum_cable_2x');

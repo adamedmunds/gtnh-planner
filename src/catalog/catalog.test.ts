@@ -25,6 +25,21 @@ test.each([
   ['steel_pipe_large', 5133, 7, 'fluidPipe'],
   ['tin_item_pipe_small', 5590, 7, 'itemPipe'],
   ['electrum_item_pipe_normal', 5612, 6, 'itemPipe'],
+  // Every size GT makes; meta = 4 + the material's tool quality (0-3).
+  ['bronze_pipe_tiny', 5120, 6, 'fluidPipe'],
+  ['bronze_pipe_huge', 5124, 6, 'fluidPipe'],
+  ['copper_pipe_tiny', 5110, 5, 'fluidPipe'],
+  ['cast_iron_pipe_huge', 5264, 6, 'fluidPipe'],
+  ['plastic_pipe_normal', 5172, 5, 'fluidPipe'],
+  ['ptfe_pipe_large', 5683, 5, 'fluidPipe'],
+  ['tin_item_pipe_tiny', 5589, 7, 'itemPipe'],
+  ['tin_item_pipe_huge', 5593, 7, 'itemPipe'],
+  ['brass_item_pipe_huge', 5604, 5, 'itemPipe'],
+  ['electrum_item_pipe_large', 5613, 6, 'itemPipe'],
+  ['nickel_item_pipe_normal', 5700, 6, 'itemPipe'],
+  ['cobalt_item_pipe_large', 5711, 7, 'itemPipe'],
+  ['aluminium_item_pipe_huge', 5722, 6, 'itemPipe'],
+  ['pvc_item_pipe_normal', 5690, 5, 'itemPipe'],
   ['combustion_generator_mv', 1111, 1, 'machine'],
   ['transformer_mv_lv', 21, 1, 'machine'],
 ] as const)('%s has mID %i, meta %i, kind %s', (key, mID, meta, kind) => {
@@ -64,12 +79,19 @@ test('HV power parts and new pipes', () => {
   expect(getEntry('transformer_hv_mv')).toMatchObject({ mID: 22, kind: 'machine', tier: 'MV' });
   expect(getEntry('stainless_steel_pipe_normal')).toMatchObject({ mID: 5142, kind: 'fluidPipe' });
   expect(getEntry('titanium_pipe_large')).toMatchObject({ mID: 5153, kind: 'fluidPipe' });
-  expect(getEntry('bronze_pipe_small')!.pipeCapacity).toBe(120 * 2 * 20);
+  // GT fluid pipes: L/t of tiny base/6, small base/3, normal base, large 2x, huge 4x (Bronze base 120), shown per second.
+  expect(getEntry('bronze_pipe_tiny')!.pipeCapacity).toBe(400);
+  expect(getEntry('bronze_pipe_small')!.pipeCapacity).toBe(800);
+  expect(getEntry('bronze_pipe_normal')!.pipeCapacity).toBe(2400);
+  expect(getEntry('titanium_pipe_huge')!.pipeCapacity).toBe(38400);
   // GT item pipes move a few stacks per so many ticks: Tin 1 stack per 4 s (small) / 2 s, Electrum 1 / 2 stacks per s.
   expect(getEntry('tin_item_pipe_small')!.itemCapacity).toBe(16);
   expect(getEntry('tin_item_pipe_normal')!.itemCapacity).toBe(32);
   expect(getEntry('electrum_item_pipe_small')!.itemCapacity).toBe(64);
   expect(getEntry('electrum_item_pipe_normal')!.itemCapacity).toBe(128);
+  expect(getEntry('tin_item_pipe_tiny')!.itemCapacity).toBe(8);
+  expect(getEntry('electrum_item_pipe_huge')!.itemCapacity).toBe(512);
+  expect(getEntry('nickel_item_pipe_normal')!.itemCapacity).toBe(64);
 });
 
 test('markers', () => {

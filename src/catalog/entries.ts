@@ -78,29 +78,41 @@ const pipeTextures = (icon: string) => ({
   end: `blocks/materialicons/NONE/${icon}.png`,
 });
 
-// GT FluidPipeBuilder: tiny = start, small +1, normal +2, large +3. Meta = 4 + tool quality.
-// `base`: GT FluidPipeBuilder baseCapacity (L/t for a tiny pipe); sizes multiply it.
+// GT pipe sizes, in id order. Meta = 4 + the material's tool quality (0-3), from GT LoaderMetaPipeEntities.
+const PIPE_SIZES = [
+  { size: 'tiny', label: 'Tiny', thickness: 0.25, icon: 'pipeTiny' },
+  { size: 'small', label: 'Small', thickness: 0.375, icon: 'pipeSmall' },
+  { size: 'normal', label: 'Normal', thickness: 0.5, icon: 'pipeMedium' },
+  { size: 'large', label: 'Large', thickness: 0.75, icon: 'pipeLarge' },
+  { size: 'huge', label: 'Huge', thickness: 0.875, icon: 'pipeHuge' },
+] as const;
+
+// GT FluidPipeBuilder: tiny = start, small +1, ... huge +4. `capacity`: its baseCapacity, the normal pipe's L/t.
 const FLUID_PIPES = [
+  { base: 'copper', name: 'Copper', start: 5110, meta: 5, color: '#ff6400', capacity: 20 },
   { base: 'bronze', name: 'Bronze', start: 5120, meta: 6, color: '#ff8000', capacity: 120 },
+  { base: 'cast_iron', name: 'Cast Iron', start: 5260, meta: 6, color: '#c8b4b4', capacity: 180 },
   { base: 'steel', name: 'Steel', start: 5130, meta: 7, color: '#808080', capacity: 240 },
   { base: 'stainless_steel', name: 'Stainless Steel', start: 5140, meta: 7, color: '#c8c8dc', capacity: 360 },
   { base: 'titanium', name: 'Titanium', start: 5150, meta: 7, color: '#dca0f0', capacity: 480 },
+  { base: 'plastic', name: 'Plastic', start: 5170, meta: 5, color: '#c8c8c8', capacity: 360 },
+  { base: 'ptfe', name: 'PTFE', start: 5680, meta: 5, color: '#646464', capacity: 480 },
 ] as const;
 
-const PIPE_SIZES = [
-  { size: 'small', label: 'Small', offset: 1, thickness: 0.375, icon: 'pipeSmall', mult: 2 },
-  { size: 'normal', label: 'Normal', offset: 2, thickness: 0.5, icon: 'pipeMedium', mult: 6 },
-  { size: 'large', label: 'Large', offset: 3, thickness: 0.75, icon: 'pipeLarge', mult: 12 },
-] as const;
+/** L/t of each fluid pipe size for a material's baseCapacity (GT FluidPipeBuilder, Java integer division). */
+const FLUID_SIZE_CAPACITY: Record<string, (base: number) => number> = {
+  tiny: (b) => Math.floor(b / 6), small: (b) => Math.floor(b / 3), normal: (b) => b, large: (b) => b * 2, huge: (b) => b * 4,
+};
 
 function fluidPipeEntries(): CatalogEntry[] {
   return FLUID_PIPES.flatMap((p) =>
-    PIPE_SIZES.map((s): CatalogEntry => ({
+    PIPE_SIZES.map((s, i): CatalogEntry => ({
       key: `${p.base}_pipe_${s.size}`,
       name: `${s.label} ${p.name} Fluid Pipe`,
       kind: 'fluidPipe',
-      pipeCapacity: p.capacity * s.mult * 20,
-      mID: p.start + s.offset,
+      // GT shows a pipe's L/t times 20 as its capacity per second.
+      pipeCapacity: FLUID_SIZE_CAPACITY[s.size](p.capacity) * 20,
+      mID: p.start + i,
       meta: p.meta,
       group: 'Fluid pipes',
       thickness: s.thickness,
@@ -110,25 +122,30 @@ function fluidPipeEntries(): CatalogEntry[] {
   );
 }
 
-// GT ItemPipeBuilder: tiny, small, normal, ... in idList order. `huge`: its invSlotsForHugePipe, which sets every size's speed.
+// GT ItemPipeBuilder: `ids` in size order, tiny to huge (materials without tiny and small start at normal).
+// `huge`: its invSlotsForHugePipe, which sets every size's speed.
 const ITEM_PIPES = [
-  { base: 'tin', name: 'Tin', small: 5590, normal: 5591, meta: 7, color: '#dcdcdc', huge: 2 },
-  { base: 'electrum', name: 'Electrum', small: 5611, normal: 5612, meta: 6, color: '#ffff64', huge: 8 },
+  { base: 'tin', name: 'Tin', ids: [5589, 5590, 5591, 5592, 5593], meta: 7, color: '#dcdcdc', huge: 2 },
+  { base: 'brass', name: 'Brass', ids: [5600, 5601, 5602, 5603, 5604], meta: 5, color: '#ffb400', huge: 4 },
+  { base: 'electrum', name: 'Electrum', ids: [5610, 5611, 5612, 5613, 5614], meta: 6, color: '#ffff64', huge: 8 },
+  { base: 'nickel', name: 'Nickel', ids: [5700, 5701, 5702], meta: 6, color: '#c8c8fa', huge: 4 },
+  { base: 'cobalt', name: 'Cobalt', ids: [5710, 5711, 5712], meta: 7, color: '#5050fa', huge: 8 },
+  { base: 'aluminium', name: 'Aluminium', ids: [5720, 5721, 5722], meta: 6, color: '#80c8f0', huge: 8 },
+  { base: 'pvc', name: 'PVC', ids: [5690, 5691, 5692], meta: 5, color: '#d7e6e6', huge: 16 },
 ] as const;
+/** GT divides invSlotsForHugePipe by this for each size. */
+const ITEM_SIZE_DIV: Record<string, number> = { tiny: 16, small: 8, normal: 4, large: 2, huge: 1 };
 
-/** Items per second: GT moves max(huge / div, 1) stacks every max(div / huge, 1) seconds (div 8 small, 4 normal). */
+/** Items per second: GT moves max(huge / div, 1) stacks every max(div / huge, 1) seconds. */
 const itemsPerSecond = (huge: number, div: number) => (Math.max(Math.floor(huge / div), 1) * 64) / Math.max(Math.floor(div / huge), 1);
 
 function itemPipeEntries(): CatalogEntry[] {
-  return ITEM_PIPES.flatMap((p) => [
-    { size: 'small', label: 'Small', mID: p.small, thickness: 0.375, icon: 'pipeSmall', div: 8 },
-    { size: 'normal', label: 'Normal', mID: p.normal, thickness: 0.5, icon: 'pipeMedium', div: 4 },
-  ].map((s): CatalogEntry => ({
+  return ITEM_PIPES.flatMap((p) => PIPE_SIZES.slice(PIPE_SIZES.length - p.ids.length).map((s, i): CatalogEntry => ({
     key: `${p.base}_item_pipe_${s.size}`,
     name: `${s.label} ${p.name} Item Pipe`,
     kind: 'itemPipe',
-    itemCapacity: itemsPerSecond(p.huge, s.div),
-    mID: s.mID,
+    itemCapacity: itemsPerSecond(p.huge, ITEM_SIZE_DIV[s.size]),
+    mID: p.ids[i],
     meta: p.meta,
     group: 'Item pipes',
     thickness: s.thickness,
