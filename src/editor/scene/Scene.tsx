@@ -8,7 +8,7 @@ import { CATALOG } from '../../catalog';
 import { computeConnections } from '../../model/connections';
 import { DIRS, addVec, posKey } from '../../model/directions';
 import { placementFacing, type BlockMap } from '../../model/editing';
-import { frameFor, placementAllowed, shiftClickTarget } from '../interaction';
+import { frameFor, placementAllowed, shiftClickTarget, visibleBlocks, type Hidden } from '../interaction';
 import type { Facing, Vec3 } from '../../model/types';
 import { ConduitMesh } from './ConduitMesh';
 import { MachineMesh } from './MachineMesh';
@@ -19,6 +19,8 @@ export interface Hover { pos: Vec3; side: number; ground: boolean; arm?: number 
 export interface SceneProps {
   blocks: BlockMap;
   layer: number | null;
+  /** Pipes and/or cables left out of the view (they stay in the build). */
+  hide?: Hidden;
   selectedKey: string;
   hover: Hover | null;
   /** Bump to re-frame the camera on the current build. */
@@ -48,8 +50,8 @@ function groundHover(e: ThreeEvent<PointerEvent | MouseEvent>): Hover {
 
 function Blocks(props: SceneProps) {
   const { camera } = useThree();
-  const { blocks, layer } = props;
-  const visible = useMemo(() => [...blocks.values()].filter((b) => layer === null || b.pos[1] <= layer), [blocks, layer]);
+  const { blocks, layer, hide } = props;
+  const visible = useMemo(() => visibleBlocks(blocks, layer, hide), [blocks, layer, hide]);
   const masks = useMemo(() => computeConnections([...blocks.values()]), [blocks]);
 
   const place = (h: Hover) => {

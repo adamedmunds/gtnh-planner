@@ -45,6 +45,20 @@ export function frameFor(blocks: BlockMap): { target: Vec3; position: Vec3 } | n
 }
 
 /** Blocks may not go below the ground, or above the layer cut-off (they would be placed invisibly). */
+/** What the 3D view hides: pipes (fluid and item) and/or cables. */
+export interface Hidden { pipes?: boolean; cables?: boolean }
+
+/** Whether a block of this key is hidden. */
+export function isHidden(key: string, hide: Hidden, catalog: Catalog = CATALOG): boolean {
+  const kind = catalog.get(key)?.kind;
+  return (!!hide.pipes && (kind === 'fluidPipe' || kind === 'itemPipe')) || (!!hide.cables && kind === 'cable');
+}
+
+/** The blocks the 3D view draws: at or below the layer, minus hidden pipes and cables. */
+export function visibleBlocks(blocks: BlockMap, layer: number | null, hide: Hidden = {}, catalog: Catalog = CATALOG): PlacedBlock[] {
+  return [...blocks.values()].filter((b) => (layer === null || b.pos[1] <= layer) && !isHidden(b.key, hide, catalog));
+}
+
 export function placementAllowed(pos: Vec3, layer: number | null): { ok: true } | { ok: false; reason: string } {
   if (pos[1] < 0) return { ok: false, reason: 'Blocks can only be placed at ground level (y = 0) or above.' };
   if (layer !== null && pos[1] > layer) {

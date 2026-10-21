@@ -338,6 +338,11 @@ test.describe('with recipe data', () => {
     await expect(page.locator('main.viewport')).not.toHaveAttribute('data-highlight', '');
     await oil.click();
     await expect(page.locator('main.viewport')).toHaveAttribute('data-highlight', '');
+    // Hiding the pipes takes their labels with them; showing them again brings the labels back.
+    await page.getByLabel('Show pipes').uncheck();
+    await expect(page.locator('.pipe-label')).toHaveCount(0);
+    await page.getByLabel('Show pipes').check();
+    await expect(page.locator('.pipe-label').first()).toBeVisible();
     await page.getByLabel("Show what's in pipes").uncheck();
     await expect(page.locator('.pipe-label')).toHaveCount(0);
   });

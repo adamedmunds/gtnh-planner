@@ -8,7 +8,7 @@ import type { Build, Facing, Vec3 } from './model/types';
 import { countsForBerryRate, makeOilBerryLine } from './presets/oilBerryLine';
 import { downloadBytes, downloadText, safeFileName } from './editor/download';
 import { historyReducer, initialHistory } from './editor/history';
-import { placementAllowed, sameHover, unknownKeys } from './editor/interaction';
+import { isHidden, placementAllowed, sameHover, unknownKeys } from './editor/interaction';
 import { createAutosaver, loadFromStorage, safeStorage } from './editor/persistence';
 import { toBuild } from './editor/state';
 import { Scene, type Hover } from './editor/scene/Scene';
@@ -139,11 +139,19 @@ export function App() {
     }
   };
   const [picked, setPicked] = useState<string>();
+  // Pipes and cables can be hidden to see the machines behind them; hidden pipes take their labels with them.
+  const [showPipes, setShowPipes] = useState(true);
+  const [showCables, setShowCables] = useState(true);
+  const hide = useMemo(() => ({ pipes: !showPipes, cables: !showCables }), [showPipes, showCables]);
   const networks = state.extras.networks;
-  const labels = useMemo(
-    () => (showLabels && networks?.length ? { spots: labelSpots(toBuild(state)), networks } : undefined),
-    [showLabels, networks, state.blocks], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  const labels = useMemo(() => {
+    if (!showLabels || !networks?.length) return undefined;
+    const spots = labelSpots(toBuild(state)).filter((s) => {
+      const b = state.blocks.get(posKey(s.pos));
+      return !b || !isHidden(b.key, hide);
+    });
+    return { spots, networks };
+  }, [showLabels, networks, state.blocks, hide]); // eslint-disable-line react-hooks/exhaustive-deps
   const hoveredNetwork = hovered?.net ? networks?.find((n) => n.id === hovered.net) : undefined;
   const activeName = picked ?? hoveredNetwork?.name;
   const highlight = useMemo(() => {
@@ -279,6 +287,10 @@ export function App() {
         onLayer={(layer) => dispatch({ type: 'setLayer', layer })}
         showLabels={showLabels}
         onShowLabels={setShowLabels}
+        showPipes={showPipes}
+        onShowPipes={setShowPipes}
+        showCables={showCables}
+        onShowCables={setShowCables}
       />
       <Palette selectedKey={state.selectedKey} onSelect={(key) => dispatch({ type: 'select', key })} />
       <main className="viewport" data-highlight={activeName ?? ''}>
@@ -287,6 +299,7 @@ export function App() {
           highlight={highlight}
           blocks={state.blocks}
           layer={state.layer}
+          hide={hide}
           selectedKey={state.selectedKey}
           hover={hover}
           frameToken={frameToken}

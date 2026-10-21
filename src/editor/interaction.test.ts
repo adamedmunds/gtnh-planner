@@ -1,4 +1,4 @@
-import { frameFor, shiftClickTarget } from './interaction';
+import { frameFor, shiftClickTarget, visibleBlocks } from './interaction';
 import { toBlockMap } from '../model/editing';
 
 const blocks = toBlockMap([
@@ -57,4 +57,22 @@ test('unknownKeys lists block types the catalog does not know, with counts', () 
     { pos: [1, 0, 0], key: 'future_machine' },
     { pos: [2, 0, 0], key: 'future_machine' },
   ])).toEqual([{ key: 'future_machine', count: 2 }]);
+});
+
+test('pipes and cables can be hidden, on their own or together, and the layer still applies', () => {
+  const line = toBlockMap([
+    { pos: [0, 0, 0], key: 'distillery_lv', facing: 3 },
+    { pos: [1, 0, 0], key: 'bronze_pipe_normal' },
+    { pos: [2, 0, 0], key: 'electrum_item_pipe_small' },
+    { pos: [3, 0, 0], key: 'tin_cable_1x' },
+    { pos: [4, 0, 0], key: 'marker_fluid_in' },
+    { pos: [0, 1, 0], key: 'bronze_pipe_normal' },
+  ]);
+  const keys = (hide: { pipes?: boolean; cables?: boolean }, layer: number | null = null) =>
+    visibleBlocks(line, layer, hide).map((b) => b.key).sort();
+  expect(keys({})).toHaveLength(6);
+  expect(keys({ pipes: true })).toEqual(['distillery_lv', 'marker_fluid_in', 'tin_cable_1x']);
+  expect(keys({ cables: true })).not.toContain('tin_cable_1x');
+  expect(keys({ pipes: true, cables: true })).toEqual(['distillery_lv', 'marker_fluid_in']);
+  expect(keys({}, 0)).toHaveLength(5);
 });
