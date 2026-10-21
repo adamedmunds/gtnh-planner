@@ -1,7 +1,7 @@
 import { registerMachines } from '../catalog';
 import { buildSchematic, buildSchematicTag } from './schematic';
 import { decodeNbt } from './nbtRead';
-import type { CompoundTag, Tag } from './nbt';
+import type { CompoundTag, ListTag, Tag } from './nbt';
 import type { Build, PlacedBlock } from '../model/types';
 
 const mk = (blocks: PlacedBlock[]): Build => ({ version: 1, name: 't', blocks });
@@ -133,16 +133,41 @@ test('refuses builds whose bounding box volume is too large, naming the bounds',
   ]))).toThrow(/too large.*0,0,0.*3000,200,3000/);
 });
 
-test('recipe machines export with their mID; markers export as plain vanilla blocks', () => {
+test('recipe machines export with their mID; glass markers export as plain glass', () => {
   registerMachines([{ key: 'gt_1112', name: 'Turbo Combustion Generator', mID: 1112, tier: 'HV' }]);
-  const { tag } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'gt_1112', facing: 1 }, { pos: [1, 0, 0], key: 'marker_item_in' }]));
+  const { tag } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'gt_1112', facing: 1 }, { pos: [1, 0, 0], key: 'marker_fluid_in' }]));
   const [te] = tes(tag);
   expect(num(te, 'mID')).toBe(1112);
   expect(tes(tag)).toHaveLength(1);
   const mapping = (v(tag, 'SchematicaMapping') as CompoundTag).value;
-  expect(Object.keys(mapping)).toContain('minecraft:chest');
   const ids = Array.from((v(tag, 'Blocks') as { value: Uint8Array }).value);
-  expect(ids[1]).toBe((mapping['minecraft:chest'] as { value: number }).value);
+  expect(ids[1]).toBe((mapping['minecraft:glass'] as { value: number }).value);
+});
+
+test('item markers export as oak and spruce drawers facing their front, holding what a placed one does', () => {
+  const { tag } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'marker_item_in', facing: 4 }, { pos: [1, 0, 0], key: 'marker_item_out', facing: 5 }]));
+  const mapping = (v(tag, 'SchematicaMapping') as CompoundTag).value;
+  const ids = Array.from((v(tag, 'Blocks') as { value: Uint8Array }).value);
+  const data = Array.from((v(tag, 'Data') as { value: Uint8Array }).value);
+  const drawerId = (mapping['StorageDrawers:fullDrawers1'] as { value: number }).value;
+  expect([ids[0], ids[1]]).toEqual([drawerId, drawerId]);
+  expect([data[0], data[1]]).toEqual([0, 1]);
+  // As a drawer in the user's world saves it: its front (Dir), capacity in stacks (GTNH config: 64) and one empty slot.
+  const [oak, spruce] = tes(tag);
+  expect((oak.value.id as { value: string }).value).toBe('StorageDrawers:tileDrawersStandard');
+  expect(num(oak, 'Dir')).toBe(4);
+  expect(num(spruce, 'Dir')).toBe(5);
+  expect(num(oak, 'Cap')).toBe(64);
+  expect((oak.value.Slots as ListTag).value).toHaveLength(1);
+});
+
+test('the fluid output marker exports as a GT Super Tank I with its front where the build says', () => {
+  const { tag } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'marker_fluid_out', facing: 2 }]));
+  const [te] = tes(tag);
+  expect((te.value.id as { value: string }).value).toBe('BaseMetaTileEntity');
+  expect(num(te, 'mID')).toBe(130);
+  expect(num(te, 'mFacing')).toBe(2);
+  expect(Array.from((v(tag, 'Data') as { value: Uint8Array }).value)[0]).toBe(1);
 });
 
 test('a machine with a front writes mMainFacing next to its output face', () => {

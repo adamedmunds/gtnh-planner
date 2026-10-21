@@ -1,4 +1,4 @@
-import { selectTextures, wantedTexturePaths } from './textureSelect';
+import { selectTextures, textureSource, wantedTexturePaths } from './textureSelect';
 import { CATALOG_ENTRIES } from '../src/catalog';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
@@ -8,6 +8,12 @@ test('wanted paths are the unique texture paths referenced by the catalog', () =
   expect(wanted).toContain('blocks/iconsets/MACHINE_LV_SIDE.png');
   expect(wanted).toContain('blocks/basicmachines/distillery/OVERLAY_FRONT.png');
   expect(new Set(wanted).size).toBe(wanted.length);
+});
+
+test('textures from Storage Drawers and Minecraft come from their own jars', () => {
+  expect(textureSource('blocks/iconsets/MACHINE_LV_SIDE.png')).toEqual({ jar: 'gregtech', path: 'assets/gregtech/textures/blocks/iconsets/MACHINE_LV_SIDE.png' });
+  expect(textureSource('storagedrawers/blocks/drawers_oak_side.png')).toEqual({ jar: 'storagedrawers', path: 'assets/storagedrawers/textures/blocks/drawers_oak_side.png' });
+  expect(textureSource('minecraft/blocks/glass.png')).toEqual({ jar: 'minecraft', path: 'assets/minecraft/textures/blocks/glass.png' });
 });
 
 test('selectTextures maps jar entries to public paths, keeps .mcmeta, reports missing', () => {

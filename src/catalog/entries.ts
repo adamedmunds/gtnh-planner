@@ -209,15 +209,31 @@ POWER.push({
   textures: { ...casing('MV'), front: 'blocks/iconsets/OVERLAY_ENERGY_IN.png' },
 });
 
-// Stand-ins for where things come in and go out. Exported as plain vanilla blocks the user swaps for their own.
+// Stand-ins for where things come in and go out: items in an oak drawer and out a spruce one (Storage Drawers 1x1,
+// meta = wood), fluids in from glass and out into a GT Super Tank I. Power and multiblocks stay plain vanilla blocks.
 const marker = (key: string, name: string, color: string, vanilla: string): CatalogEntry => ({
   key, name, kind: 'marker', mID: 0, meta: 0, group: 'Markers', color, vanilla, textures: {},
 });
+const drawer = (key: string, name: string, wood: string, meta: number, color: string): CatalogEntry => {
+  const side = `storagedrawers/blocks/drawers_${wood}_side.png`;
+  return {
+    key, name, kind: 'marker', mID: 0, meta, group: 'Markers', color, vanilla: 'StorageDrawers:fullDrawers1', drawer: true,
+    textures: { top: side, side, bottom: side, front: `storagedrawers/blocks/drawers_${wood}_front_1.png` },
+  };
+};
+const glass = 'minecraft/blocks/glass.png';
 const MARKERS: CatalogEntry[] = [
-  marker('marker_item_in', 'Items in', '#4fc3f7', 'minecraft:chest'),
-  marker('marker_item_out', 'Items out', '#8bc34a', 'minecraft:chest'),
-  marker('marker_fluid_in', 'Fluid in', '#29b6f6', 'minecraft:glass'),
-  marker('marker_fluid_out', 'Fluid out', '#9ccc65', 'minecraft:glass'),
+  drawer('marker_item_in', 'Items in (oak drawer)', 'oak', 0, '#b8945f'),
+  drawer('marker_item_out', 'Items out (spruce drawer)', 'spruce', 1, '#6b4f2e'),
+  {
+    key: 'marker_fluid_in', name: 'Fluid in (glass)', kind: 'marker', mID: 0, meta: 0, group: 'Markers', color: '#cfe8ff',
+    vanilla: 'minecraft:glass', seeThrough: true, textures: { top: glass, side: glass, bottom: glass },
+  },
+  // GT Super Tank I (SUPER_TANK_LV): takes fluid on every face but its front.
+  {
+    key: 'marker_fluid_out', name: 'Fluid out (Super Tank I)', kind: 'marker', mID: 130, meta: 1, group: 'Markers', color: '#5a7fb3',
+    textures: { ...casing('LV'), topOverlay: 'blocks/iconsets/OVERLAY_QTANK.png', front: 'blocks/iconsets/OVERLAY_PIPE.png' },
+  },
   marker('marker_power_in', 'Power in', '#ef5350', 'minecraft:redstone_block'),
   marker('marker_multiblock', 'Multiblock goes here', '#ab47bc', 'minecraft:bookshelf'),
 ];

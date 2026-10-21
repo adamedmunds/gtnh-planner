@@ -97,8 +97,16 @@ test('HV power parts and new pipes', () => {
 test('markers', () => {
   for (const k of ['marker_item_in', 'marker_item_out', 'marker_fluid_in', 'marker_fluid_out', 'marker_power_in', 'marker_multiblock']) {
     expect(getEntry(k)).toMatchObject({ kind: 'marker', group: 'Markers' });
-    expect(getEntry(k)!.vanilla).toMatch(/^minecraft:/);
   }
+  // Items in an oak drawer, out a spruce one (Storage Drawers 1x1, meta = wood); fluids in glass, out a Super Tank I.
+  expect(getEntry('marker_item_in')).toMatchObject({ vanilla: 'StorageDrawers:fullDrawers1', meta: 0, drawer: true });
+  expect(getEntry('marker_item_out')).toMatchObject({ vanilla: 'StorageDrawers:fullDrawers1', meta: 1, drawer: true });
+  expect(getEntry('marker_fluid_in')).toMatchObject({ vanilla: 'minecraft:glass', seeThrough: true });
+  expect(getEntry('marker_fluid_out')).toMatchObject({ mID: 130, meta: 1 });
+  expect(getEntry('marker_fluid_out')!.vanilla).toBeUndefined();
+  expect(getEntry('marker_item_in')!.textures.front).toBe('storagedrawers/blocks/drawers_oak_front_1.png');
+  expect(getEntry('marker_fluid_in')!.textures.side).toBe('minecraft/blocks/glass.png');
+  for (const k of ['marker_power_in', 'marker_multiblock']) expect(getEntry(k)!.vanilla).toMatch(/^minecraft:/);
 });
 
 test('machines from recipe data are registered under gt_<mID>', () => {

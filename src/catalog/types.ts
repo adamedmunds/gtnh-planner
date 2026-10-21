@@ -1,4 +1,4 @@
-/** `marker`: a stand-in for where something comes in or goes out; exported as a plain vanilla block. */
+/** `marker`: a stand-in for where something comes in or goes out (a drawer, glass, a tank, ...). */
 export type Kind = 'machine' | 'cable' | 'fluidPipe' | 'itemPipe' | 'marker';
 export type Tier = 'LV' | 'MV' | 'HV';
 
@@ -17,18 +17,23 @@ export interface CatalogEntry {
   /** Material/placeholder colour, CSS hex. */
   color: string;
   /**
-   * Paths relative to public/textures/. Machines: top/side/bottom + front overlay. Cables/pipes: `side` along
-   * the length, `end` on the open end, `core` (cables) the wire under the insulation; tinted by `color`.
+   * Paths relative to public/textures/ (GregTech's; `storagedrawers/` and `minecraft/` ones come from those jars).
+   * Machines: top/side/bottom + front and top overlays. Cables/pipes: `side` along the length, `end` on the open end,
+   * `core` (cables) the wire under the insulation; tinted by `color`.
    */
-  textures: { top?: string; side?: string; bottom?: string; front?: string; end?: string; core?: string };
+  textures: { top?: string; topOverlay?: string; side?: string; bottom?: string; front?: string; end?: string; core?: string };
   /** Cables: voltage tier and amps per 1x of thickness; `size` is the 1x/4x multiplier. */
   cable?: { tier: Tier; ampsPerSize: number; size: number; lossPerBlock: number };
   /** Fluid pipes: litres per second one pipe carries. */
   pipeCapacity?: number;
   /** Item pipes: items per second one pipe carries. */
   itemCapacity?: number;
-  /** Markers: the vanilla block written to the schematic instead of a GregTech block. */
+  /** Markers: the block (Minecraft or mod name, `meta` its metadata) written instead of a GregTech one. */
   vanilla?: string;
+  /** Markers: a Storage Drawers drawer, written with its tile data. */
+  drawer?: boolean;
+  /** Drawn see-through where its texture is (glass). */
+  seeThrough?: boolean;
 }
 
 /** A machine from the recipe data that isn't in the hand-made catalog; saved with the build that uses it. */

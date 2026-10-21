@@ -1,5 +1,5 @@
 import { CATALOG, registerMachines } from '../catalog';
-import { DIRS, addVec, posKey } from '../model/directions';
+import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
 import { routeNetwork } from '../model/route';
 import type { Build, FaceSetting, Facing, LineNetwork, PlacedBlock, Vec3 } from '../model/types';
 import { VOLTAGE, cableFor, pipeFor } from './power';
@@ -386,7 +386,7 @@ export function itemFilters(routed: Routed, nets: Net[]): void {
       if (end.unit.marker) {
         const side = sideTo(end.cell, end.unit.pos);
         routed.covers.push({ pos: end.cell, side, kind: 'itemFilter', item: item.key });
-        routed.notes.push(`Put an Item Filter cover set to ${item.name} on the pipe at (${end.cell.join(', ')}), on its ${SIDE_NAME[side]} next to the ${item.name} chest, so only ${item.name} goes in.`);
+        routed.notes.push(`Put an Item Filter cover set to ${item.name} on the pipe at (${end.cell.join(', ')}), on its ${SIDE_NAME[side]} next to the ${item.name} drawer, so only ${item.name} goes in.`);
       } else {
         const side = sideTo(end.unit.pos, end.cell);
         routed.covers.push({ pos: end.unit.pos, side, kind: 'itemFilter', item: item.key });
@@ -455,7 +455,25 @@ export function lineNetworks(blocks: PlacedBlock[], nets: Net[], plan: LinePlan)
   });
 }
 
+/**
+ * Markers with a front (drawers, the Super Tank) face away from their pipe, sideways: a Super Tank takes nothing in
+ * through its front, and a drawer can't face up or down. Prefer the side opposite the pipe, then any open side.
+ */
+export function faceMarkers(blocks: PlacedBlock[]): PlacedBlock[] {
+  const at = new Map(blocks.map((b) => [posKey(b.pos), b]));
+  const kindAt = (c: Vec3) => { const b = at.get(posKey(c)); return b && CATALOG.get(b.key)?.kind; };
+  return blocks.map((b) => {
+    const entry = CATALOG.get(b.key);
+    if (entry?.kind !== 'marker' || !entry.textures.front) return b;
+    const piped = [0, 1, 2, 3, 4, 5].filter((s) => /Pipe|cable/.test(kindAt(addVec(b.pos, DIRS[s])) ?? ''));
+    const sides = [...piped.map((s) => OPPOSITE[s]), 2, 3, 4, 5].filter((s) => s >= 2 && !piped.includes(s));
+    const facing = sides.find((s) => !kindAt(addVec(b.pos, DIRS[s]))) ?? sides[0];
+    return facing === undefined ? b : { ...b, facing: facing as Facing };
+  });
+}
+
 export function assemble(name: string, plan: LinePlan, blocks: PlacedBlock[], covers: FaceSetting[], notes: string[], generated?: GeneratedLine, nets: Net[] = []): Build {
+  blocks = faceMarkers(blocks);
   const machines = [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])]
     .filter((m) => m.key.startsWith('gt_'))
     .map((m) => m.machine);

@@ -8,7 +8,7 @@ const UNIT: [number, number, number] = [1, 1, 1];
 export function MachineMesh({ block, entry }: { block: PlacedBlock; entry: CatalogEntry }) {
   const t = entry.textures;
   const tex = useAsync(
-    () => Promise.all([textureCache.get(t.top), textureCache.get(t.side), textureCache.get(t.bottom), textureCache.composite(t.side, t.front)]),
+    () => Promise.all([textureCache.composite(t.top, t.topOverlay), textureCache.get(t.side), textureCache.get(t.bottom), textureCache.composite(t.side, t.front)]),
     [entry.key],
   );
   const [x, y, z] = block.pos;

@@ -1,4 +1,6 @@
+import { CATALOG } from '../catalog';
 import { buildSchematicTag } from '../export/schematic';
+import { DIRS, addVec, posKey } from '../model/directions';
 import type { CompoundTag } from '../export/nbt';
 import { buildLine } from './build';
 import { checkLine } from './check';
@@ -43,4 +45,17 @@ test('a step-up transformer is pasted in step-up mode', () => {
   const { tag } = buildSchematicTag({ version: 1, name: 't', blocks: [{ pos: [0, 0, 0], key: 'transformer_hv_mv', facing: 2, stepUp: true }] });
   const te = ((tag.value.TileEntities as { value: CompoundTag[] }).value)[0];
   expect((te.value.mWorks as { value: number }).value).toBe(1);
+});
+
+test('drawer and super tank markers face away from their pipe', () => {
+  const p = plan();
+  const { build } = buildLine(p, 'Mixer line');
+  const at = new Map(build.blocks.map((b) => [posKey(b.pos), b]));
+  const faced = build.blocks.filter((b) => CATALOG.get(b.key)?.textures.front && CATALOG.get(b.key)?.kind === 'marker');
+  expect(faced.length).toBeGreaterThan(0);
+  for (const m of faced) {
+    expect(m.facing).toBeGreaterThanOrEqual(2); // drawers can't face up or down
+    const front = at.get(posKey(addVec(m.pos, DIRS[m.facing!])));
+    expect(String(front && CATALOG.get(front.key)?.kind)).not.toMatch(/Pipe|cable/);
+  }
 });

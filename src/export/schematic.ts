@@ -74,13 +74,24 @@ export function buildSchematicTag(
     const index = x + (y * size.length + z) * size.width;
     if (entry.vanilla) {
       blocks[index] = vanillaIds.get(entry.vanilla)!;
+      data[index] = entry.meta;
+      // A drawer as a placed one saves it: its front, capacity in stacks (GTNH's StorageDrawers.cfg: 64) and one empty
+      // slot. Without these it loads facing down with no room.
+      if (entry.drawer) {
+        tileEntities.push(compound({
+          x: int(x), y: int(y), z: int(z), id: str('StorageDrawers:tileDrawersStandard'),
+          Dir: byte(block.facing !== undefined && block.facing >= 2 ? block.facing : DEFAULT_FACING), Cap: int(64),
+          Slots: list('compound', [compound({})]),
+        }));
+      }
       continue;
     }
     blocks[index] = GT_LOCAL_ID;
     data[index] = entry.meta;
 
     const te: CompoundTag = compound({ x: int(x), y: int(y), z: int(z) });
-    if (entry.kind === 'machine') {
+    // Markers that aren't another mod's block are GT machines (the Super Tank).
+    if (entry.kind === 'machine' || entry.kind === 'marker') {
       te.value.id = str('BaseMetaTileEntity');
       te.value.mID = int(entry.mID);
       te.value.mFacing = short(block.facing ?? DEFAULT_FACING);

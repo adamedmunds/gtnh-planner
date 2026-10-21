@@ -109,7 +109,7 @@ function Blocks(props: SceneProps) {
               </mesh>
             );
           }
-          if (entry.kind === 'marker') {
+          if (entry.kind === 'marker' && !entry.textures.side) {
             return (
               <mesh key={posKey(b.pos)} position={[b.pos[0] + 0.5, b.pos[1] + 0.5, b.pos[2] + 0.5]} userData={{ pos: b.pos }}>
                 <boxGeometry args={[0.8, 0.8, 0.8]} />
@@ -117,7 +117,7 @@ function Blocks(props: SceneProps) {
               </mesh>
             );
           }
-          return entry.kind === 'machine'
+          return entry.kind === 'machine' || entry.kind === 'marker'
             ? <MachineMesh key={posKey(b.pos)} block={b} entry={entry} />
             : <ConduitMesh key={posKey(b.pos)} block={b} entry={entry} mask={masks.get(posKey(b.pos)) ?? 0} />;
         })}
