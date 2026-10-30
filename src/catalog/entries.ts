@@ -262,7 +262,7 @@ const CASINGS: CatalogEntry[] = [
   {
     key: 'frame_steel', name: 'Steel Frame Box', kind: 'casing', mID: 0, meta: 305, group: MB, color: '#808080',
     vanilla: 'gregtech:gt.blockframes', seeThrough: true, tint: true, notInSchematic: true,
-    textures: { side: 'blocks/materialicons/NONE/frameGt.png' },
+    textures: { top: 'blocks/materialicons/NONE/frameGt.png', side: 'blocks/materialicons/NONE/frameGt.png', bottom: 'blocks/materialicons/NONE/frameGt.png' },
   },
 ];
 

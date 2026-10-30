@@ -228,6 +228,15 @@ test('frame boxes stay out of the schematic; the bounds come from the rest', () 
   expect([...(v(tag, 'Data') as { value: Uint8Array }).value]).toEqual([13]);
 });
 
+test('frames left out of the schematic are named in a warning with their count', () => {
+  const { warnings } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'casing_steel_pipe' }, { pos: [0, 1, 0], key: 'frame_steel' }, { pos: [0, 2, 0], key: 'frame_steel' }]));
+  expect(warnings).toContain("Left out 2 × Steel Frame Box; place by hand (a schematic can't hold it)");
+});
+
+test('a build of only frames is still empty', () => {
+  expect(() => buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'frame_steel' }]))).toThrow('Build is empty');
+});
+
 test('a block with metadata above 255 is refused, not truncated', () => {
   const catalog = new Map(CATALOG);
   catalog.set('wide_meta', { ...CATALOG.get('casing_steel_pipe')!, key: 'wide_meta', name: 'Wide', meta: 305 });

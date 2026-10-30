@@ -25,17 +25,22 @@ export function buildSchematicTag(
 
   // Resolve catalog entries; last block at a position wins.
   const byPos = new Map<string, Resolved>();
+  const leftOut = new Map<string, number>();
   for (const block of build.blocks) {
     const entry = catalog.get(block.key);
     if (!entry) {
       warnings.push(`Skipped unknown block "${block.key}" at ${posKey(block.pos)}`);
       continue;
     }
-    if (entry.notInSchematic) continue;
+    if (entry.notInSchematic) {
+      leftOut.set(entry.name, (leftOut.get(entry.name) ?? 0) + 1);
+      continue;
+    }
     const key = posKey(block.pos);
     if (byPos.has(key)) warnings.push(`Duplicate blocks at ${key}; kept the last one`);
     byPos.set(key, { block, entry });
   }
+  for (const [name, n] of leftOut) warnings.push(`Left out ${n} × ${name}; place by hand (a schematic can't hold it)`);
   const cells = [...byPos.values()];
   if (cells.length === 0) throw new Error('Build is empty');
 

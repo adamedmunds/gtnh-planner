@@ -170,7 +170,7 @@ it('has the Pyrolyse Oven blocks', () => {
   expect(CATALOG.get('casing_steel_firebox')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockcasings3', meta: 14, textures: {
     top: 'blocks/iconsets/MACHINE_CASING_FIREBOX_STEEL_TOP.png', bottom: 'blocks/iconsets/MACHINE_CASING_FIREBOX_STEEL_TOP.png', side: 'blocks/iconsets/MACHINE_CASING_FIREBOX_STEEL.png' } });
   expect(CATALOG.get('frame_steel')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockframes', meta: 305, color: '#808080', seeThrough: true, tint: true, notInSchematic: true,
-    textures: { side: 'blocks/materialicons/NONE/frameGt.png' } });
+    textures: { top: 'blocks/materialicons/NONE/frameGt.png', side: 'blocks/materialicons/NONE/frameGt.png', bottom: 'blocks/materialicons/NONE/frameGt.png' } });
 });
 
 it('the Pyrolyse Oven controller wears its casing and front overlay', () => {
