@@ -1,4 +1,5 @@
 import { CATALOG, CATALOG_ENTRIES, getEntry, machineKey, registerMachines } from './index';
+import { CONTROLLER_TEXTURE_PATHS, generatedEntry } from './entries';
 
 test('keys and mIDs are unique', () => {
   const keys = CATALOG_ENTRIES.map((e) => e.key);
@@ -144,4 +145,21 @@ test('a multiblock controller is meta 2 with its front overlay', () => {
   const e = getEntry('gt_1126')!;
   expect(e.meta).toBe(2);
   expect(e.textures.front).toMatch(/OVERLAY_FRONT_DISTILLATION_TOWER\.png$/);
+});
+
+test('has the EBF and Vacuum Freezer blocks', () => {
+  expect(CATALOG.get('casing_heat_proof')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockcasings', meta: 11 });
+  expect(CATALOG.get('casing_frost_proof')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockcasings2', meta: 1 });
+  expect(CATALOG.get('coil_kanthal')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockcasings5', meta: 1 });
+  expect(CATALOG.get('coil_nichrome')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockcasings5', meta: 2 });
+  expect(CATALOG.get('hatch_muffler_lv')).toMatchObject({ kind: 'machine', mID: 91, meta: 1, tier: 'LV' });
+  expect(CATALOG.get('hatch_muffler_lv')!.textures.front).toBe('blocks/iconsets/OVERLAY_MUFFLER.png');
+});
+
+test('EBF and Vacuum Freezer controllers wear their casing and front overlay', () => {
+  const ebf = generatedEntry({ key: 'gt_1000', name: 'Electric Blast Furnace', mID: 1000, multiblock: true });
+  expect(ebf).toMatchObject({ meta: 2, textures: { side: 'blocks/iconsets/MACHINE_HEATPROOFCASING.png', front: 'blocks/iconsets/OVERLAY_FRONT_ELECTRIC_BLAST_FURNACE.png' } });
+  const vf = generatedEntry({ key: 'gt_1002', name: 'Vacuum Freezer', mID: 1002, multiblock: true });
+  expect(vf).toMatchObject({ meta: 2, textures: { side: 'blocks/iconsets/MACHINE_CASING_FROST_PROOF.png', front: 'blocks/iconsets/OVERLAY_FRONT_VACUUM_FREEZER.png' } });
+  expect(CONTROLLER_TEXTURE_PATHS).toContain('blocks/iconsets/OVERLAY_FRONT_ELECTRIC_BLAST_FURNACE.png');
 });

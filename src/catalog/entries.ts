@@ -250,6 +250,10 @@ const CASINGS: CatalogEntry[] = [
   casingBlock('casing_chemically_inert', 'Chemically Inert Casing', 'gregtech:gt.blockcasings8', 0, 'MACHINE_CASING_CHEMICALLY_INERT', '#7a8a6e'),
   casingBlock('casing_ptfe_pipe', 'PTFE Pipe Casing', 'gregtech:gt.blockcasings8', 1, 'MACHINE_CASING_PIPE_POLYTETRAFLUOROETHYLENE', '#e8e4d0'),
   casingBlock('coil_cupronickel', 'Cupronickel Coil Block', 'gregtech:gt.blockcasings5', 0, 'MACHINE_COIL_CUPRONICKEL', '#c9824a'),
+  casingBlock('casing_heat_proof', 'Heat Proof Machine Casing', 'gregtech:gt.blockcasings', 11, 'MACHINE_HEATPROOFCASING', '#9a8f84'),
+  casingBlock('casing_frost_proof', 'Frost Proof Machine Casing', 'gregtech:gt.blockcasings2', 1, 'MACHINE_CASING_FROST_PROOF', '#c8dce8'),
+  casingBlock('coil_kanthal', 'Kanthal Coil Block', 'gregtech:gt.blockcasings5', 1, 'MACHINE_COIL_KANTHAL', '#b5b0a0'),
+  casingBlock('coil_nichrome', 'Nichrome Coil Block', 'gregtech:gt.blockcasings5', 2, 'MACHINE_COIL_NICHROME', '#8f8a7a'),
 ];
 
 const hatch = (key: string, name: string, mID: number, tier: Tier, overlay: string): CatalogEntry => ({
@@ -265,6 +269,7 @@ const HATCHES: CatalogEntry[] = [
   hatch('hatch_energy_mv', 'MV Energy Hatch', 42, 'MV', 'OVERLAY_ENERGY_IN_MULTI'),
   hatch('hatch_energy_hv', 'HV Energy Hatch', 43, 'HV', 'OVERLAY_ENERGY_IN_MULTI'),
   hatch('hatch_maintenance', 'Maintenance Hatch', 90, 'LV', 'OVERLAY_MAINTENANCE'),
+  hatch('hatch_muffler_lv', 'LV Muffler Hatch', 91, 'LV', 'OVERLAY_MUFFLER'),
 ];
 
 // Multiblock controllers: block meta 2, wearing their casing with the controller's front overlay.
@@ -272,6 +277,8 @@ const CONTROLLERS: Record<number, { casing: string; overlay: string }> = {
   1126: { casing: 'MACHINE_CASING_CLEAN_STAINLESSSTEEL', overlay: 'OVERLAY_FRONT_DISTILLATION_TOWER' },
   1169: { casing: 'MACHINE_CASING_CHEMICALLY_INERT', overlay: 'OVERLAY_FRONT_LARGE_CHEMICAL_REACTOR' },
   1160: { casing: 'MACHINE_CASING_CLEAN_STAINLESSSTEEL', overlay: 'OVERLAY_FRONT_OIL_CRACKER' },
+  1000: { casing: 'MACHINE_HEATPROOFCASING', overlay: 'OVERLAY_FRONT_ELECTRIC_BLAST_FURNACE' },
+  1002: { casing: 'MACHINE_CASING_FROST_PROOF', overlay: 'OVERLAY_FRONT_VACUUM_FREEZER' },
 };
 
 /** Multiblock controllers exist in the catalog only once registered, but their textures must still be extracted. */

@@ -212,3 +212,11 @@ test('multiblock parts export: casings as their GT block and meta, hatches as GT
   expect(num(entities[0], 'mID')).toBe(61);
   expect(num(entities[0], 'mFacing')).toBe(3);
 });
+
+test('an LV muffler hatch exports as a GT machine facing its front, meta 1', () => {
+  const { tag } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'hatch_muffler_lv', facing: 1 }]));
+  const [te] = tes(tag);
+  expect(num(te, 'mID')).toBe(91);
+  expect(num(te, 'mFacing')).toBe(1);
+  expect(Array.from((v(tag, 'Data') as { value: Uint8Array }).value)).toEqual([1]);
+});
