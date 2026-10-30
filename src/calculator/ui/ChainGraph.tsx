@@ -4,7 +4,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Chain } from '../../calc/chain';
+import { emptyChain, type Chain } from '../../calc/chain';
 import type { RecipeDb } from '../../recipes/db';
 import type { ChainAction, ChainHistoryAction } from '../chainState';
 import type { ScreenSolve } from '../drive';
@@ -126,6 +126,13 @@ function Graph({ active, chain, db, screen, greyed, canUndo, canRedo, dispatch, 
           <button onClick={() => flow.fitView({ duration: 200, ...FIT })}>Fit</button>
           <button onClick={() => dispatch({ type: 'undo' })} disabled={!canUndo} title="Undo (Ctrl+Z)">Undo</button>
           <button onClick={() => dispatch({ type: 'redo' })} disabled={!canRedo} title="Redo (Ctrl+Y)">Redo</button>
+          <button
+            onClick={() => window.confirm('Clear the whole line? (Ctrl+Z undoes this.)') && dispatch({ type: 'load', chain: emptyChain() })}
+            disabled={!chain.nodes.length}
+            title="Start again with an empty line"
+          >
+            Clear
+          </button>
           <button className="primary" disabled={!onBuild3d} onClick={onBuild3d} title="Lay this line out in the 3D Editor, ready to export">Build in 3D</button>
           <label className="straight-toggle" title="Off: a core with copy-paste slices you can grow. On: every machine in one row.">
             <input type="checkbox" checked={straight} onChange={(e) => onStraight(e.target.checked)} /> Straight line (no copy-paste slices)

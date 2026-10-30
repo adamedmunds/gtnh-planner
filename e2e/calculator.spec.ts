@@ -149,6 +149,14 @@ test.describe('with recipe data', () => {
     await page.keyboard.press('Control+y');
     await expect(page.getByTestId('node-card')).toHaveCount(4);
 
+    // Clear empties the whole line after asking; Ctrl+Z brings it back.
+    page.once('dialog', (d) => d.accept());
+    await page.getByRole('button', { name: 'Clear' }).click();
+    await expect(page.getByTestId('node-card')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Clear' })).toBeDisabled();
+    await page.keyboard.press('Control+z');
+    await expect(page.getByTestId('node-card')).toHaveCount(4);
+
     await page.getByTestId('tab-editor').click();
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Save .json' }).click();
