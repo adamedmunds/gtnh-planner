@@ -16,6 +16,7 @@ import {
   assemble,
   conduitBlocks,
   countTransformers,
+  handBuilt,
   machineUnits,
   markerUnits,
   placeCore,
@@ -214,7 +215,7 @@ export function buildLine(plan: LinePlan, name: string): { build: Build; warning
   // stepped up in the core. Only outside power too low for a machine can't work.
   const source = plan.power.source.tier;
   const tooHigh = plan.power.source.kind === 'generators' ? [] : [...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])]
-    .filter((m) => !m.generator && !m.multiblock && m.tier && TIER_NAMES.indexOf(m.tier) > TIER_NAMES.indexOf(source));
+    .filter((m) => !m.generator && !handBuilt(m) && m.tier && TIER_NAMES.indexOf(m.tier) > TIER_NAMES.indexOf(source));
   if (tooHigh.length) {
     throw new LayoutFailure(tooHigh.map((m) => `${CATALOG.get(m.key)?.name ?? m.machine.name} needs ${m.tier} power, but the line's power is ${source}`));
   }

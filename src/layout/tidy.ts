@@ -1,12 +1,15 @@
+import { CATALOG } from '../catalog';
 import { DIRS, addVec, posKey } from '../model/directions';
 import type { Build, PlacedBlock, Vec3 } from '../model/types';
 import { checkLine } from './check';
 import { cableLoss } from './loss';
+import { structureFor } from './multiblock';
 import { VOLTAGE, cableFor } from './power';
 import {
   assemble,
   conduitBlocks,
   countTransformers,
+  handBuilt,
   machineUnits,
   markerUnits,
   planNets,
@@ -15,6 +18,7 @@ import {
   stepUpsFor,
   transformersFor,
   TIERS,
+  tierOf,
   unitBlock,
   type Net,
   type Placed,
@@ -58,7 +62,9 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[], why:
   const straight = plan.style === 'straight';
   let rows = straight ? (plan.straight ?? []).filter((m) => m.count >= 2 && !m.multiblock) : plan.slice ?? [];
   let oneOffs = straight ? (plan.straight ?? []).filter((m) => !rows.includes(m)) : plan.core;
-  if (!rows.length) return undefined;
+  // A straight line with no repeated machine is all core when it has a multiblock to stand behind it (no slice).
+  const coreOnly = !rows.length && straight && oneOffs.some((m) => m.multiblock && !handBuilt(m));
+  if (!rows.length && !coreOnly) return undefined;
   const copies = straight ? { left: 0, right: 1 } : { left: plan.sliceCount - Math.ceil(plan.sliceCount / 2), right: Math.ceil(plan.sliceCount / 2) };
   ({ rows, oneOffs } = powerEachRegion(plan, rows, oneOffs, copies.left + copies.right));
   const source = plan.power.source.tier;
@@ -79,7 +85,7 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[], why:
   }));
   // Two high first; when machines need side faces, also one high (the upper level then left for pipes to rise into).
   const needsSides = [...sideFaces.values()].some((n) => n > 0);
-  const arrangements = [
+  const arrangements = coreOnly ? [] : [
     ...arrangeRows(rows, undefined, false, [0, 1, 2, 3], sideFaces).slice(0, ARRANGEMENTS_TRIED),
     ...arrangeRows(rows, undefined, true, [0, 1, 2, 3], sideFaces).slice(0, ARRANGEMENTS_TRIED),
     ...(needsSides ? arrangeRows(rows, undefined, true, [0, 2], sideFaces).slice(0, ARRANGEMENTS_TRIED) : []),
@@ -88,6 +94,12 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[], why:
   // The core only sees where the slices' through-runs enter it: one that can't be routed for a set of entries can't for
   // any slice with the same entries.
   const coreFails = new Set<string>();
+  if (coreOnly) {
+    const build = withCore(plan, name, NO_SLICE, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings], false, why);
+    const problems = build ? checkLine(build, plan) : [];
+    if (build && !problems.length) best = { build, score: [], relaxed: false, slice: NO_SLICE };
+    else if (problems.length) why.push(`check: ${problems[0]}`);
+  }
   const entries = (slice: TidySlice) => [...slice.throughRuns]
     .map(([id, runs]) => `${id}:${runs.map((r) => `${r[0][1]},${r[0][2]}`).sort().join(';')}`).sort().join('|');
   // Strict first (pipes leave their runs only in service and gap columns); relaxed only if nothing strict fits.
@@ -122,7 +134,7 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[], why:
     }
   }
   if (!best) return undefined;
-  const compact = withCore(plan, name, best.slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings], false);
+  const compact = coreOnly ? undefined : withCore(plan, name, best.slice, copies, nets, coreMachines, everyMachine, markers, [...warnings, ...netWarnings], false);
   if (compact && !checkLine(compact, plan).length) best.build = compact;
   best.build.notes = (best.build.notes ?? []).map((n) => (n.startsWith('Place every machine with its front') ? FRONT_NOTE : n));
   if (best.relaxed) best.build.notes.push(DENSE_NOTE);
@@ -144,6 +156,12 @@ export function buildTidy(plan: LinePlan, name: string, warnings: string[], why:
   }
   return best.build;
 }
+
+/** The slice of a line that is all core: nothing repeated, nothing running through. */
+const NO_SLICE: TidySlice = {
+  length: 0, serviceFrom: 0, blocks: [], throughRuns: new Map(), nets: [],
+  routed: { cells: new Map(), attach: new Set(), ends: [], covers: [], notes: [] },
+};
 
 /** Machine spots in a core column: (y, z) of the lower and upper rows of both columns. */
 const ROW_SPOTS: readonly [number, number][] = [[0, 0], [0, 1], [2, 0], [2, 1]];
@@ -200,6 +218,43 @@ function placeTidyCore(units: Unit[], start: number, length: number, side: (u: U
   return placed;
 }
 
+/**
+ * Multiblocks behind the core (they're too big for the cross-section): side by side along x from `xStart`, a gap
+ * before each and after the last so side hatches have their cell, two wide where hatches on both sides face into it.
+ * Fronts face +z, the front row just behind the cross-section, so front hatches' cells are its back row. The
+ * controller and hatches carry the unit's role; casings none. Every block, and the cell in front of each hatch, goes in
+ * `taken`. `width` covers the gaps too.
+ */
+export function placeMultiblocks(units: Unit[], xStart: number, taken: Set<string>): { placed: Placed[]; width: number } {
+  const placed: Placed[] = [];
+  let x = xStart;
+  let lastFacesEast = false;
+  for (const u of units) {
+    const s = u.pm && structureFor(u.pm);
+    if (!s) continue;
+    x += lastFacesEast && s.ports.some((p) => p.facing === 4) ? 2 : 1;
+    const [w, , d] = s.size;
+    const at = (rel: Vec3): Vec3 => [x + rel[0], rel[1], TIDY_BOUNDS.zMin - d + rel[2]];
+    for (const b of s.blocks) {
+      const controller = b.key === u.key;
+      placed.push(controller
+        ? { ...u, pos: at(b.rel), facing: 3, fixed: true, tier: undefined }
+        : { role: '', key: b.key, name: CATALOG.get(b.key)?.name ?? b.key, pos: at(b.rel), fixed: true });
+    }
+    for (const p of s.ports) {
+      placed.push({
+        role: u.role, key: p.key, name: CATALOG.get(p.key)?.name ?? p.key, pm: u.pm, pos: at(p.rel), facing: p.facing, fixed: true,
+        port: { kind: p.kind, keys: p.keys }, ...(p.kind === 'energy' ? { tier: tierOf(u.pm) } : {}),
+      });
+      taken.add(posKey(addVec(at(p.rel), DIRS[p.facing])));
+    }
+    lastFacesEast = s.ports.some((p) => p.facing === 5);
+    x += w;
+  }
+  for (const p of placed) taken.add(posKey(p.pos));
+  return { placed, width: placed.length ? x - xStart + 1 : 0 };
+}
+
 /** Generators a region needs for what its machines use on average, with a margin for cable loss. */
 const GENERATOR_MARGIN = 1.1;
 
@@ -213,7 +268,7 @@ function powerEachRegion(plan: LinePlan, rows: PlanMachine[], oneOffs: PlanMachi
   if (new Set(allGens.map((g) => g.tier)).size > 1) return powerEachVoltage(rows, oneOffs, copies, allGens);
   const gen = [...rows, ...oneOffs].find((m) => m.generator);
   if (!gen || plan.power.source.kind !== 'generators' || !gen.eut) return { rows, oneOffs };
-  const uses = (ms: PlanMachine[], per: number) => ms.filter((m) => !m.generator && !m.multiblock).reduce((s, m) => s + (m.avgEut ?? m.eut * m.count * per) / per, 0);
+  const uses = (ms: PlanMachine[], per: number) => ms.filter((m) => !m.generator && !handBuilt(m)).reduce((s, m) => s + (m.avgEut ?? m.eut * m.count * per) / per, 0);
   const need = (eu: number) => (eu > 0 ? Math.ceil((eu * GENERATOR_MARGIN) / gen.eut - 1e-9) : 0);
   const planned = [...rows, ...oneOffs].filter((m) => m.generator).reduce((s, m) => s + m.count * (rows.includes(m) ? copies : 1), 0);
   // Machines above the generators' voltage are stepped up to in the core, which then powers their slices: all the
@@ -222,7 +277,7 @@ function powerEachRegion(plan: LinePlan, rows: PlanMachine[], oneOffs: PlanMachi
   const inRows = rows.some((m) => m.generator) && !above;
   // A transformer gives 4 A of the lower voltage: one generator (through one transformer) per 4 machines a step down.
   const stepDown = rows.some((m) => !m.generator && m.tier && TIERS.indexOf(m.tier as PowerTier) < TIERS.indexOf(gen.tier as PowerTier));
-  const machinesPerSlice = rows.filter((m) => !m.generator && !m.multiblock).reduce((s, m) => s + m.count, 0);
+  const machinesPerSlice = rows.filter((m) => !m.generator && !handBuilt(m)).reduce((s, m) => s + m.count, 0);
   const perSlice = inRows ? Math.max(need(uses(rows, copies)), stepDown ? Math.ceil(machinesPerSlice / 4) : 0) : 0;
   const coreOwn = need(uses(oneOffs, 1) + (inRows ? 0 : uses(rows, copies) * copies));
   // Generators added to the plan for cable loss stay in the core.
@@ -243,7 +298,7 @@ function powerEachVoltage(rows: PlanMachine[], oneOffs: PlanMachine[], copies: n
   const region = (ms: PlanMachine[], per: number): PlanMachine[] => {
     const count = new Map<PlanMachine, number>();
     const machinesOf = new Map<PlanMachine, number>();
-    for (const m of ms.filter((x) => !x.generator && !x.multiblock && x.tier)) {
+    for (const m of ms.filter((x) => !x.generator && !handBuilt(x) && x.tier)) {
       const tier = m.tier === 'ULV' ? 'LV' : m.tier!;
       const g = genFor(tier);
       const eu = (m.avgEut ?? m.eut * m.count * per) / per;
@@ -274,7 +329,10 @@ function withCore(
   const steps = feed && feed.tier !== source
     ? [...transformersFor(everyMachine, source).filter((t) => t.transformer!.from === source), ...transformersFor(coreMachines.filter(needsStep), source).filter((t) => t.transformer!.from !== source)]
     : ownGen.size > 1 ? transformersFor(coreMachines.filter(needsStep), source) : transformersFor(coreMachines, source);
-  const coreUnits = [...coreMachines, ...steps, ...(plan.power.source.kind === 'generators' ? stepUpsFor(everyMachine, source) : [])];
+  // Multiblocks stand behind the core rather than in its machine spots (they still count toward its transformers).
+  const multiblocks = coreMachines.filter((u) => u.pm?.multiblock && !handBuilt(u.pm));
+  const coreUnits = [...coreMachines.filter((u) => !multiblocks.includes(u)), ...steps, ...(plan.power.source.kind === 'generators' ? stepUpsFor(everyMachine, source) : [])];
+  const multiblockWidth = placeMultiblocks(multiblocks, 0, new Set()).width;
   const markerColumns = Math.ceil(markers.length / 4);
   const laneIds = new Set(slice.throughRuns.keys());
   const local = nets.map((n) => (n.kind === 'cable' && !n.source && !laneIds.has(n.id) ? { ...n, id: `${n.id}:core` } : n));
@@ -305,7 +363,8 @@ function withCore(
     : ([1, 2] as const).flatMap((step) => [undefined, LOW_AVOID].map((avoid) => ({ step, avoid })));
   for (const { step, avoid } of shapes) {
   for (let extra = 0; extra < CORE_WIDEN_TRIES; extra++) {
-    const C = markerColumns + step * machineCount + (step === 2 ? 2 : 1) + extra;
+    // At least as long as the multiblocks behind it.
+    const C = Math.max(markerColumns + step * machineCount + (step === 2 ? 2 : 1), multiblockWidth) + extra;
     if (best && C > best.score[0]) break;
     const coreMin = -C;
     // Through-runs are fixed only where they meet the slices (both core ends, or just the slice end of a straight
@@ -316,6 +375,8 @@ function withCore(
     const laneYs = [...lanes.values()].flat(2).map((c) => c[1]);
     const laneZs = [...lanes.values()].flat(2).map((c) => c[2]);
     const taken = new Set([...keepClear, ...[...lanes.values()].flat(2).map(posKey)]);
+    // Multiblocks at the slice end of the core, the cells in front of their hatches kept for their pipes and cables.
+    const behind = placeMultiblocks(multiblocks, -multiblockWidth, taken).placed;
     // A marker sits right beside the through-run it fills or empties (no pipe needed), else in the end column.
     const corePlaced: Placed[] = [];
     const roomy = (c: Vec3) => !taken.has(posKey(c)) && c[0] >= coreMin && c[0] < 0 && inBounds(c);
@@ -335,14 +396,14 @@ function withCore(
       lastWhy = 'core: no room to place the core machines';
       continue;
     }
-    corePlaced.push(...core.map(facingInward));
+    corePlaced.push(...core.map(facingInward), ...behind);
     // Nothing goes in front of a core machine.
     for (const u of corePlaced) if (u.mainFacing !== undefined) keepClear.add(posKey(addVec(u.pos, DIRS[u.mainFacing])));
     const region: Region = {
-      // Within the tidy cross-section, or as far out as the slices' runs come in.
+      // Within the tidy cross-section, or as far out as the slices' runs come in and the multiblocks stand.
       name: 'core', units: corePlaced,
-      min: [coreMin, Math.min(TIDY_BOUNDS.yMin, ...laneYs), Math.min(TIDY_BOUNDS.zMin, ...laneZs)],
-      max: [-1, Math.max(TIDY_BOUNDS.yMax, ...laneYs), Math.max(TIDY_BOUNDS.zMax, ...laneZs)],
+      min: [coreMin, Math.min(TIDY_BOUNDS.yMin, ...laneYs), Math.min(TIDY_BOUNDS.zMin, ...laneZs, ...behind.map((u) => u.pos[2]))],
+      max: [-1, Math.max(TIDY_BOUNDS.yMax, ...laneYs, ...behind.map((u) => u.pos[1])), Math.max(TIDY_BOUNDS.zMax, ...laneZs)],
       lanes, keepClear, bendPenalty: BEND_PENALTY, walkway: false, ...(avoid !== undefined ? { avoidPenalty: avoid } : {}),
     };
     const routed = routeRegion(region, coreNets, plan, true);

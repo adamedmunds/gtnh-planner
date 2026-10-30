@@ -27,7 +27,7 @@ function permutations<T>(items: T[]): T[][] {
   return items.flatMap((item, i) => permutations([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [item, ...rest]));
 }
 
-/** Machines that take power (generators make it; multiblocks are built by hand). */
+/** Machines that take power (generators make it; multiblocks never sit in rows, and stand-ins take none). */
 const consumes = (m: PlanMachine) => !m.generator && !m.multiblock;
 
 /**

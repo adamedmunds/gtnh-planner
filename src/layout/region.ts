@@ -1,7 +1,7 @@
 import { CATALOG, registerMachines } from '../catalog';
 import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
 import { routeNetwork } from '../model/route';
-import type { Build, FaceSetting, Facing, LineNetwork, PlacedBlock, Vec3 } from '../model/types';
+import type { Build, FaceSetting, Facing, LineNetwork, PlacedBlock, PortKind, Vec3 } from '../model/types';
 import { structureFor } from './multiblock';
 import { VOLTAGE, cableFor, pipeFor } from './power';
 import type { GeneratedLine, LinePlan, PlanMachine, PlanMarker, PowerTier } from './types';
@@ -21,8 +21,12 @@ export interface Unit {
   marker?: PlanMarker;
   /** `up`: set to step up (soft mallet) — `from` (lower) in on five faces, `to` (higher) out of its facing. */
   transformer?: { from: PowerTier; to: PowerTier; up?: boolean };
-  /** Power tier the block runs on (machines). */
+  /** Power tier the block runs on (machines; a multiblock's energy hatch). */
   tier?: PowerTier;
+  /** A multiblock's hatch or bus: what it does, and the resources it handles (its pipe or cable is on its `facing`). */
+  port?: { kind: PortKind; keys: string[] };
+  /** Part of a multiblock: placed with its facing already set, which routing keeps. */
+  fixed?: boolean;
 }
 
 export interface Placed extends Unit {
@@ -81,6 +85,16 @@ export interface Routed {
 /** The power tier a machine runs on; a multiblock only has one when it's planned as itself. */
 export const tierOf = (pm?: PlanMachine): PowerTier | undefined =>
   (pm?.multiblock && !structureFor(pm)) || !pm?.tier ? undefined : pm.tier === 'ULV' ? 'LV' : (pm.tier as PowerTier);
+
+/** A multiblock without a structure: a one-block stand-in the player builds by hand, which the line doesn't power. */
+export const handBuilt = (pm?: PlanMachine): boolean => !!pm?.multiblock && !structureFor(pm);
+
+/** What a network carries: its item kinds, or its one fluid. */
+const netKeys = (n: Net) => n.parts?.map((p) => p.key) ?? [n.id.slice(2)];
+
+/** Networks a multiblock port ends: those it carries a key of, in its direction. */
+const portNets = (u: Placed, nets: Net[]) => nets.filter((n) => n.kind !== 'cable' && u.port && netKeys(n).some((k) => u.port!.keys.includes(k)) &&
+  (u.port.kind === 'out' ? n.producers.has(u.role) : u.port.kind === 'in' && n.consumers.has(u.role)));
 
 const isWalkway = (c: Vec3) => c[2] === 0 && (c[1] === 0 || c[1] === 1);
 
@@ -202,8 +216,19 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
   const sourceNet = (t: PowerTier) => nets.find((n) => n.kind === 'cable' && n.tier === t)!;
   const roleNets = (u: Placed) => nets.filter((n) => n.kind !== 'cable' && (n.producers.has(u.role) || n.consumers.has(u.role)));
 
-  // 1. Output faces, decided up front so inputs never take them.
+  // 1. Output faces, decided up front so inputs never take them. A multiblock's parts keep their facing: the cell in
+  // front of a hatch is its network's (an energy hatch's, its voltage's), reserved before anything else picks a face.
   for (const u of region.units) {
+    if (!u.fixed || !u.port || u.facing === undefined) continue;
+    const net = u.port.kind === 'energy' ? (u.tier && nets.find((n) => n.kind === 'cable' && n.tier === u.tier)) : portNets(u, nets)[0];
+    if (!net) continue;
+    const cell = addVec(u.pos, DIRS[u.facing]);
+    if (!usable(cell, net.id)) return { fail: `no room in front of the ${u.name} for ${net.name}` };
+    u.facingNet = net.id;
+    netOf.set(posKey(cell), net.id);
+  }
+  for (const u of region.units) {
+    if (u.fixed) continue;
     let primary: Net | undefined;
     if (u.pm?.generator) primary = sourceNet(u.tier ?? TIERS.find((t) => nets.some((n) => n.tier === t && n.source))!);
     else if (u.transformer) primary = sourceNet(u.transformer.up ? u.transformer.to : u.transformer.from);
@@ -233,7 +258,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
     DIRS.forEach((d, side) => {
       if (side === t.facing) return;
       const m = occupied.get(posKey(addVec(t.pos, d)));
-      if (!m || m.transformer || m.marker || m.pm?.generator || m.tier !== t.transformer!.to) return;
+      if (!m || m.transformer || m.marker || m.fixed || m.pm?.generator || m.tier !== t.transformer!.to) return;
       if (sideTo(m.pos, t.pos) === m.mainFacing) return;
       directlyPowered.add(posKey(m.pos));
     });
@@ -246,6 +271,9 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
       if (u.transformer?.up) return u.transformer.from === n.tier ? [{ u, mode: 'other' }] : u.transformer.to === n.tier ? [{ u, mode: 'facing' }] : [];
       if (u.transformer) return u.transformer.from === n.tier ? [{ u, mode: 'facing' }] : u.transformer.to === n.tier ? [{ u, mode: 'other' }] : [];
       if (u.marker?.kind === 'power') return n.source ? [{ u, mode: 'any' }] : [];
+      // A multiblock takes power through its energy hatch's front alone.
+      if (u.port) return u.port.kind === 'energy' && u.tier === n.tier ? [{ u, mode: 'facing' }] : [];
+      if (u.fixed) return [];
       if (u.tier === n.tier && !u.marker && !u.pm?.multiblock && !directlyPowered.has(posKey(u.pos))) return [{ u, mode: 'other' }];
       return [];
     });
@@ -287,6 +315,8 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
       ? powerEnds(n)
       : region.units.flatMap((u): { u: Placed; mode: 'facing' | 'other' | 'any' | 'cover' }[] => {
           if (u.marker) return n.producers.has(u.role) || n.consumers.has(u.role) ? [{ u, mode: 'any' }] : [];
+          // A hatch ends the networks it carries: an output only out of its front, an input on any free face.
+          if (u.fixed) return portNets(u, [n]).length ? [{ u, mode: u.facingNet === n.id || u.port!.kind === 'out' ? 'facing' : 'other' }] : [];
           if (n.producers.has(u.role)) return [{ u, mode: u.facingNet === n.id ? 'facing' : 'cover' }];
           if (n.consumers.has(u.role)) return [{ u, mode: 'other' }];
           return [];
@@ -304,7 +334,8 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
     // Steer clear of machine faces and of the cells around other machines' output faces, so no output gets boxed in.
     const avoid = new Set<string>();
     for (const u of region.units) {
-      for (const d of DIRS) avoid.add(posKey(addVec(u.pos, d)));
+      // A multiblock's walls have no faces to keep free (its hatches' cells are reserved).
+      if (!u.fixed) for (const d of DIRS) avoid.add(posKey(addVec(u.pos, d)));
       if (u.facing !== undefined && u.facingNet !== n.id) {
         const out = addVec(u.pos, DIRS[u.facing]);
         for (const d of DIRS) avoid.add(posKey(addVec(out, d)));
@@ -365,7 +396,7 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
 
   // Machines with nothing to push out still need an output side: any free side but the front.
   for (const u of region.units) {
-    if (u.facing !== undefined || u.marker) continue;
+    if (u.facing !== undefined || u.marker || u.fixed) continue;
     const used = new Set([...routed.attach].filter((a) => a.endsWith(`>${posKey(u.pos)}`)).map((a) => a.split('>')[0]));
     u.facing = ([0, 1, 2, 3, 4, 5] as Facing[]).find((s) => s !== u.mainFacing && !used.has(posKey(addVec(u.pos, DIRS[s])))) as Facing;
   }
@@ -413,7 +444,9 @@ export function conduitBlocks(routed: Routed, nets: Net[], laneIds: Set<string>,
 }
 
 export const unitBlock = (u: Placed): PlacedBlock => ({
-  pos: u.pos, key: u.key, role: u.role,
+  pos: u.pos, key: u.key,
+  ...(u.role ? { role: u.role } : {}),
+  ...(u.port ? { port: u.port } : {}),
   ...(u.transformer?.up ? { stepUp: true } : {}),
   ...(u.facing !== undefined ? { facing: u.facing } : {}),
   ...(u.mainFacing !== undefined ? { mainFacing: u.mainFacing } : {}),
