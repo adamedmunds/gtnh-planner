@@ -7,7 +7,7 @@ import { formatNumber } from '../calculator/format';
 import { resourceInfo } from '../calculator/graphModel';
 import type { RecipeDb } from '../recipes/db';
 import { EU, type MachineRef, type ResourceKey } from '../recipes/types';
-import { COILS, EBF_ID, buildable, coilFor, ebfHeat } from './multiblock';
+import { COILS, EBF_ID, PYROLYSE_OVEN_ID, buildable, coilFor, ebfHeat, hasMuffler } from './multiblock';
 import type { LayoutStyle, LinePlan, PlanMachine, PlanMarker, PlanNetwork, PowerPlan, PowerTier } from './types';
 
 const POWER_TIERS: readonly PowerTier[] = ['LV', 'MV', 'HV'];
@@ -192,7 +192,10 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     const coil = i.ref.mID === EBF_ID ? coilFor(i.heat, i.tier) : undefined;
     return [
       `Fix the ${name}'s maintenance hatch with tools after pasting it`,
-      ...(coil ? [`The ${name} uses ${coil.name} Heating Coils (its recipe needs ${formatNumber(i.heat)} K)`, `Keep the block above the ${name}'s muffler hatch empty`] : []),
+      ...(coil ? [`The ${name} uses ${coil.name} Heating Coils (its recipe needs ${formatNumber(i.heat)} K)`] : []),
+      ...(i.ref.mID === PYROLYSE_OVEN_ID ? [`The ${name} uses Kanthal Heating Coils so it runs at the recipe's speed (Cupronickel would halve it)`] : []),
+      ...(hasMuffler(i.ref.mID) ? [`Keep the block above the ${name}'s muffler hatch empty`] : []),
+      ...(i.ref.mID === PYROLYSE_OVEN_ID ? [`Place a Steel Frame Box on top of each of the ${name}'s two back pipe columns (Schematica can't hold frame boxes)`] : []),
       ...(i.ref.mID === 1169 || i.ref.mID === 1160 ? [`The ${name}'s Heating Coils are Cupronickel; better ones can be swapped in`] : []),
       ...i.kept.map((k) => `Put a ${k.name} in the ${name}'s controller or input bus`),
     ];

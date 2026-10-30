@@ -7,11 +7,15 @@ export const machineTier = (m: MachineRef) =>
 
 const byTier = (a: MachineRef, b: MachineRef) => Number(a.multiblock) - Number(b.multiblock) || machineTier(a) - machineTier(b);
 
+/** Legacy machine -> the craftable one replacing it; GT's "Pyrolyse Oven Conversion Recipe" (MTERecipeLoader) only converts the old oven into the new one. */
+const REPLACED_BY: Record<number, number> = { 1159: 15546 };
+
 /** Machines on the recipe's map with enough voltage for it: single blocks first, lowest tier first. */
 export function machineOptions(recipe: Recipe, db: RecipeDb): MachineRef[] {
   const map = db.map(recipe.map);
   const eutPerAmp = recipe.eut / Math.max(1, map.amperage);
-  return map.machines.filter((m) => (m.voltage ?? (m.tier !== undefined ? V[m.tier] : Infinity)) >= eutPerAmp).sort(byTier);
+  const ids = new Set(map.machines.map((m) => m.mID));
+  return map.machines.filter((m) => !ids.has(REPLACED_BY[m.mID])).filter((m) => (m.voltage ?? (m.tier !== undefined ? V[m.tier] : Infinity)) >= eutPerAmp).sort(byTier);
 }
 
 /** The cheapest machine that can run the recipe. */

@@ -114,6 +114,20 @@ test('an EBF is planned as itself with its recipe heat, and the notes name its c
   expect(p.notes).toContain("Keep the block above the Distillation Tower's muffler hatch empty");
 });
 
+test('a Pyrolyse Oven is planned as itself; the notes name its Kanthal coils, its muffler and its frames', async () => {
+  const p = await towerPlan(15546, null, 'modular', 120);
+  expect(inPlan(p).key).toBe('gt_15546');
+  expect(p.notes).toContain("The Distillation Tower uses Kanthal Heating Coils so it runs at the recipe's speed (Cupronickel would halve it)");
+  expect(p.notes).toContain("Keep the block above the Distillation Tower's muffler hatch empty");
+  expect(p.notes).toContain("Place a Steel Frame Box on top of each of the Distillation Tower's two back pipe columns (Schematica can't hold frame boxes)");
+});
+
+test('the legacy Pyrolyse Oven keeps the stand-in', async () => {
+  const p = await towerPlan(1159, null, 'modular', 120);
+  expect(inPlan(p).key).toBe('marker_multiblock');
+  expect(p.notes).toContain("Build the Distillation Tower here yourself (multiblocks aren't laid out yet)");
+});
+
 test('an EBF hotter than Nichrome keeps the stand-in, says why, and uses no power', async () => {
   const p = await towerPlan(1000, 3, 'modular', 120, 4500);
   expect(inPlan(p).key).toBe('marker_multiblock');
