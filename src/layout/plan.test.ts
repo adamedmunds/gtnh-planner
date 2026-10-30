@@ -81,12 +81,12 @@ test('an EV machine is refused in plain words', async () => {
 
 // A Distillation Tower (HV) fed by the oil extractor: Oil -> five fluids, in a fixed order.
 const TOWER_FLUIDS = ['fluid:fraction_a', 'fluid:fraction_b', 'fluid:fraction_c', 'fluid:fraction_d', 'fluid:fraction_e'];
-const towerSetup = (mID = 1126, tier = 3) => {
+const towerSetup = (mID = 1126, tier: number | null = 3, eut = 120) => {
   const data = oilBerryData();
   for (const k of TOWER_FLUIDS) data.resources.push({ key: k, name: `Fraction ${k.slice(-1).toUpperCase()}`, kind: 'fluid' });
   data.maps.push({ index: 5, id: 'gt.recipe.distillationtower', name: 'Distillation Tower', amperage: 1,
-    machines: [{ mID, name: 'Distillation Tower', tier, multiblock: true }] });
-  data.recipes.push({ id: 5, map: 5, eut: 120, duration: 100, specialValue: 0,
+    machines: [{ mID, name: 'Distillation Tower', ...(tier === null ? {} : { tier }), multiblock: true }] });
+  data.recipes.push({ id: 5, map: 5, eut, duration: 100, specialValue: 0,
     inputs: [{ key: K.oil, amount: 1000, consumed: true }],
     outputs: TOWER_FLUIDS.map((key) => ({ key, amount: 100, chance: 1 })) });
   const towerDb = new RecipeDb(data);
@@ -101,8 +101,8 @@ const towerSetup = (mID = 1126, tier = 3) => {
   };
   return { towerDb, chain };
 };
-const towerPlan = async (mID = 1126, tier = 3, style: 'modular' | 'straight' = 'modular') => {
-  const { towerDb, chain } = towerSetup(mID, tier);
+const towerPlan = async (mID = 1126, tier: number | null = 3, style: 'modular' | 'straight' = 'modular', eut = 120) => {
+  const { towerDb, chain } = towerSetup(mID, tier, eut);
   return ok(await plan(chain, style, towerDb));
 };
 const inPlan = (p: LinePlan) => [...(p.slice ?? []), ...p.core, ...(p.straight ?? [])].find((m) => m.nodeId === 'tower')!;
@@ -129,6 +129,21 @@ test('a multiblock with no definition keeps the stand-in', async () => {
 test('a multiblock above HV keeps the stand-in', async () => {
   const p = await towerPlan(1126, 4);
   expect(inPlan(p).key).toBe('marker_multiblock');
+});
+
+test('a multiblock without a tier takes its recipe voltage', async () => {
+  const p = await towerPlan(1126, null, 'modular', 480);
+  const t = inPlan(p);
+  expect(t.key).toBe('gt_1126');
+  expect(t.machine).toMatchObject({ mID: 1126, multiblock: true, tier: 'HV' });
+  expect(t.tier).toBe('HV');
+  expect(p.power.demand.HV).toBeGreaterThan(0);
+});
+
+test('a multiblock without a tier whose recipe is above HV keeps the stand-in', async () => {
+  const p = await towerPlan(1126, null, 'modular', 2000);
+  expect(inPlan(p).key).toBe('marker_multiblock');
+  expect(p.power.demand.HV).toBeUndefined();
 });
 
 test('a planned multiblock adds the maintenance note', async () => {

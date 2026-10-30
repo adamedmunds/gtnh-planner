@@ -1,6 +1,6 @@
 import type { Chain } from '../calc/chain';
 import { nodeRates } from '../calc/rates';
-import { V, tierName, TIER_NAMES } from '../calc/tiers';
+import { V, tierName, tierForEut, TIER_NAMES } from '../calc/tiers';
 import { CATALOG_ENTRIES, machineKey } from '../catalog';
 import { haveBoxes, type ScreenSolve } from '../calculator/drive';
 import { formatNumber } from '../calculator/format';
@@ -39,7 +39,8 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     const perMachine = r.valid ? r.perMachine : new Map<ResourceKey, number>();
     const mapIndex = node.kind === 'recipe' ? db.bySignature(node.recipeSig)!.map : db.mapIndexById(node.fuelMap)!;
     const ref = db.map(mapIndex).machines.find((m) => m.mID === node.machineMID)!;
-    const tier = tierName(ref);
+    // A multiblock dump carries no tier: it runs at the lowest voltage that covers its recipe's EU/t.
+    const tier = tierName(ref) ?? (ref.multiblock && r.valid ? TIER_NAMES[tierForEut(Math.abs(r.eut))] : undefined);
     const recipe = node.kind === 'recipe' ? db.bySignature(node.recipeSig) : undefined;
     const kept = (recipe?.inputs ?? []).filter((s) => s.consumed === false).map((s) => {
       const circuit = /gt\.integrated_circuit@(\d+)$/.exec(s.key);
