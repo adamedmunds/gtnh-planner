@@ -87,6 +87,13 @@ test('recipe machines carried by the build round-trip and register', () => {
   expect(getEntry('gt_1112')?.name).toBe('Turbo Combustion Generator');
 });
 
+test('a multiblock controller keeps its controller look after a reload', () => {
+  const b: Build = { ...good, machines: [{ key: 'gt_1126', name: 'Distillation Tower', mID: 1126, tier: 'HV', multiblock: true }] };
+  const { build } = parseBuild(serializeBuild(b));
+  expect(build.machines).toEqual(b.machines);
+  expect(getEntry('gt_1126')?.meta).toBe(2);
+});
+
 test('a malformed recipe machine is skipped with a warning', () => {
   const { build, warnings } = parseBuild(JSON.stringify({ ...good, machines: [{ key: 'gt_1', mID: 'x' }] }));
   expect(build.machines).toBeUndefined();

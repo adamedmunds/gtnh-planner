@@ -70,7 +70,9 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
   (Array.isArray(obj.machines) ? obj.machines : []).forEach((m: unknown, i: number) => {
     const r = (typeof m === 'object' && m !== null ? m : {}) as Record<string, unknown>;
     if (typeof r.key === 'string' && typeof r.name === 'string' && isInt(r.mID) && (r.tier === undefined || typeof r.tier === 'string')) {
-      machines.push({ key: r.key, name: r.name, mID: r.mID, ...(typeof r.tier === 'string' ? { tier: r.tier } : {}) });
+      machines.push({
+        key: r.key, name: r.name, mID: r.mID, ...(typeof r.tier === 'string' ? { tier: r.tier } : {}), ...(r.multiblock === true ? { multiblock: true } : {}),
+      });
     } else warnings.push(`Skipped recipe machine #${i + 1}: invalid entry`);
   });
   if (machines.length) {
