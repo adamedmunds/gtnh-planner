@@ -23,6 +23,8 @@ export interface PlanMachine {
   kept: { key: ResourceKey; name: string }[];
   inputs: ResourceKey[];
   outputs: ResourceKey[];
+  /** Fluid outputs in the recipe's own order (a Distillation Tower's layers follow it). */
+  fluidOutputs?: ResourceKey[];
   generator: boolean;
   multiblock: boolean;
 }

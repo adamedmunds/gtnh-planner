@@ -12,6 +12,9 @@ export interface ManualMask {
   forcedOff: number;
 }
 
+/** What a multiblock hatch or bus does for the structure. */
+export type PortKind = 'in' | 'out' | 'energy' | 'maintenance';
+
 export interface PlacedBlock {
   pos: Vec3;
   key: string;
