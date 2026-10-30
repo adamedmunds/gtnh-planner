@@ -76,6 +76,22 @@ test("two towers are both built and share each layer's network", () => {
   expect(checkLine(build, p)).toEqual([]);
 });
 
+test('a one-output tower is built three tall, its empty layer-2 hatch unpiped, and passes', () => {
+  const t = tower({ outputs: ['fluid:f1'], fluidOutputs: ['fluid:f1'] });
+  const p = plan([t], [fluid('fluid:f1', ['dt'], ['out:0'])], [marker('out:0', 'fluid:f1', 'out')]);
+  const { build } = buildLine(p, 'Tower line');
+  expect(checkLine(build, p)).toEqual([]);
+  const mb = multiblockBlocks(build, 'dt');
+  expect(Math.max(...mb.map((b) => b.pos[1])) - Math.min(...mb.map((b) => b.pos[1])) + 1).toBe(3);
+  const bottom = build.blocks.find((b) => b.key === 'gt_1126')!.pos[1];
+  const outs = ports(build, 'out');
+  expect(outs.find((b) => b.pos[1] === bottom + 1)?.port!.keys).toEqual(['fluid:f1']);
+  const empty = outs.find((b) => b.pos[1] === bottom + 2)!;
+  expect(empty.port!.keys).toEqual([]);
+  const front = build.blocks.find((b) => posKey(b.pos) === posKey(addVec(empty.pos, DIRS[empty.facing!])));
+  expect(front).toBeUndefined();
+});
+
 test('a tower with an item output gets its item out', () => {
   const p = plan(
     [tower({ outputs: [...FLUIDS, 'item:coke'] })],
