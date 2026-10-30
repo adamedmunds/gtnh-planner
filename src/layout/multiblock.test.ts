@@ -81,6 +81,31 @@ describe('multiblock structures', () => {
     expect(s.ports.find((p) => p.kind === 'out')?.rel[0]).toBe(4);
   });
 
+  // GT's casing minimums (checkCasingMin in checkMachine): MTEOilCracker 18, MTELargeChemicalReactor 8,
+  // MTEDistillationTower 7 * (mHeight + 1) - 5, where mHeight + 1 is the tower's height.
+  it.each([['fluid:hydrogen'], ['fluid:steam']])('an oil cracker keeps at least 18 casings, one hatch per fluid (%s)', (gas) => {
+    const s = structureFor(mb(1160, { inputs: ['fluid:oil', gas], outputs: ['fluid:cracked'] }))!;
+    expect(countKey(s, 'casing_clean_stainless')).toBeGreaterThanOrEqual(18);
+    expect(s.ports.filter((p) => p.kind === 'in' && p.rel[0] === 0)).toHaveLength(1);
+    expect(s.ports.filter((p) => p.kind === 'out')).toHaveLength(1);
+    expect(s.ports.filter((p) => p.kind === 'out' && !p.keys.length)).toHaveLength(0);
+  });
+
+  it('a large chemical reactor with every hatch spot used keeps at least 8 casings, and its energy hatch', () => {
+    const many = (p: string, n: number) => Array.from({ length: n }, (_, i) => `fluid:${p}${i}`);
+    const s = structureFor(mb(1169, { inputs: [...many('i', 8), 'item:x'], outputs: [...many('o', 6), 'item:y'] }))!;
+    expect(countKey(s, 'casing_chemically_inert')).toBeGreaterThanOrEqual(8);
+    expect(s.ports.filter((p) => p.kind === 'energy')).toHaveLength(1);
+    expect(s.notes.length).toBeGreaterThan(0);
+  });
+
+  it.each([1, 2, 5, 11])('a %i-output tower with every bottom-layer port used keeps 7h - 5 casings', (n) => {
+    const outs = FLUIDS.concat(['fluid:f', 'fluid:g', 'fluid:h', 'fluid:i', 'fluid:j', 'fluid:k']).slice(0, n);
+    const s = tower(outs, { inputs: ['fluid:x', 'fluid:y', 'fluid:z', 'item:a'], outputs: [...outs, 'item:b'] });
+    const h = s.size[1];
+    expect(countKey(s, 'casing_clean_stainless')).toBeGreaterThanOrEqual(7 * h - 5);
+  });
+
   it('unknown multiblocks and ones above HV have no structure', () => {
     expect(structureFor(mb(9999))).toBeUndefined();
     expect(structureFor(mb(1126, { tier: 'EV', outputs: ['fluid:a'] }))).toBeUndefined();

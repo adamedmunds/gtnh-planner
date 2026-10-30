@@ -73,7 +73,11 @@ function hatchesFor(keys: ResourceKey[], kind: 'in' | 'out'): { key: string; key
   return list;
 }
 
-/** Distillation Tower: 3x3, one layer per fluid output above the bottom layer (at least 3 tall). */
+/**
+ * Distillation Tower: 3x3, one layer per fluid output above the bottom layer (at least 3 tall). GT needs 7h - 5 casings
+ * for a tower h tall (MTEDistillationTower.checkMachine: checkCasingMin(..., 7 * (mHeight + 1) - 5)); with every
+ * bottom-layer port used this structure has exactly that many.
+ */
 function distillationTower(pm: PlanMachine, tier: string): Structure {
   const fluids = pm.fluidOutputs ?? pm.outputs.filter(isFluid);
   const h = Math.max(3, fluids.length + 1);
@@ -105,7 +109,10 @@ function distillationTower(pm: PlanMachine, tier: string): Structure {
   return b.done();
 }
 
-/** Large Chemical Reactor: 3x3x3 Chemically Inert, PTFE pipe in the middle, one coil at the middle layer's back centre. */
+/**
+ * Large Chemical Reactor: 3x3x3 Chemically Inert, PTFE pipe in the middle, one coil at the middle layer's back centre.
+ * GT needs 8 casings (MTELargeChemicalReactor.checkMachine: checkCasingMin(..., 8)); 14 hatch spots leave 9.
+ */
 function largeChemicalReactor(pm: PlanMachine, tier: string): Structure {
   const b = new Builder([3, 3, 3], tier);
   for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let z = 0; z < 3; z++) b.block([x, y, z], INERT);
@@ -120,10 +127,11 @@ function largeChemicalReactor(pm: PlanMachine, tier: string): Structure {
   for (const [y, z] of [[1, 1], [0, 1], [2, 1]]) {
     spots.push({ rel: [0, y, z], facing: 4 }, { rel: [2, y, z], facing: 5 });
   }
+  // The energy hatch first, so running out of spots never leaves the reactor without power.
   const wanted: { kind: PortKind; key: string; keys: ResourceKey[] }[] = [
+    { kind: 'energy', key: tier, keys: [] },
     ...hatchesFor(pm.inputs, 'in').map((p) => ({ kind: 'in' as const, ...p })),
     ...hatchesFor(pm.outputs, 'out').map((p) => ({ kind: 'out' as const, ...p })),
-    { kind: 'energy', key: tier, keys: [] },
   ];
   wanted.forEach((w, i) => {
     const spot = spots[i];
@@ -150,9 +158,11 @@ function oilCrackingUnit(pm: PlanMachine, tier: string): Structure {
   const fluidIns = pm.inputs.filter(isFluid);
   const crack = fluidIns.find((k) => CRACKING_FLUIDS.includes(k));
   const oil = fluidIns.filter((k) => k !== crack);
+  // One hatch per fluid (at least one: GT needs an input on one side and an output on the other). Every hatch takes a
+  // casing's place, and the cracker needs 18 casings (MTEOilCracker.checkMachine: checkCasingMin(..., 18)).
   const column = (x: number, kind: 'in' | 'out', keys: ResourceKey[], ys: number[]) => {
     const key = kind === 'in' ? 'hatch_input_lv' : 'hatch_output_lv';
-    ys.forEach((y, i) => b.port([x, y, 2], 3, kind, key, keys[i] ? [keys[i]] : []));
+    ys.slice(0, Math.max(1, keys.length)).forEach((y, i) => b.port([x, y, 2], 3, kind, key, keys[i] ? [keys[i]] : []));
     if (keys.length > ys.length) b.notes.push(`The cracker's ${x === 0 ? 'input' : 'output'} column has room for ${ys.length} fluids.`);
   };
   column(0, 'in', oil, [1, 0, 2]);
