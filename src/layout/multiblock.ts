@@ -193,6 +193,12 @@ export const COILS: readonly { key: string; name: string; heat: number }[] = [
 
 export const EBF_ID = 1000;
 const VACUUM_FREEZER_ID = 1002;
+export const PYROLYSE_OVEN_ID = 15546;
+
+/** Controllers whose structure has a muffler hatch (the EBF's, and the Pyrolyse Oven's on top). */
+export function hasMuffler(mID: number): boolean {
+  return mID === EBF_ID || mID === PYROLYSE_OVEN_ID;
+}
 
 /** Energy hatches go up to HV; ULV takes an LV one. Above that, no structure. */
 function energyHatch(tier: string | undefined): string | undefined {
@@ -269,6 +275,47 @@ function vacuumFreezer(pm: PlanMachine, tier: string): Structure {
   return b.done();
 }
 
+/** MTEPyrolyseOven's shape: [c][b], c 0 the front layer, b 0 the top row; the character's index is x. */
+const PYROLYSE_SHAPE = [
+  ['       ', '       ', ' F   F ', 'FBF FBF', 'DBD~DBD', 'GGGGGGG'],
+  ['       ', '       ', ' C   C ', 'F FFF F', 'D D D D', 'GCGGGCG'],
+  ['       ', '       ', ' C   C ', 'F FFF F', 'D     D', 'GCGGGCG'],
+  ['       ', '       ', ' C   C ', 'F FFF F', 'D D D D', 'GCGGGCG'],
+  [' E   E ', ' A   A ', ' A   A ', 'FAF FAF', 'DADDDAD', 'GGGGGGG'],
+];
+const PYROLYSE_BLOCKS: Record<string, string> = { C: 'coil_kanthal', A: 'casing_steel_pipe', B: 'casing_steel_firebox', E: 'frame_steel', D: 'casing_pyrolyse', F: 'casing_pyrolyse', G: 'casing_pyrolyse' };
+
+/**
+ * Pyrolyse Oven: 7x6x5, shape and 60-casing minimum from MTEPyrolyseOven (checkCasingMin(errors, mCasing, 60); 73 casing
+ * or hatch cells, so at most 13 hatches). The coil is Kanthal: GT's speed multiplier is 2 / (1 + coil tier) and Kanthal
+ * is tier 1, so the oven runs at the recipe's own speed. The steel frames (corner posts) are drawn in 3D but can't go in
+ * a schematic. Inputs and the muffler (up, with air above) take the F cells, outputs, energy and maintenance the G cells.
+ */
+function pyrolyseOven(pm: PlanMachine, tier: string): Structure {
+  const b = new Builder([7, 6, 5], tier);
+  PYROLYSE_SHAPE.forEach((rows, c) => rows.forEach((row, r) => [...row].forEach((ch, x) => {
+    if (ch === ' ') return;
+    b.block([x, 5 - r, 4 - c], ch === '~' ? pm.key : PYROLYSE_BLOCKS[ch]);
+  })));
+  b.energy([5, 0, 4], 3);
+  b.port([3, 0, 0], 2, 'maintenance', 'hatch_maintenance');
+  b.port([3, 2, 2], 1, 'muffler', 'hatch_muffler_lv');
+  const ins = hatchesFor(pm.inputs, 'in');
+  const outs = hatchesFor(pm.outputs, 'out');
+  const itemIn = ins.find((p) => isItem(p.keys[0]));
+  const itemOut = outs.find((p) => isItem(p.keys[0]));
+  if (itemIn) b.port([0, 2, 2], 4, 'in', itemIn.key, itemIn.keys);
+  if (itemOut) b.port([6, 0, 2], 5, 'out', itemOut.key, itemOut.keys);
+  const side = (list: typeof ins, kind: 'in' | 'out', spots: Vec3[], facing: Facing, word: string, noun: string) => {
+    const fluids = list.filter((p) => isFluid(p.keys[0]));
+    fluids.slice(0, spots.length).forEach((p, i) => b.port(spots[i], facing, kind, p.key, p.keys));
+    if (fluids.length > spots.length) b.notes.push(`${fluids.length - spots.length} fluid ${word} don't fit on the oven's ${noun} side.`);
+  };
+  side(ins, 'in', [[0, 2, 3], [0, 2, 1]], 4, 'inputs', 'left');
+  side(outs, 'out', [[6, 0, 3], [6, 0, 1]], 5, 'outputs', 'right');
+  return b.done();
+}
+
 type Definition = (pm: PlanMachine, energyKey: string) => Structure;
 
 /** Multiblocks with a definition, by controller mID; the next one is one more function here. */
@@ -278,6 +325,7 @@ const DEFINITIONS: Partial<Record<number, Definition>> = {
   1160: oilCrackingUnit,
   [EBF_ID]: electricBlastFurnace,
   [VACUUM_FREEZER_ID]: vacuumFreezer,
+  [PYROLYSE_OVEN_ID]: pyrolyseOven,
 };
 
 /** Whether the machine gets a structure: a definition, an energy hatch for the tier, and (EBF) a coil that reaches `heat`. */

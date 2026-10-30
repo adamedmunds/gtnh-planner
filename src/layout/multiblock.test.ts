@@ -1,4 +1,4 @@
-import { buildable, ebfHeat, structureFor, type Structure } from './multiblock';
+import { buildable, ebfHeat, hasMuffler, structureFor, type Structure } from './multiblock';
 import type { PlanMachine } from './types';
 
 const mb = (mID: number, over: Partial<PlanMachine> = {}): PlanMachine => ({
@@ -213,5 +213,65 @@ describe('electric blast furnace and vacuum freezer', () => {
       'No room on the vacuum freezer for another in hatch.',
       'No room on the vacuum freezer for another out hatch.',
     ]);
+  });
+});
+
+describe('pyrolyse oven', () => {
+  // MTEPyrolyseOven's shape, verbatim: [c][b], c 0 = front, b 0 = top; char a = x.
+  const GT_SHAPE = [
+    ['       ', '       ', ' F   F ', 'FBF FBF', 'DBD~DBD', 'GGGGGGG'],
+    ['       ', '       ', ' C   C ', 'F FFF F', 'D D D D', 'GCGGGCG'],
+    ['       ', '       ', ' C   C ', 'F FFF F', 'D     D', 'GCGGGCG'],
+    ['       ', '       ', ' C   C ', 'F FFF F', 'D D D D', 'GCGGGCG'],
+    [' E   E ', ' A   A ', ' A   A ', 'FAF FAF', 'DADDDAD', 'GGGGGGG'],
+  ];
+  const oven = (over: Partial<PlanMachine> = {}) =>
+    structureFor(mb(15546, { tier: 'MV', inputs: ['item:log', 'fluid:nitrogen'], outputs: ['item:charcoal', 'fluid:creosote'], ...over }))!;
+
+  it("matches GT's shape cell for cell", () => {
+    const s = oven();
+    expect(s.size).toEqual([7, 6, 5]);
+    const BLOCK: Record<string, string> = { C: 'coil_kanthal', A: 'casing_steel_pipe', B: 'casing_steel_firebox', E: 'frame_steel', D: 'casing_pyrolyse', '~': 'gt_15546' };
+    GT_SHAPE.forEach((rows, c) => rows.forEach((row, b) => [...row].forEach((ch, a) => {
+      const [x, y, z] = [a, 5 - b, 4 - c];
+      const block = at(s, x, y, z)?.key;
+      const port = s.ports.find((p) => p.rel[0] === x && p.rel[1] === y && p.rel[2] === z);
+      if (ch === ' ') expect([block, port], `${x},${y},${z}`).toEqual([undefined, undefined]);
+      else if (ch === 'F') expect(block === 'casing_pyrolyse' || ['in', 'muffler'].includes(port?.kind ?? ''), `${x},${y},${z}`).toBe(true);
+      else if (ch === 'G') expect(block === 'casing_pyrolyse' || ['out', 'energy', 'maintenance'].includes(port?.kind ?? ''), `${x},${y},${z}`).toBe(true);
+      else expect(block, `${x},${y},${z}`).toBe(BLOCK[ch]);
+    })));
+    expect(countKey(s, 'casing_pyrolyse') + s.ports.length).toBe(73);
+  });
+
+  it('hatches: energy front right, maintenance back, muffler on top facing up, inputs left, outputs right', () => {
+    const s = oven();
+    const port = (kind: string, key?: string) => s.ports.find((p) => p.kind === kind && (!key || p.key === key));
+    expect(port('energy')).toMatchObject({ rel: [5, 0, 4], facing: 3, key: 'hatch_energy_mv' });
+    expect(port('maintenance')).toMatchObject({ rel: [3, 0, 0], facing: 2 });
+    expect(port('muffler')).toMatchObject({ rel: [3, 2, 2], facing: 1, key: 'hatch_muffler_lv', keys: [] });
+    expect(at(s, 3, 3, 2)).toBeUndefined();
+    expect(port('in', 'bus_input_lv')).toMatchObject({ rel: [0, 2, 2], facing: 4, keys: ['item:log'] });
+    expect(port('in', 'hatch_input_lv')).toMatchObject({ rel: [0, 2, 3], facing: 4, keys: ['fluid:nitrogen'] });
+    expect(port('out', 'bus_output_lv')).toMatchObject({ rel: [6, 0, 2], facing: 5, keys: ['item:charcoal'] });
+    expect(port('out', 'hatch_output_lv')).toMatchObject({ rel: [6, 0, 3], facing: 5, keys: ['fluid:creosote'] });
+  });
+
+  it('too many fluids: the extras get a note; casings stay at 60 or more, and the energy hatch stays', () => {
+    const s = oven({ inputs: ['item:log', 'fluid:a', 'fluid:b', 'fluid:c'], outputs: ['fluid:x', 'fluid:y', 'fluid:z'] });
+    expect(s.ports.filter((p) => p.kind === 'in' && p.key === 'hatch_input_lv').map((p) => p.rel)).toEqual([[0, 2, 3], [0, 2, 1]]);
+    expect(s.ports.filter((p) => p.kind === 'out').map((p) => p.rel)).toEqual([[6, 0, 3], [6, 0, 1]]);
+    expect(s.notes).toEqual(["1 fluid inputs don't fit on the oven's left side.", "1 fluid outputs don't fit on the oven's right side."]);
+    expect(countKey(s, 'casing_pyrolyse')).toBeGreaterThanOrEqual(60);
+    expect(s.ports.some((p) => p.kind === 'energy')).toBe(true);
+  });
+
+  it('only the new oven has a structure, up to HV', () => {
+    expect(buildable(15546, 'HV')).toBe(true);
+    expect(buildable(15546, 'EV')).toBe(false);
+    expect(buildable(1159, 'MV')).toBe(false);
+    expect(hasMuffler(15546)).toBe(true);
+    expect(hasMuffler(1000)).toBe(true);
+    expect(hasMuffler(1002)).toBe(false);
   });
 });
