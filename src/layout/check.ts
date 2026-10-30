@@ -2,6 +2,7 @@ import { CATALOG, type CatalogEntry } from '../catalog';
 import { computeConnections } from '../model/connections';
 import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
 import type { Build, PlacedBlock, Vec3 } from '../model/types';
+import { structureFor } from './multiblock';
 import type { LinePlan, PlanMachine } from './types';
 
 interface Cell { block: PlacedBlock; entry: CatalogEntry }
@@ -76,6 +77,18 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
   for (const c of cells.values()) {
     const r = roleOf(c);
     if (r) blocksOf.set(r, [...(blocksOf.get(r) ?? []), c]);
+  }
+  // A multiblock forms only whole: a lone controller of one the line can build does nothing in game, and one without an
+  // energy hatch never runs.
+  for (const m of planMachines.filter((x) => x.multiblock)) {
+    const blocks = blocksOf.get(m.nodeId) ?? [];
+    if (!blocks.length) continue;
+    const name = CATALOG.get(m.key)?.name ?? m.machine.name;
+    if (!blocks.some((c) => c.block.port)) {
+      if (structureFor(m)) {
+        for (const c of blocks) problems.push(`The ${name} at ${where(c.block.pos)} is a single block — it needs its casings and hatches to form`);
+      }
+    } else if (!blocks.some((c) => c.block.port?.kind === 'energy')) problems.push(`The ${name} has no energy hatch`);
   }
   const setting = (c: Cell, side: number, kind: string) =>
     (build.covers ?? []).some((s) => posKey(s.pos) === posKey(c.block.pos) && s.side === side && s.kind === kind);

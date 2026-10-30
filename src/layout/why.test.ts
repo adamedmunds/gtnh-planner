@@ -97,3 +97,9 @@ test('the same mixer on MV generators is stepped up instead', () => {
   expect(checkLine(build, plan)).toEqual([]);
   expect(build.blocks.some((b) => b.stepUp)).toBe(true);
 }, 60_000);
+
+test('a multiblock laid out as one block is explained as not fitting whole', () => {
+  const [r] = explainFailures(['check: The Distillation Tower at (1, 0, -1) is a single block — it needs its casings and hatches to form']);
+  expect(r.text).toBe("The Distillation Tower couldn't be laid out whole: there was no room for its casings and hatches");
+  expect(r.advice).toMatch(/build the Distillation Tower yourself beside the line/);
+});

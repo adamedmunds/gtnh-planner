@@ -229,6 +229,27 @@ describe('multiblock ports', () => {
     expect(checkLine(b, plan).join(' | ')).toMatch(/No power reaches the .*Energy Hatch/);
   });
 
+  test('a multiblock with hatches but no energy hatch is caught', () => {
+    const b = multiblock();
+    b.blocks = b.blocks.filter((p) => p.port?.kind !== 'energy' && p.key !== 'electrum_cable_1x' && p.key !== 'marker_power_in');
+    expect(checkLine(b, plan).join(' | ')).toMatch(/has no energy hatch/);
+  });
+
+  test('a lone controller for a tower the line builds whole is caught', () => {
+    // A real Distillation Tower (mID 1126): it has a structure, so one block of it never forms.
+    const tower: LinePlan = {
+      ...plan,
+      straight: [{ ...plan.straight![0], machine: { key: 'gt_1126', name: 'Distillation Tower', mID: 1126, tier: 'HV', multiblock: true }, fluidOutputs: [B, C] }],
+    };
+    const lone: Build = { version: 1, name: 'mb', blocks: [
+      { pos: [0, 0, 0], key: 'gt_1126', role: 'mb', facing: 3 },
+      pipe([1, 0, 0]), { pos: [2, 0, 0], key: 'marker_fluid_in', role: 'a_in' },
+      pipe([-1, 0, 0]), { pos: [-2, 0, 0], key: 'marker_fluid_out', role: 'b_out' },
+      pipe([0, 0, 1]), { pos: [0, 0, 2], key: 'marker_fluid_out', role: 'c_out' },
+    ] };
+    expect(checkLine(lone, tower).join(' | ')).toMatch(/The Distillation Tower at \(0, 0, 0\) is a single block — it needs its casings and hatches to form/);
+  });
+
   test('an output hatch with nothing to output needs no pipe', () => {
     const b = multiblock();
     hatchAt(b, 0, 1).port = { kind: 'out', keys: [] };

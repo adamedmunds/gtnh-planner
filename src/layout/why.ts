@@ -27,6 +27,16 @@ const RULES: { test: RegExp; text: (m: RegExpMatchArray) => string; tips: string
     ],
   },
   {
+    test: /^The (.+?) at \(.+?\) is a single block/,
+    text: (m) => `The ${m[1]} couldn't be laid out whole: there was no room for its casings and hatches`,
+    tips: (m) => [SPLIT, `Or build the ${m[1]} yourself beside the line`],
+  },
+  {
+    test: /^The (.+?) has no energy hatch$/,
+    text: (m) => `The ${m[1]} has no energy hatch, so it can't run`,
+    tips: (m) => [`Give the ${m[1]} an energy hatch with its power cable on the hatch's front`],
+  },
+  {
     test: /no free face on the (.+?) for (.+)$/,
     text: (m) => `The ${m[1]} has more pipes than free sides (it needed one for ${m[2]})`,
     tips: [FEWER, STRAIGHT],
