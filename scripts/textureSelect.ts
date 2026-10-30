@@ -1,4 +1,4 @@
-import type { CatalogEntry } from '../src/catalog';
+import { CONTROLLER_TEXTURE_PATHS, type CatalogEntry } from '../src/catalog';
 
 export const JAR_TEXTURE_ROOT = 'assets/gregtech/textures/';
 
@@ -11,7 +11,7 @@ export function textureSource(rel: string): { jar: 'gregtech' | 'storagedrawers'
 }
 
 export function wantedTexturePaths(entries: readonly CatalogEntry[]): string[] {
-  const set = new Set<string>();
+  const set = new Set<string>(CONTROLLER_TEXTURE_PATHS);
   for (const e of entries) for (const p of Object.values(e.textures)) if (p) set.add(p);
   return [...set].sort();
 }

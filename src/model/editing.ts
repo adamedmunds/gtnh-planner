@@ -1,4 +1,4 @@
-import { CATALOG, type Catalog } from '../catalog';
+import { CATALOG, isConduit, type Catalog } from '../catalog';
 import { computeConnections } from './connections';
 import { DIRS, OPPOSITE, addVec, posKey } from './directions';
 import type { Facing, ManualMask, PlacedBlock, Vec3 } from './types';
@@ -58,7 +58,7 @@ export function toggleSide(m: BlockMap, pos: Vec3, side: number, catalog: Catalo
   const k = posKey(pos);
   const block = m.get(k);
   const kind = block && catalog.get(block.key)?.kind;
-  if (!block || !kind || kind === 'machine' || side < 0 || side > 5) return m;
+  if (!block || !kind || !isConduit(kind) || side < 0 || side > 5) return m;
   const bit = 1 << side;
   const sideOn = (blocks: BlockMap) => ((computeConnections([...blocks.values()], catalog).get(k) ?? 0) & bit) !== 0;
 

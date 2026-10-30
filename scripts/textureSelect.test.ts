@@ -7,6 +7,9 @@ test('wanted paths are the unique texture paths referenced by the catalog', () =
   const wanted = wantedTexturePaths(CATALOG_ENTRIES);
   expect(wanted).toContain('blocks/iconsets/MACHINE_LV_SIDE.png');
   expect(wanted).toContain('blocks/basicmachines/distillery/OVERLAY_FRONT.png');
+  expect(wanted).toContain('blocks/iconsets/OVERLAY_FRONT_DISTILLATION_TOWER.png');
+  expect(wanted).toContain('blocks/iconsets/OVERLAY_FRONT_LARGE_CHEMICAL_REACTOR.png');
+  expect(wanted).toContain('blocks/iconsets/OVERLAY_FRONT_OIL_CRACKER.png');
   expect(new Set(wanted).size).toBe(wanted.length);
 });
 

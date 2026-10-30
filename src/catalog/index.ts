@@ -1,8 +1,8 @@
-import { CATALOG_ENTRIES, generatedEntry } from './entries';
+import { CATALOG_ENTRIES, CONTROLLER_TEXTURE_PATHS, generatedEntry } from './entries';
 import type { Catalog, CatalogEntry, GeneratedMachine } from './types';
 
 export * from './types';
-export { CATALOG_ENTRIES };
+export { CATALOG_ENTRIES, CONTROLLER_TEXTURE_PATHS };
 
 /** GregTech version the block catalog's machine IDs were taken from. */
 export const CATALOG_GREGTECH = '5.09.54.183';

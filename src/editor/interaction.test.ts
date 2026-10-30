@@ -18,6 +18,15 @@ test('shift+click on a machine face toggles the pipe attached to that face', () 
   expect(shiftClickTarget(blocks, { pos: [0, 0, 0], side: 1 })).toEqual({ pos: [0, 1, 0], side: 0 });
 });
 
+test('shift+click does nothing on a casing, and a machine face next to a casing has no pipe to target', () => {
+  const m = toBlockMap([
+    { pos: [0, 0, 0], key: 'casing_clean_stainless' },
+    { pos: [1, 0, 0], key: 'distillery_lv', facing: 3 },
+  ]);
+  expect(shiftClickTarget(m, { pos: [0, 0, 0], side: 1 })).toBeNull();
+  expect(shiftClickTarget(m, { pos: [1, 0, 0], side: 4 })).toBeNull();
+});
+
 test('shift+click on a machine face with no pipe there does nothing', () => {
   expect(shiftClickTarget(blocks, { pos: [0, 0, 0], side: 3 })).toBeNull();
 });

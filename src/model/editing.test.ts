@@ -58,6 +58,15 @@ test('toggleSide flips a connected side off and an unconnected side on, for cond
   expect(toggleSide(m, [0, 1, 0], 2)).toBe(m); // machine: no-op
 });
 
+test('toggleSide leaves a casing or marker unchanged', () => {
+  const m = toBlockMap([
+    { pos: [0, 0, 0], key: 'casing_clean_stainless' },
+    { pos: [1, 0, 0], key: 'marker_power_in' },
+  ]);
+  expect(toggleSide(m, [0, 0, 0], 5)).toBe(m);
+  expect(toggleSide(m, [1, 0, 0], 4)).toBe(m);
+});
+
 test('placementFacing: horizontal faces keep their direction, top/bottom faces face the camera', () => {
   expect(placementFacing(3, [0, -1, -1])).toBe(3);
   expect(placementFacing(4, [0, -1, -1])).toBe(4);

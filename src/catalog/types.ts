@@ -3,6 +3,8 @@
  * `casing`: a multiblock's casing or coil block, written as its plain GT block (`vanilla` + `meta`).
  */
 export type Kind = 'machine' | 'cable' | 'fluidPipe' | 'itemPipe' | 'marker' | 'casing';
+/** Cables and pipes: the kinds with arms that connect and can be toggled. */
+export const isConduit = (k: Kind) => k === 'cable' || k === 'fluidPipe' || k === 'itemPipe';
 export type Tier = 'LV' | 'MV' | 'HV';
 
 export interface CatalogEntry {

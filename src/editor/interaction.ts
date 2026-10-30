@@ -1,4 +1,4 @@
-import { CATALOG, type Catalog } from '../catalog';
+import { CATALOG, isConduit, type Catalog } from '../catalog';
 import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
 import type { BlockMap } from '../model/editing';
 import type { PlacedBlock, Vec3 } from '../model/types';
@@ -8,18 +8,18 @@ export interface Hit { pos: Vec3; side: number; arm?: number }
 
 /**
  * Which cable/pipe side a Shift+click should toggle. The face toward a connected neighbour is buried inside the
- * arm, so clicking an arm toggles the arm's own direction; clicking a machine face toggles the pipe attached
+ * arm, so clicking an arm toggles the arm's own direction; clicking a machine, marker or casing face toggles the pipe attached
  * to that face. Returns null when there is nothing to toggle.
  */
 export function shiftClickTarget(blocks: BlockMap, hit: Hit, catalog: Catalog = CATALOG): { pos: Vec3; side: number } | null {
   const block = blocks.get(posKey(hit.pos));
   const kind = block && catalog.get(block.key)?.kind;
   if (!kind) return null;
-  if (kind !== 'machine') return { pos: hit.pos, side: hit.arm ?? hit.side };
+  if (isConduit(kind)) return { pos: hit.pos, side: hit.arm ?? hit.side };
   const neighbour = addVec(hit.pos, DIRS[hit.side]);
   const nb = blocks.get(posKey(neighbour));
   const nbKind = nb && catalog.get(nb.key)?.kind;
-  return nbKind && nbKind !== 'machine' ? { pos: neighbour, side: OPPOSITE[hit.side] } : null;
+  return nbKind && isConduit(nbKind) ? { pos: neighbour, side: OPPOSITE[hit.side] } : null;
 }
 
 /** Camera target and position that fit the whole build in view, or null for an empty build. */

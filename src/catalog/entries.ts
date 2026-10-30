@@ -274,6 +274,9 @@ const CONTROLLERS: Record<number, { casing: string; overlay: string }> = {
   1160: { casing: 'MACHINE_CASING_CLEAN_STAINLESSSTEEL', overlay: 'OVERLAY_FRONT_OIL_CRACKER' },
 };
 
+/** Multiblock controllers exist in the catalog only once registered, but their textures must still be extracted. */
+export const CONTROLLER_TEXTURE_PATHS: readonly string[] = Object.values(CONTROLLERS).flatMap((c) => [iconset(c.casing), iconset(c.overlay)]);
+
 /** Catalog entry for a recipe machine without a hand-made entry: tier casing (HV casing above HV), no front overlay. */
 export function generatedEntry(m: { key: string; name: string; mID: number; tier?: string; multiblock?: boolean }): CatalogEntry {
   const tier = m.tier === 'LV' || m.tier === 'MV' || m.tier === 'HV' ? m.tier : m.tier === 'ULV' ? 'LV' : 'HV';
