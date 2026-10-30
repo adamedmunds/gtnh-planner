@@ -25,6 +25,8 @@ export interface PlanMachine {
   outputs: ResourceKey[];
   /** Fluid outputs in the recipe's own order (a Distillation Tower's layers follow it). */
   fluidOutputs?: ResourceKey[];
+  /** Electric Blast Furnace: the heat its recipe needs, in kelvin (the dump's `specialValue`). */
+  heat?: number;
   generator: boolean;
   multiblock: boolean;
 }

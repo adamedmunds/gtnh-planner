@@ -33,6 +33,8 @@ const CASING = 'casing_clean_stainless';
 const INERT = 'casing_chemically_inert';
 const PTFE = 'casing_ptfe_pipe';
 const COIL = 'coil_cupronickel';
+const HEAT_PROOF = 'casing_heat_proof';
+const FROST_PROOF = 'casing_frost_proof';
 
 const isFluid = (k: ResourceKey) => k.startsWith('fluid:');
 const isItem = (k: ResourceKey) => k.startsWith('item:');
@@ -112,6 +114,32 @@ function distillationTower(pm: PlanMachine, tier: string): Structure {
 }
 
 /**
+ * The 14 hatch spots of a 3x3x3 box with its controller at [1,1,2] and the maintenance hatch at [1,0,0]: the front
+ * face first (the 8 around the controller), then the side faces; the back keeps the maintenance hatch and a coil.
+ */
+const HATCH_SPOTS: { rel: Vec3; facing: Facing }[] = [
+  ...[[0, 1, 2], [2, 1, 2], [0, 0, 2], [2, 0, 2], [1, 0, 2], [0, 2, 2], [2, 2, 2], [1, 2, 2]].map((r) => ({ rel: r as unknown as Vec3, facing: 3 as Facing })),
+  ...[[1, 1], [0, 1], [2, 1]].flatMap(([y, z]) => [{ rel: [0, y, z] as Vec3, facing: 4 as Facing }, { rel: [2, y, z] as Vec3, facing: 5 as Facing }]),
+];
+
+/**
+ * The energy hatch first (so running out of spots never leaves the machine without power), then the input hatches, then
+ * the output hatches, on the first `limit` of HATCH_SPOTS; the rest get a note naming the machine.
+ */
+function placeHatches(b: Builder, pm: PlanMachine, tier: string, limit: number, noun: string): void {
+  const wanted: { kind: PortKind; key: string; keys: ResourceKey[] }[] = [
+    { kind: 'energy', key: tier, keys: [] },
+    ...hatchesFor(pm.inputs, 'in').map((p) => ({ kind: 'in' as const, ...p })),
+    ...hatchesFor(pm.outputs, 'out').map((p) => ({ kind: 'out' as const, ...p })),
+  ];
+  wanted.forEach((w, i) => {
+    const spot = i < limit ? HATCH_SPOTS[i] : undefined;
+    if (spot) b.port(spot.rel, spot.facing, w.kind, w.key, w.keys);
+    else b.notes.push(`No room on the ${noun} for another ${w.kind} hatch.`);
+  });
+}
+
+/**
  * Large Chemical Reactor: 3x3x3 Chemically Inert, PTFE pipe in the middle, one coil at the middle layer's back centre.
  * GT needs 8 casings (MTELargeChemicalReactor.checkMachine: checkCasingMin(..., 8)); 14 hatch spots leave 9.
  */
@@ -122,24 +150,7 @@ function largeChemicalReactor(pm: PlanMachine, tier: string): Structure {
   b.block([1, 1, 0], COIL);
   b.block([1, 1, 2], pm.key);
   b.port([1, 0, 0], 2, 'maintenance', 'hatch_maintenance');
-  // Front face first, then the side faces; the back (z = 0) keeps the coil and the maintenance hatch.
-  const spots: { rel: Vec3; facing: Facing }[] = [
-    [0, 1, 2], [2, 1, 2], [0, 0, 2], [2, 0, 2], [1, 0, 2], [0, 2, 2], [2, 2, 2], [1, 2, 2],
-  ].map((r) => ({ rel: r as unknown as Vec3, facing: 3 as Facing }));
-  for (const [y, z] of [[1, 1], [0, 1], [2, 1]]) {
-    spots.push({ rel: [0, y, z], facing: 4 }, { rel: [2, y, z], facing: 5 });
-  }
-  // The energy hatch first, so running out of spots never leaves the reactor without power.
-  const wanted: { kind: PortKind; key: string; keys: ResourceKey[] }[] = [
-    { kind: 'energy', key: tier, keys: [] },
-    ...hatchesFor(pm.inputs, 'in').map((p) => ({ kind: 'in' as const, ...p })),
-    ...hatchesFor(pm.outputs, 'out').map((p) => ({ kind: 'out' as const, ...p })),
-  ];
-  wanted.forEach((w, i) => {
-    const spot = spots[i];
-    if (spot) b.port(spot.rel, spot.facing, w.kind, w.key, w.keys);
-    else b.notes.push(`No room on the reactor for another ${w.kind} hatch.`);
-  });
+  placeHatches(b, pm, tier, HATCH_SPOTS.length, 'reactor');
   return b.done();
 }
 
@@ -173,16 +184,15 @@ function oilCrackingUnit(pm: PlanMachine, tier: string): Structure {
   return b.done();
 }
 
-type Definition = (pm: PlanMachine, energyKey: string) => Structure;
+/** Heating Coils the planner builds with, coolest first (GT's HeatingCoilLevel.getHeat: 1801, 2701, 3601 K). */
+export const COILS: readonly { key: string; name: string; heat: number }[] = [
+  { key: 'coil_cupronickel', name: 'Cupronickel', heat: 1801 },
+  { key: 'coil_kanthal', name: 'Kanthal', heat: 2701 },
+  { key: 'coil_nichrome', name: 'Nichrome', heat: 3601 },
+];
 
-/** Multiblocks with a definition, by controller mID; the next one is one more function here. */
-const DEFINITIONS: Partial<Record<number, Definition>> = {
-  1126: distillationTower,
-  1169: largeChemicalReactor,
-  1160: oilCrackingUnit,
-};
-
-export const MULTIBLOCK_IDS: readonly number[] = Object.keys(DEFINITIONS).map(Number);
+export const EBF_ID = 1000;
+const VACUUM_FREEZER_ID = 1002;
 
 /** Energy hatches go up to HV; ULV takes an LV one. Above that, no structure. */
 function energyHatch(tier: string | undefined): string | undefined {
@@ -192,12 +202,97 @@ function energyHatch(tier: string | undefined): string | undefined {
   return undefined;
 }
 
-/** Undefined for multiblocks without a definition (or above HV): they keep the one-block stand-in. */
+/**
+ * The heat an Electric Blast Furnace reaches: coil heat + 100 K per energy hatch tier above MV
+ * (MTEElectricBlastFurnace.checkMachine: coil heat + 100 * (GTUtility.getTier(getMaxInputVoltage()) - 2)), with the
+ * hatch the layout uses (LV 1, MV 2, HV 3; ULV gets an LV hatch). Above HV there is no hatch; counted as HV.
+ */
+export function ebfHeat(coilHeat: number, tier: string | undefined): number {
+  const hatch = energyHatch(tier);
+  const n = hatch === 'hatch_energy_lv' ? 1 : hatch === 'hatch_energy_mv' ? 2 : 3;
+  return coilHeat + 100 * (n - 2);
+}
+
+/** The first coil whose furnace heat with this tier's energy hatch reaches `heat`; undefined if even Nichrome falls short. */
+export function coilFor(heat: number, tier: string | undefined): (typeof COILS)[number] | undefined {
+  return COILS.find((c) => ebfHeat(c.heat, tier) >= heat);
+}
+
+/**
+ * Electric Blast Furnace: 3x3x4. Bottom layer Heat Proof casings with the controller at the front centre and the
+ * hatches; two coil rings (16 coils, all one kind, air in the centre); the top layer Heat Proof casings round the
+ * muffler hatch, which faces up and needs air above it (MTEHatchMuffler.polluteEnvironment). Shape and heat:
+ * MTEElectricBlastFurnace. There is no casing minimum.
+ */
+function electricBlastFurnace(pm: PlanMachine, tier: string): Structure {
+  const b = new Builder([3, 4, 3], tier);
+  const coil = coilFor(pm.heat ?? 0, pm.tier)!;
+  for (let x = 0; x < 3; x++) {
+    for (let z = 0; z < 3; z++) {
+      b.block([x, 0, z], HEAT_PROOF);
+      b.block([x, 3, z], HEAT_PROOF);
+      if (x !== 1 || z !== 1) for (const y of [1, 2]) b.block([x, y, z], coil.key);
+    }
+  }
+  b.block([1, 0, 2], pm.key);
+  b.port([1, 3, 1], 1, 'muffler', 'hatch_muffler_lv');
+  b.energy([2, 0, 2], 3);
+  b.port([1, 0, 0], 2, 'maintenance', 'hatch_maintenance');
+  const ins = hatchesFor(pm.inputs, 'in');
+  const outs = hatchesFor(pm.outputs, 'out');
+  const itemIn = ins.find((p) => isItem(p.keys[0]));
+  const itemOut = outs.find((p) => isItem(p.keys[0]));
+  if (itemIn) b.port([0, 0, 1], 4, 'in', itemIn.key, itemIn.keys);
+  if (itemOut) b.port([2, 0, 1], 5, 'out', itemOut.key, itemOut.keys);
+  // Fluid hatches, inputs before outputs: front left, back left, back right.
+  const slots: { rel: Vec3; facing: Facing }[] = [{ rel: [0, 0, 2], facing: 3 }, { rel: [0, 0, 0], facing: 4 }, { rel: [2, 0, 0], facing: 5 }];
+  const fluids = [
+    ...ins.filter((p) => isFluid(p.keys[0])).map((p) => ({ kind: 'in' as const, ...p })),
+    ...outs.filter((p) => isFluid(p.keys[0])).map((p) => ({ kind: 'out' as const, ...p })),
+  ];
+  fluids.slice(0, slots.length).forEach((f, i) => b.port(slots[i].rel, slots[i].facing, f.kind, f.key, f.keys));
+  if (fluids.length > slots.length) b.notes.push(`${fluids.length - slots.length} fluid hatches don't fit on the furnace's bottom layer.`);
+  return b.done();
+}
+
+/**
+ * Vacuum Freezer: 3x3x3 Frost Proof casings round an air centre, controller at the middle front. GT needs 16 casings
+ * (MTEVacuumFreezer.checkMachine: checkCasingMin(errors, mCasing, 16)); the maintenance hatch and at most 8 more hatches
+ * leave exactly 16.
+ */
+function vacuumFreezer(pm: PlanMachine, tier: string): Structure {
+  const b = new Builder([3, 3, 3], tier);
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let z = 0; z < 3; z++) if (x !== 1 || y !== 1 || z !== 1) b.block([x, y, z], FROST_PROOF);
+  b.block([1, 1, 2], pm.key);
+  b.port([1, 0, 0], 2, 'maintenance', 'hatch_maintenance');
+  placeHatches(b, pm, tier, 8, 'vacuum freezer');
+  return b.done();
+}
+
+type Definition = (pm: PlanMachine, energyKey: string) => Structure;
+
+/** Multiblocks with a definition, by controller mID; the next one is one more function here. */
+const DEFINITIONS: Partial<Record<number, Definition>> = {
+  1126: distillationTower,
+  1169: largeChemicalReactor,
+  1160: oilCrackingUnit,
+  [EBF_ID]: electricBlastFurnace,
+  [VACUUM_FREEZER_ID]: vacuumFreezer,
+};
+
+export const MULTIBLOCK_IDS: readonly number[] = Object.keys(DEFINITIONS).map(Number);
+
+/** Whether the machine gets a structure: a definition, an energy hatch for the tier, and (EBF) a coil that reaches `heat`. */
+export function buildable(mID: number, tier: string | undefined, heat = 0): boolean {
+  if (!DEFINITIONS[mID] || !energyHatch(tier)) return false;
+  return mID !== EBF_ID || coilFor(heat, tier) !== undefined;
+}
+
+/** Undefined for multiblocks without a definition (or above HV, or an EBF too hot for Nichrome): they keep the one-block stand-in. */
 export function structureFor(pm: PlanMachine): Structure | undefined {
-  const define = DEFINITIONS[pm.machine.mID];
-  const energy = energyHatch(pm.tier);
-  if (!define || !energy) return undefined;
-  const s = define(pm, energy);
+  if (!buildable(pm.machine.mID, pm.tier, pm.heat)) return undefined;
+  const define = DEFINITIONS[pm.machine.mID]!;
+  const s = define(pm, energyHatch(pm.tier)!);
   if (define !== distillationTower) lockOutputs(s);
   return s;
 }

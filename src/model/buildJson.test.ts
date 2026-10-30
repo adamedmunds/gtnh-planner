@@ -123,3 +123,8 @@ test('round-trips a multiblock port and drops a malformed one', () => {
   const bad = JSON.stringify({ ...b, blocks: [{ ...b.blocks[0], port: { kind: 'sideways', keys: [] } }] });
   expect(parseBuild(bad).build.blocks[0].port).toBeUndefined();
 });
+
+test('round-trips a muffler port', () => {
+  const b: Build = { version: 1, name: 'mb', blocks: [{ pos: [0, 0, 0], key: 'hatch_muffler_lv', facing: 1, role: 'mb', port: { kind: 'muffler', keys: [] } }] };
+  expect(parseBuild(serializeBuild(b)).build.blocks[0].port).toEqual({ kind: 'muffler', keys: [] });
+});

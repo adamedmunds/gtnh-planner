@@ -7,7 +7,7 @@ export function serializeBuild(build: Build): string {
   return JSON.stringify(build, null, 2);
 }
 
-const PORT_KINDS: readonly PortKind[] = ['in', 'out', 'energy', 'maintenance'];
+const PORT_KINDS: readonly PortKind[] = ['in', 'out', 'energy', 'maintenance', 'muffler'];
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
 const isMaskBits = (v: unknown): v is number => isInt(v) && v >= 0 && v <= 63;
 

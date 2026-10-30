@@ -13,7 +13,7 @@ export interface ManualMask {
 }
 
 /** What a multiblock hatch or bus does for the structure. */
-export type PortKind = 'in' | 'out' | 'energy' | 'maintenance';
+export type PortKind = 'in' | 'out' | 'energy' | 'maintenance' | 'muffler';
 
 export interface PlacedBlock {
   pos: Vec3;

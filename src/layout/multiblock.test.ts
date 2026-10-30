@@ -1,4 +1,4 @@
-import { structureFor, type Structure } from './multiblock';
+import { buildable, ebfHeat, structureFor, type Structure } from './multiblock';
 import type { PlanMachine } from './types';
 
 const mb = (mID: number, over: Partial<PlanMachine> = {}): PlanMachine => ({
@@ -141,5 +141,70 @@ describe('multiblock structures', () => {
       const out = p.facing === 3 ? z === d - 1 : p.facing === 2 ? z === 0 : p.facing === 4 ? x === 0 : p.facing === 5 ? x === w - 1 : false;
       expect(out).toBe(true);
     }
+  });
+});
+
+describe('electric blast furnace and vacuum freezer', () => {
+  const ebf = (heat: number, over: Partial<PlanMachine> = {}) =>
+    structureFor(mb(1000, { inputs: ['item:dust', 'fluid:oxygen'], outputs: ['item:ingot'], heat, ...over }));
+
+  it('an EBF is 3x3x4: heat proof bottom with the controller, two coil rings, a muffler facing up on top', () => {
+    const s = ebf(1000, { tier: 'MV' })!;
+    expect(s.size).toEqual([3, 4, 3]);
+    expect(at(s, 1, 0, 2)?.key).toBe('gt_1000');
+    for (const y of [1, 2]) {
+      expect(at(s, 1, y, 1)).toBeUndefined();
+      expect(s.blocks.filter((b) => b.rel[1] === y && b.key === 'coil_cupronickel')).toHaveLength(8);
+    }
+    expect(s.blocks.filter((b) => b.rel[1] === 3 && b.key === 'casing_heat_proof')).toHaveLength(8);
+    expect(s.ports.find((p) => p.kind === 'muffler')).toMatchObject({ rel: [1, 3, 1], facing: 1, key: 'hatch_muffler_lv', keys: [] });
+    expect(s.ports.filter((p) => p.kind !== 'muffler').every((p) => p.rel[1] === 0)).toBe(true);
+  });
+
+  it("an EBF's bottom layer: energy front right, maintenance back, buses at the sides, fluids front left", () => {
+    const s = ebf(1000, { tier: 'MV', outputs: ['item:ingot', 'fluid:co2'] })!;
+    const port = (kind: string, key?: string) => s.ports.find((p) => p.kind === kind && (!key || p.key === key));
+    expect(port('energy')).toMatchObject({ rel: [2, 0, 2], facing: 3, key: 'hatch_energy_mv' });
+    expect(port('maintenance')).toMatchObject({ rel: [1, 0, 0], facing: 2 });
+    expect(port('in', 'bus_input_lv')).toMatchObject({ rel: [0, 0, 1], facing: 4, keys: ['item:dust'] });
+    expect(port('out', 'bus_output_lv')).toMatchObject({ rel: [2, 0, 1], facing: 5, keys: ['item:ingot'] });
+    expect(port('in', 'hatch_input_lv')).toMatchObject({ rel: [0, 0, 2], facing: 3, keys: ['fluid:oxygen'] });
+    expect(port('out', 'hatch_output_lv')).toMatchObject({ rel: [0, 0, 0], facing: 4, keys: ['fluid:co2'] });
+  });
+
+  it('the coil is the cheapest that reaches the recipe heat with the energy hatch bonus', () => {
+    const coil = (heat: number, tier: string) => ebf(heat, { tier })?.blocks.find((b) => b.rel[1] === 1)?.key;
+    expect(coil(1801, 'MV')).toBe('coil_cupronickel');
+    expect(coil(1802, 'MV')).toBe('coil_kanthal');
+    expect(coil(1901, 'HV')).toBe('coil_cupronickel');
+    expect(coil(2801, 'HV')).toBe('coil_kanthal');
+    expect(coil(2802, 'HV')).toBe('coil_nichrome');
+    expect(coil(1750, 'LV')).toBe('coil_kanthal'); // LV hatch: 1801 - 100
+  });
+
+  it('an EBF hotter than Nichrome can reach has no structure', () => {
+    expect(ebf(3701, { tier: 'HV' })).toBeDefined();
+    expect(ebf(3702, { tier: 'HV' })).toBeUndefined();
+    expect(buildable(1000, 'HV', 3702)).toBe(false);
+    expect(buildable(1000, 'HV')).toBe(true);
+    expect(ebfHeat(3601, 'HV')).toBe(3701);
+  });
+
+  it('a vacuum freezer is 3x3x3 frost proof, hollow, controller at the middle front', () => {
+    const s = structureFor(mb(1002, { tier: 'MV', inputs: ['item:hot'], outputs: ['item:cold'] }))!;
+    expect(s.size).toEqual([3, 3, 3]);
+    expect(at(s, 1, 1, 1)).toBeUndefined();
+    expect(at(s, 1, 1, 2)?.key).toBe('gt_1002');
+    expect(s.ports.find((p) => p.kind === 'maintenance')).toMatchObject({ rel: [1, 0, 0], facing: 2 });
+    expect(s.ports.find((p) => p.kind === 'energy')).toMatchObject({ rel: [0, 1, 2], facing: 3 });
+    expect(countKey(s, 'casing_frost_proof') + s.ports.length + 1).toBe(26);
+  });
+
+  it('a vacuum freezer with too many hatches keeps 16 casings and its energy hatch, and says so', () => {
+    const fluids = Array.from({ length: 10 }, (_, i) => `fluid:f${i}`);
+    const s = structureFor(mb(1002, { tier: 'MV', inputs: fluids, outputs: ['item:cold'] }))!;
+    expect(countKey(s, 'casing_frost_proof')).toBe(16);
+    expect(s.ports.some((p) => p.kind === 'energy')).toBe(true);
+    expect(s.notes.length).toBeGreaterThan(0);
   });
 });
