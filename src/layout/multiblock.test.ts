@@ -133,6 +133,7 @@ describe('multiblock structures', () => {
     ['cracker', () => structureFor(mb(1160, { inputs: ['fluid:oil', 'fluid:steam'], outputs: ['fluid:o'] }))!],
     ['ebf', () => structureFor(mb(1000, { tier: 'MV', heat: 1000, inputs: ['item:a', 'fluid:b', 'fluid:c'], outputs: ['item:d', 'fluid:e'] }))!],
     ['freezer', () => structureFor(mb(1002, { tier: 'MV', inputs: ['item:hot'], outputs: ['item:cold'] }))!],
+    ['pyrolyse oven', () => structureFor(mb(15546, { tier: 'MV', inputs: ['item:log', 'fluid:a', 'fluid:b'], outputs: ['item:c', 'fluid:x', 'fluid:y'] }))!],
   ])('%s: no shared cells, ports face out of the box', (_n, make) => {
     const s = make();
     const [w, , d] = s.size;
@@ -140,7 +141,7 @@ describe('multiblock structures', () => {
     expect(new Set(cells).size).toBe(cells.length);
     for (const p of s.ports) {
       const [x, y, z] = p.rel;
-      const out = p.facing === 1 ? y === s.size[1] - 1 : p.facing === 3 ? z === d - 1 : p.facing === 2 ? z === 0 : p.facing === 4 ? x === 0 : p.facing === 5 ? x === w - 1 : false;
+      const out = p.facing === 1 ? !cells.some((c) => { const [cx, cy, cz] = c.split(',').map(Number); return cx === x && cz === z && cy > y; }) : p.facing === 3 ? z === d - 1 : p.facing === 2 ? z === 0 : p.facing === 4 ? x === 0 : p.facing === 5 ? x === w - 1 : false;
       expect(out).toBe(true);
     }
   });
