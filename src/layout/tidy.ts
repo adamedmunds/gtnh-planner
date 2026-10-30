@@ -223,10 +223,12 @@ function placeTidyCore(units: Unit[], start: number, length: number, side: (u: U
  * before each and after the last so side hatches have their cell, two wide where hatches on both sides face into it.
  * Fronts face +z, the front row just behind the cross-section, so front hatches' cells are its back row. The
  * controller and hatches carry the unit's role; casings none. Every block, and the cell in front of each hatch, goes in
- * `taken`. `width` covers the gaps too.
+ * `taken`. A muffler's front is kept as air: those cells come back in `clear` (the core keeps pipes and cables out of
+ * them). `width` covers the gaps too.
  */
-export function placeMultiblocks(units: Unit[], xStart: number, taken: Set<string>): { placed: Placed[]; width: number } {
+export function placeMultiblocks(units: Unit[], xStart: number, taken: Set<string>): { placed: Placed[]; width: number; clear: string[] } {
   const placed: Placed[] = [];
+  const clear: string[] = [];
   let x = xStart;
   let lastFacesEast = false;
   for (const u of units) {
@@ -247,12 +249,13 @@ export function placeMultiblocks(units: Unit[], xStart: number, taken: Set<strin
         port: { kind: p.kind, keys: p.keys, ...(p.locked ? { locked: true } : {}) }, ...(p.kind === 'energy' ? { tier: tierOf(u.pm) } : {}),
       });
       taken.add(posKey(addVec(at(p.rel), DIRS[p.facing])));
+      if (p.kind === 'muffler') clear.push(posKey(addVec(at(p.rel), DIRS[p.facing])));
     }
     lastFacesEast = s.ports.some((p) => p.facing === 5);
     x += w;
   }
   for (const p of placed) taken.add(posKey(p.pos));
-  return { placed, width: placed.length ? x - xStart + 1 : 0 };
+  return { placed, width: placed.length ? x - xStart + 1 : 0, clear };
 }
 
 /** Generators a region needs for what its machines use on average, with a margin for cable loss. */
@@ -376,7 +379,7 @@ function withCore(
     const laneZs = [...lanes.values()].flat(2).map((c) => c[2]);
     const taken = new Set([...keepClear, ...[...lanes.values()].flat(2).map(posKey)]);
     // Multiblocks at the slice end of the core, the cells in front of their hatches kept for their pipes and cables.
-    const behind = placeMultiblocks(multiblocks, -multiblockWidth, taken).placed;
+    const { placed: behind, clear: mufflerAir } = placeMultiblocks(multiblocks, -multiblockWidth, taken);
     // A marker sits right beside the through-run it fills or empties (no pipe needed), else in the end column.
     const corePlaced: Placed[] = [];
     const roomy = (c: Vec3) => !taken.has(posKey(c)) && c[0] >= coreMin && c[0] < 0 && inBounds(c);
@@ -404,7 +407,8 @@ function withCore(
       continue;
     }
     corePlaced.push(...core.map(facingInward), ...behind);
-    // Nothing goes in front of a core machine.
+    // Nothing goes in front of a core machine, or above a muffler hatch.
+    for (const c of mufflerAir) keepClear.add(c);
     for (const u of corePlaced) if (u.mainFacing !== undefined) keepClear.add(posKey(addVec(u.pos, DIRS[u.mainFacing])));
     const region: Region = {
       // Within the tidy cross-section, or as far out as the slices' runs come in and the multiblocks stand.

@@ -92,6 +92,14 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
       }
     } else if (!blocks.some((c) => c.block.port?.kind === 'energy')) problems.push(`The ${name} has no energy hatch`);
   }
+  // A muffler hatch needs the cell it faces open to the air.
+  for (const c of cells.values()) {
+    if (c.block.port?.kind !== 'muffler' || c.block.facing === undefined) continue;
+    if (!neighbour(c, c.block.facing)) continue;
+    const m = byNode.get(roleOf(c) ?? '');
+    const name = (m && (CATALOG.get(m.key)?.name ?? m.machine.name)) ?? c.entry.name;
+    problems.push(`The ${name}'s muffler hatch is covered; it needs air above it`);
+  }
   const setting = (c: Cell, side: number, kind: string) =>
     (build.covers ?? []).some((s) => posKey(s.pos) === posKey(c.block.pos) && s.side === side && s.kind === kind);
   const label = (c: Cell) => `${c.entry.name} at ${where(c.block.pos)}`;

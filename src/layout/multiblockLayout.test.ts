@@ -26,6 +26,10 @@ const mixers = (count = 2) => pm({
 const FLUIDS = ['fluid:f1', 'fluid:f2', 'fluid:f3', 'fluid:f4', 'fluid:f5'];
 const tower = (o: Partial<PlanMachine> = {}) => multi('dt', 1126, 'Distillation Tower', { inputs: ['fluid:oil'], outputs: FLUIDS, fluidOutputs: FLUIDS, ...o });
 
+const item = (key: string, producers: string[], consumers: string[]): LinePlan['networks'][number] =>
+  ({ key, name: key.slice(5), kind: 'item', flow: 1, producers, consumers });
+const ebf = (o: Partial<PlanMachine> = {}) => multi('ebf', 1000, 'Electric Blast Furnace', { inputs: ['item:dust'], outputs: ['item:hot'], heat: 1500, ...o });
+const freezer = (o: Partial<PlanMachine> = {}) => multi('vf', 1002, 'Vacuum Freezer', { inputs: ['item:hot'], outputs: ['item:ingot'], ...o });
 const fluid = (key: string, producers: string[], consumers: string[]): LinePlan['networks'][number] =>
   ({ key, name: key.slice(6), kind: 'fluid', flow: 10, producers, consumers });
 const marker = (id: string, key: string, dir: 'in' | 'out', kind: 'item' | 'fluid' = 'fluid'): LinePlan['markers'][number] => ({ id, key, dir, kind });
@@ -35,7 +39,7 @@ const plan = (machines: PlanMachine[], networks: LinePlan['networks'], markers: 
   const eut = [mixers(), ...machines].reduce((s, m) => s + m.eut * m.count, 0);
   return {
     style: 'straight', sliceCount: 0, core: [], notes: [], straight: [mixers(), ...machines],
-    networks: [fluid('fluid:a', ['in:a'], ['mix']), fluid('fluid:oil', ['mix'], machines.filter((m) => m.inputs.includes('fluid:oil')).map((m) => m.nodeId)), ...networks],
+    networks: [fluid('fluid:a', ['in:a'], ['mix']), fluid('fluid:oil', ['mix'], machines.some((m) => m.inputs.includes('fluid:oil')) ? machines.filter((m) => m.inputs.includes('fluid:oil')).map((m) => m.nodeId) : ['out:oil']), ...networks],
     markers: [marker('in:a', 'fluid:a', 'in'), { id: 'power', key: 'eu', dir: 'in', kind: 'power' }, ...markers],
     power: { tiers: ['HV'], source: { kind: 'outside', tier: 'HV', eut }, demand: { HV: eut }, transformers: [] },
   };
@@ -251,4 +255,40 @@ test('a line with more markers than two end columns hold gives each its own cell
   expect(markers).toHaveLength(11);
   expect(new Set(markers.map((b) => posKey(b.pos))).size).toBe(11);
   expect(checkLine(build, p)).toEqual([]);
+});
+
+test('placeMultiblocks keeps the cell above an EBF muffler clear', () => {
+  const { placed, clear } = placeMultiblocks(machineUnits([ebf()]), 0, new Set());
+  const muffler = placed.find((p) => p.port?.kind === 'muffler')!;
+  expect(muffler.facing).toBe(1);
+  expect(clear).toEqual([posKey(addVec(muffler.pos, DIRS[1]))]);
+});
+
+const mufflerUncovered = (b: Build) => {
+  const muffler = b.blocks.find((x) => x.port?.kind === 'muffler')!;
+  expect(b.blocks.some((x) => posKey(x.pos) === posKey(addVec(muffler.pos, DIRS[1])))).toBe(false);
+};
+
+test('an EBF feeding a vacuum freezer builds, checks clean, and nothing sits above the muffler', () => {
+  // dust (in marker) -> ebf -> hot -> vf -> ingot (out marker); the mixers' Oil has no taker, so it ends at an out marker.
+  const p = plan([ebf(), freezer()], [
+    item('item:dust', ['in:dust'], ['ebf']), item('item:hot', ['ebf'], ['vf']), item('item:ingot', ['vf'], ['out:ingot']),
+  ], [marker('out:oil', 'fluid:oil', 'out'), marker('in:dust', 'item:dust', 'in', 'item'), marker('out:ingot', 'item:ingot', 'out', 'item')]);
+  const b = buildLine(p, 'ebf');
+  expect(checkLine(b.build, p)).toEqual([]);
+  mufflerUncovered(b.build);
+});
+
+test('beside a taller Distillation Tower the muffler is still uncovered', () => {
+  const t = tower();
+  const p = plan([t, ebf()], [
+    ...FLUIDS.map((k, i) => fluid(k, ['dt'], [`out:${i}`])),
+    item('item:dust', ['in:dust'], ['ebf']), item('item:hot', ['ebf'], ['out:hot']),
+  ], [
+    ...FLUIDS.map((k, i) => marker(`out:${i}`, k, 'out')),
+    marker('in:dust', 'item:dust', 'in', 'item'), marker('out:hot', 'item:hot', 'out', 'item'),
+  ]);
+  const b = buildLine(p, 'tower and ebf');
+  expect(checkLine(b.build, p)).toEqual([]);
+  mufflerUncovered(b.build);
 });

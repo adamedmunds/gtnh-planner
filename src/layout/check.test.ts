@@ -181,7 +181,10 @@ describe('burn risk: higher voltage touching a lower-rated cable, connected or n
 });
 
 describe('multiblock ports', () => {
-  beforeAll(() => registerMachines([{ key: 'gt_1126', name: 'Distillation Tower', mID: 1126, tier: 'HV', multiblock: true }]));
+  beforeAll(() => registerMachines([
+    { key: 'gt_1126', name: 'Distillation Tower', mID: 1126, tier: 'HV', multiblock: true },
+    { key: 'gt_1000', name: 'Electric Blast Furnace', mID: 1000, tier: 'HV', multiblock: true },
+  ]));
   const A = 'fluid:a';
   const B = 'fluid:b';
   const C = 'fluid:c';
@@ -212,6 +215,33 @@ describe('multiblock ports', () => {
     ],
   });
   const hatchAt = (b: Build, x: number, z: number) => b.blocks.find((p) => p.pos[0] === x && p.pos[2] === z)!;
+
+  describe("an EBF's muffler hatch needs air above it", () => {
+    const ebfPlan: LinePlan = {
+      ...plan,
+      straight: [{ ...plan.straight![0], key: 'gt_1000', machine: { key: 'gt_1000', name: 'Electric Blast Furnace', mID: 1000, tier: 'HV', multiblock: true }, inputs: [], outputs: [] }],
+      networks: [],
+    };
+    const ebfBuild = (covered: boolean): Build => ({
+      version: 1, name: 'ebf',
+      blocks: [
+        { pos: [0, 0, 0], key: 'gt_1000', role: 'mb', facing: 3 },
+        { pos: [0, 0, -1], key: 'hatch_energy_hv', role: 'mb', facing: 2, port: { kind: 'energy', keys: [] } },
+        { pos: [0, 3, 0], key: 'hatch_muffler_lv', role: 'mb', facing: 1, port: { kind: 'muffler', keys: [] } },
+        { pos: [0, 0, -2], key: 'electrum_cable_1x' }, { pos: [0, 0, -3], key: 'marker_power_in' },
+        ...(covered ? [pipe([0, 4, 0])] : []),
+      ],
+    });
+    const covered = "The Electric Blast Furnace's muffler hatch is covered; it needs air above it";
+
+    test('a block above the muffler is caught', () => {
+      expect(checkLine(ebfBuild(true), ebfPlan)).toContain(covered);
+    });
+
+    test('an open muffler passes', () => {
+      expect(checkLine(ebfBuild(false), ebfPlan)).not.toContain(covered);
+    });
+  });
 
   test('a multiblock passes when each port has its own pipe', () => {
     expect(checkLine(multiblock(), plan)).toEqual([]);
