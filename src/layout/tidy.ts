@@ -244,7 +244,7 @@ export function placeMultiblocks(units: Unit[], xStart: number, taken: Set<strin
     for (const p of s.ports) {
       placed.push({
         role: u.role, key: p.key, name: CATALOG.get(p.key)?.name ?? p.key, pm: u.pm, pos: at(p.rel), facing: p.facing, fixed: true,
-        port: { kind: p.kind, keys: p.keys }, ...(p.kind === 'energy' ? { tier: tierOf(u.pm) } : {}),
+        port: { kind: p.kind, keys: p.keys, ...(p.locked ? { locked: true } : {}) }, ...(p.kind === 'energy' ? { tier: tierOf(u.pm) } : {}),
       });
       taken.add(posKey(addVec(at(p.rel), DIRS[p.facing])));
     }

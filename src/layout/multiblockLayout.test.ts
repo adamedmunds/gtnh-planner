@@ -157,6 +157,14 @@ test('two item networks into one input bus fail loudly (a bus takes items throug
   expect(() => buildLine(p, 'Reactor line')).toThrow(/the LV Input Bus takes items through its front only, and another pipe already uses it \(it needed one for Salt\)/);
 });
 
+test("a reactor with two fluid outputs is built with each output hatch locked to its fluid", () => {
+  const lcr = multi('lcr', 1169, 'Large Chemical Reactor', { inputs: ['fluid:oil'], outputs: ['fluid:x', 'fluid:y'] });
+  const p = plan([lcr], [fluid('fluid:x', ['lcr'], ['out:x']), fluid('fluid:y', ['lcr'], ['out:y'])], [marker('out:x', 'fluid:x', 'out'), marker('out:y', 'fluid:y', 'out')]);
+  const { build } = buildLine(p, 'Reactor line');
+  expect(checkLine(build, p)).toEqual([]);
+  expect(ports(build, 'out').map((b) => [b.port!.keys[0], b.port!.locked]).sort()).toEqual([['fluid:x', true], ['fluid:y', true]]);
+});
+
 test("the energy hatch is cabled to the line's power", () => {
   const p = towerPlan();
   const { build } = buildLine(p, 'Tower line');

@@ -177,6 +177,19 @@ test('a machine with a front writes mMainFacing next to its output face', () => 
   expect(num(te, 'mMainFacing')).toBe(3);
 });
 
+test("a locked output hatch is pasted locked to its fluid (MTEHatchOutput's mMode 9, lockedFluidName)", () => {
+  const locked = tes(buildSchematicTag(mk([
+    { pos: [0, 0, 0], key: 'hatch_output_lv', facing: 3, port: { kind: 'out', keys: ['fluid:liquid_sufluriclight_fuel'], locked: true } },
+  ])).tag)[0];
+  expect(v(locked, 'mMode')).toEqual({ type: 'byte', value: 9 });
+  expect(v(locked, 'lockedFluidName')).toEqual({ type: 'string', value: 'liquid_sufluriclight_fuel' });
+  const open = tes(buildSchematicTag(mk([
+    { pos: [0, 0, 0], key: 'hatch_output_lv', facing: 3, port: { kind: 'out', keys: ['fluid:oil'] } },
+  ])).tag)[0];
+  expect(open.value.mMode).toBeUndefined();
+  expect(open.value.lockedFluidName).toBeUndefined();
+});
+
 test('a pasted basic machine has auto-output on, and input from its output side only where the build needs it', () => {
   const plain = tes(buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'distillery_lv', facing: 2, mainFacing: 3 }])).tag)[0];
   expect(num(plain, 'mAllowInputFromOutputSide')).toBe(0);

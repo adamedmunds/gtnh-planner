@@ -94,6 +94,11 @@ test('a multiblock controller keeps its controller look after a reload', () => {
   expect(getEntry('gt_1126')?.meta).toBe(2);
 });
 
+test('a locked output hatch stays locked after a reload', () => {
+  const b: Build = { ...good, blocks: [{ pos: [0, 0, 0], key: 'hatch_output_lv', role: 'lcr', facing: 3, port: { kind: 'out', keys: ['fluid:b'], locked: true } }] };
+  expect(parseBuild(serializeBuild(b)).build.blocks[0].port).toEqual({ kind: 'out', keys: ['fluid:b'], locked: true });
+});
+
 test('a malformed recipe machine is skipped with a warning', () => {
   const { build, warnings } = parseBuild(JSON.stringify({ ...good, machines: [{ key: 'gt_1', mID: 'x' }] }));
   expect(build.machines).toBeUndefined();

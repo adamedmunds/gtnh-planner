@@ -41,9 +41,9 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
     if (typeof rb.role === 'string') block.role = rb.role;
     if (typeof rb.net === 'string') block.net = rb.net;
     if (rb.stepUp === true) block.stepUp = true;
-    const port = rb.port as { kind?: unknown; keys?: unknown } | null | undefined;
+    const port = rb.port as { kind?: unknown; keys?: unknown; locked?: unknown } | null | undefined;
     if (port && PORT_KINDS.includes(port.kind as PortKind) && Array.isArray(port.keys) && port.keys.every((k) => typeof k === 'string')) {
-      block.port = { kind: port.kind as PortKind, keys: [...(port.keys as string[])] };
+      block.port = { kind: port.kind as PortKind, keys: [...(port.keys as string[])], ...(port.locked === true ? { locked: true } : {}) };
     }
     if (isInt(rb.mainFacing) && rb.mainFacing >= 2 && rb.mainFacing <= 5) block.mainFacing = rb.mainFacing as Facing;
     if (rb.facing !== undefined) {

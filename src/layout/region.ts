@@ -24,7 +24,7 @@ export interface Unit {
   /** Power tier the block runs on (machines; a multiblock's energy hatch). */
   tier?: PowerTier;
   /** A multiblock's hatch or bus: what it does, and the resources it handles (its pipe or cable is on its `facing`). */
-  port?: { kind: PortKind; keys: string[] };
+  port?: { kind: PortKind; keys: string[]; locked?: boolean };
   /** Part of a multiblock: placed with its facing already set, which routing keeps. */
   fixed?: boolean;
 }

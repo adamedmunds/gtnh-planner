@@ -11,6 +11,8 @@ export interface Port {
   key: string;
   /** What passes through it; empty for a hatch the structure needs but no recipe resource uses. */
   keys: ResourceKey[];
+  /** An output hatch pasted locked to its one fluid, so no other fluid of the recipe goes into it. */
+  locked?: boolean;
 }
 
 /**
@@ -194,5 +196,20 @@ function energyHatch(tier: string | undefined): string | undefined {
 export function structureFor(pm: PlanMachine): Structure | undefined {
   const define = DEFINITIONS[pm.machine.mID];
   const energy = energyHatch(pm.tier);
-  return define && energy ? define(pm, energy) : undefined;
+  if (!define || !energy) return undefined;
+  const s = define(pm, energy);
+  if (define !== distillationTower) lockOutputs(s);
+  return s;
+}
+
+/**
+ * GT puts each fluid output into any output hatch that can hold it (MTEHatchOutput.canStoreFluid: an unlocked, empty
+ * hatch takes any fluid), so with two or more output hatches one fluid can end up in another's hatch and pipe. Each is
+ * locked to its fluid instead. The Distillation Tower is the exception: it fills each layer's hatches with that layer's
+ * fluid only.
+ */
+function lockOutputs(s: Structure): void {
+  const outs = s.ports.filter((p) => p.kind === 'out' && p.key === 'hatch_output_lv');
+  if (outs.length < 2) return;
+  for (const p of outs) if (p.keys.length === 1 && isFluid(p.keys[0])) p.locked = true;
 }

@@ -106,6 +106,22 @@ describe('multiblock structures', () => {
     expect(countKey(s, 'casing_clean_stainless')).toBeGreaterThanOrEqual(7 * h - 5);
   });
 
+  it('a large chemical reactor with two fluid outputs locks each output hatch to its fluid', () => {
+    const s = structureFor(mb(1169, { inputs: ['fluid:a'], outputs: ['fluid:b', 'fluid:c', 'item:d'] }))!;
+    const outs = s.ports.filter((p) => p.kind === 'out');
+    expect(outs.filter((p) => p.key === 'hatch_output_lv').map((p) => [p.keys, p.locked])).toEqual([[['fluid:b'], true], [['fluid:c'], true]]);
+    expect(outs.find((p) => p.key === 'bus_output_lv')?.locked).toBeUndefined();
+    expect(s.ports.filter((p) => p.kind === 'in').every((p) => !p.locked)).toBe(true);
+  });
+
+  it('one fluid output, or a distillation tower (one hatch per layer), needs no lock', () => {
+    const one = structureFor(mb(1169, { inputs: ['fluid:a'], outputs: ['fluid:b'] }))!;
+    expect(one.ports.some((p) => p.locked)).toBe(false);
+    expect(tower(FLUIDS).ports.some((p) => p.locked)).toBe(false);
+    const cracker = structureFor(mb(1160, { inputs: ['fluid:oil', 'fluid:steam'], outputs: ['fluid:o'] }))!;
+    expect(cracker.ports.some((p) => p.locked)).toBe(false);
+  });
+
   it('unknown multiblocks and ones above HV have no structure', () => {
     expect(structureFor(mb(9999))).toBeUndefined();
     expect(structureFor(mb(1126, { tier: 'EV', outputs: ['fluid:a'] }))).toBeUndefined();

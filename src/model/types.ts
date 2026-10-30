@@ -33,8 +33,11 @@ export interface PlacedBlock {
   net?: string;
   /** Transformers set to step up (soft mallet): the lower voltage in on five faces, the higher out of `facing`. */
   stepUp?: boolean;
-  /** Multiblock hatches and buses: what the port does, and which resources it handles (empty: it has nothing to move). */
-  port?: { kind: PortKind; keys: string[] };
+  /**
+   * Multiblock hatches and buses: what the port does, and which resources it handles (empty: it has nothing to move).
+   * `locked`: an output hatch the schematic pastes locked to its one fluid.
+   */
+  port?: { kind: PortKind; keys: string[]; locked?: boolean };
 }
 
 /** What one generated pipe or cable network carries, for labels, highlight and the legend. */

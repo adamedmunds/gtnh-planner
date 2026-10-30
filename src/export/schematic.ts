@@ -97,6 +97,13 @@ export function buildSchematicTag(
       te.value.mFacing = short(block.facing ?? DEFAULT_FACING);
       // GT stores "allowed to work" inverted; a transformer that isn't allowed to work steps up.
       if (block.stepUp) te.value.mWorks = byte(1);
+      // An output hatch locked to its fluid (MTEHatchOutput.saveNBTData/loadNBTData): mode 9 is "that fluid only", and
+      // the name is the Forge fluid registry name, which is what the recipe dump keys fluids by (`fluid:<name>`).
+      const port = block.port;
+      if (port?.kind === 'out' && port.locked && port.keys.length === 1 && port.keys[0].startsWith('fluid:')) {
+        te.value.mMode = byte(9);
+        te.value.lockedFluidName = str(port.keys[0].slice('fluid:'.length));
+      }
       // GT basic machines keep their front separately; without it they load with the front on the output side.
       if (block.mainFacing !== undefined) {
         te.value.mMainFacing = int(block.mainFacing);
