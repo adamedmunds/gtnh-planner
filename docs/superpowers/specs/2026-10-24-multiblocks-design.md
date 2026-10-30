@@ -52,6 +52,13 @@ All block names below are confirmed in the user's world save (`gregtech:gt.block
 - Layer *n* above the bottom (n = 1 … outputs): one output hatch for the recipe's *n*-th fluid output, in the recipe's
   own output order. Fluids appear in the recipe data in that order; the builder must take the order from the recipe,
   not from a map or set.
+- As built (front is +z, x runs left to right seen from the front):
+  - Output hatches: front centre of each layer above the bottom, facing front.
+  - Energy hatch: bottom layer, front right, facing front. Maintenance hatch: bottom layer, back centre, facing back.
+  - Fluid input hatches (up to 3): front left (facing front), then back left (facing left), then back right (facing
+    right). More than 3 don't fit and get a note.
+  - Input bus: bottom layer, left side centre, facing left. Output bus: bottom layer, right side centre, facing right.
+  - With every one of these used, exactly `7 × height − 5` casings remain, GT's minimum.
 
 ### Large Chemical Reactor — 3×3×3
 
@@ -60,6 +67,17 @@ All block names below are confirmed in the user's world save (`gregtech:gt.block
   is a Heating Coil (Cupronickel, `gt.blockcasings5`, meta 0); the other `x` spots are casings or hatches.
 - Controller: front centre, middle layer. Input/output hatches and buses, the energy hatch and the maintenance hatch
   may replace any outer casing (at least 8 casings must remain).
+- As built: the coil is the middle layer's back centre. The maintenance hatch is the bottom layer's back centre, facing
+  back. The other hatches fill 14 spots in this order: the 8 front-face casings around the controller (middle left,
+  middle right, bottom left, bottom right, bottom centre, top left, top right, top centre), then the side centres
+  (middle, bottom, top; left and right in turn). The energy hatch takes the first spot, then one input hatch per input
+  fluid, the input bus, one output hatch per output fluid, the output bus. What doesn't fit gets a note; 9 casings
+  always remain.
+- With two or more fluid outputs, each output hatch is pasted **locked to its fluid**. GT puts a fluid output into any
+  output hatch that can hold it, and an unlocked empty hatch takes any fluid, so without the lock one fluid could end
+  up in another's hatch and pipe. The schematic writes the hatch's `mMode` as 9 ("that fluid only") and
+  `lockedFluidName` as the fluid's Forge name, which is the name the recipe dump uses (`fluid:<name>`). This applies to
+  any multiblock but the Distillation Tower (which fills each layer's hatches with that layer's fluid only).
 
 ### Oil Cracking Unit — 5×3×3
 
@@ -67,7 +85,12 @@ All block names below are confirmed in the user's world save (`gregtech:gt.block
   two `c` columns; Clean Stainless Steel casings fill `l`, `m`, `r`.
 - Controller: front centre, middle layer.
 - The hydrocarbon input hatch goes on one side column, the cracked-fluid output hatch on the **opposite** side column,
-  and the hydrogen or steam input hatch on the middle column. Energy and maintenance hatches on any casing.
+  and the hydrogen or steam input hatch on the middle column. Energy and maintenance hatches on any casing. At least
+  18 casings must remain.
+- As built, every hatch faces front: hydrocarbon inputs on the left column's front, cracked-fluid outputs on the right
+  column's front, one hatch per fluid (middle layer first, then bottom, then top; at least one each side). The hydrogen
+  or steam input is the middle column's front bottom, the energy hatch the middle column's front top. The maintenance
+  hatch is the middle column's back, middle layer, facing back. With one fluid each way, 20 casings remain.
 
 ## Hatches (from GT source)
 
@@ -75,14 +98,17 @@ All block names below are confirmed in the user's world save (`gregtech:gt.block
 |---|---|---|
 | Input hatch | 50–53 | any face |
 | Output hatch | 60–63 | pushes out of its **front** only |
-| Input bus | 70–73 | any face |
+| Input bus | 70–73 | takes items through its **front** only |
 | Output bus | 80–83 | pushes out of its **front** only |
 | Energy hatch | 40–43 | takes power through its **front** only |
 | Maintenance hatch | 90 | no pipes |
 
 - Every hatch faces outward from the structure, with its pipe or cable on its front.
-- Energy hatch tier: the recipe's voltage (the user's Distillation Tower recipe, 480 EU/t, needs HV). If one hatch
-  can't carry the recipe's EU/t, add a second.
+- An input bus has one front, so it takes one item pipe. All the items a multiblock takes share it when they come
+  from the same places; if they can't share a pipe, the layout fails and says so.
+- Energy hatch tier: the recipe's voltage (the user's Distillation Tower recipe, 480 EU/t, needs HV). A multiblock in
+  the recipe data has no tier of its own, so it takes the lowest voltage that covers its recipe's EU/t. Above HV it
+  keeps the one-block stand-in.
 - Input/output hatches and buses: LV (cheapest). Hatch capacity is a buffer, not a speed limit.
 - Block meta for hatches and controllers follows GT's harvest-tool rule (as for other GT machines); the builder checks
   each against the source.
