@@ -39,6 +39,10 @@ export interface CatalogEntry {
   drawer?: boolean;
   /** Drawn see-through where its texture is (glass). */
   seeThrough?: boolean;
+  /** Textured faces are drawn in `color` instead of white (for greyscale textures such as frames). */
+  tint?: boolean;
+  /** Shown in 3D but never written to a schematic (a block the player can't get from it, e.g. a frame box). */
+  notInSchematic?: boolean;
 }
 
 /** A machine from the recipe data that isn't in the hand-made catalog; saved with the build that uses it. */

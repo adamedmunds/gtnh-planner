@@ -31,6 +31,7 @@ export function buildSchematicTag(
       warnings.push(`Skipped unknown block "${block.key}" at ${posKey(block.pos)}`);
       continue;
     }
+    if (entry.notInSchematic) continue;
     const key = posKey(block.pos);
     if (byPos.has(key)) warnings.push(`Duplicate blocks at ${key}; kept the last one`);
     byPos.set(key, { block, entry });
@@ -71,6 +72,7 @@ export function buildSchematicTag(
     const x = block.pos[0] - min[0];
     const y = block.pos[1] - min[1];
     const z = block.pos[2] - min[2];
+    if (entry.meta > 255) throw new Error(`${entry.name} has block metadata ${entry.meta}; a schematic holds 0-255`);
     const index = x + (y * size.length + z) * size.width;
     if (entry.vanilla) {
       blocks[index] = vanillaIds.get(entry.vanilla)!;

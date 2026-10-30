@@ -240,9 +240,10 @@ const MARKERS: CatalogEntry[] = [
 
 const MB = 'Multiblock parts';
 const iconset = (name: string) => `blocks/iconsets/${name}.png`;
-const casingBlock = (key: string, name: string, vanilla: string, meta: number, texture: string, color: string): CatalogEntry => {
+const casingBlock = (key: string, name: string, vanilla: string, meta: number, texture: string, color: string, topTexture = texture): CatalogEntry => {
   const t = iconset(texture);
-  return { key, name, kind: 'casing', mID: 0, meta, group: MB, color, vanilla, textures: { top: t, side: t, bottom: t } };
+  const tb = iconset(topTexture);
+  return { key, name, kind: 'casing', mID: 0, meta, group: MB, color, vanilla, textures: { top: tb, side: t, bottom: tb } };
 };
 // Casings and coils are plain GT blocks; their metadata is the block's (confirmed in the user's world save).
 const CASINGS: CatalogEntry[] = [
@@ -254,6 +255,15 @@ const CASINGS: CatalogEntry[] = [
   casingBlock('casing_frost_proof', 'Frost Proof Machine Casing', 'gregtech:gt.blockcasings2', 1, 'MACHINE_CASING_FROST_PROOF', '#c8dce8'),
   casingBlock('coil_kanthal', 'Kanthal Coil Block', 'gregtech:gt.blockcasings5', 1, 'MACHINE_COIL_KANTHAL', '#b5b0a0'),
   casingBlock('coil_nichrome', 'Nichrome Coil Block', 'gregtech:gt.blockcasings5', 2, 'MACHINE_COIL_NICHROME', '#8f8a7a'),
+  casingBlock('casing_pyrolyse', 'Pyrolyse Oven Casing', 'gregtech:gt.blockcasingsNH', 2, 'MACHINE_ULV_SIDE', '#8a8a86'),
+  casingBlock('casing_steel_pipe', 'Steel Pipe Casing', 'gregtech:gt.blockcasings2', 13, 'MACHINE_CASING_PIPE_STEEL', '#8c8f93'),
+  casingBlock('casing_steel_firebox', 'Steel Firebox Casing', 'gregtech:gt.blockcasings3', 14, 'MACHINE_CASING_FIREBOX_STEEL', '#7d756e', 'MACHINE_CASING_FIREBOX_STEEL_TOP'),
+  // The Steel Frame Box is a GT frame (meta 305 doesn't fit a schematic), so it is drawn but never written.
+  {
+    key: 'frame_steel', name: 'Steel Frame Box', kind: 'casing', mID: 0, meta: 305, group: MB, color: '#808080',
+    vanilla: 'gregtech:gt.blockframes', seeThrough: true, tint: true, notInSchematic: true,
+    textures: { side: 'blocks/materialicons/NONE/frameGt.png' },
+  },
 ];
 
 const hatch = (key: string, name: string, mID: number, tier: Tier, overlay: string): CatalogEntry => ({
@@ -279,6 +289,7 @@ const CONTROLLERS: Record<number, { casing: string; overlay: string }> = {
   1160: { casing: 'MACHINE_CASING_CLEAN_STAINLESSSTEEL', overlay: 'OVERLAY_FRONT_OIL_CRACKER' },
   1000: { casing: 'MACHINE_HEATPROOFCASING', overlay: 'OVERLAY_FRONT_ELECTRIC_BLAST_FURNACE' },
   1002: { casing: 'MACHINE_CASING_FROST_PROOF', overlay: 'OVERLAY_FRONT_VACUUM_FREEZER' },
+  15546: { casing: 'MACHINE_ULV_SIDE', overlay: 'OVERLAY_FRONT_PYROLYSE_OVEN' },
 };
 
 /** Multiblock controllers exist in the catalog only once registered, but their textures must still be extracted. */

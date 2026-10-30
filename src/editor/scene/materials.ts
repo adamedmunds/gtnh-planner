@@ -29,7 +29,7 @@ export function machineMaterials(entry: CatalogEntry, facing: number, tex: Machi
       if (s === output && s !== facing) return new THREE.MeshStandardMaterial({ map: map ?? null, color: '#5ad1ff', emissive: '#0b3a52' });
       // See-through blocks (glass) show only the opaque parts of their texture.
       const seeThrough = entry.seeThrough && map ? { alphaTest: 0.5 } : {};
-      return new THREE.MeshStandardMaterial({ map: map ?? null, color: map ? '#ffffff' : untexturedFront ? '#f0f0f0' : entry.color, ...seeThrough });
+      return new THREE.MeshStandardMaterial({ map: map ?? null, color: map ? (entry.tint ? entry.color : '#ffffff') : untexturedFront ? '#f0f0f0' : entry.color, ...seeThrough });
     });
     machineSets.set(key, set);
   }

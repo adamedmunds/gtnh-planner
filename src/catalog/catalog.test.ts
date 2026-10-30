@@ -163,3 +163,17 @@ test('EBF and Vacuum Freezer controllers wear their casing and front overlay', (
   expect(vf).toMatchObject({ meta: 2, textures: { side: 'blocks/iconsets/MACHINE_CASING_FROST_PROOF.png', front: 'blocks/iconsets/OVERLAY_FRONT_VACUUM_FREEZER.png' } });
   expect(CONTROLLER_TEXTURE_PATHS).toContain('blocks/iconsets/OVERLAY_FRONT_ELECTRIC_BLAST_FURNACE.png');
 });
+
+it('has the Pyrolyse Oven blocks', () => {
+  expect(CATALOG.get('casing_pyrolyse')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockcasingsNH', meta: 2, textures: { side: 'blocks/iconsets/MACHINE_ULV_SIDE.png' } });
+  expect(CATALOG.get('casing_steel_pipe')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockcasings2', meta: 13, textures: { side: 'blocks/iconsets/MACHINE_CASING_PIPE_STEEL.png' } });
+  expect(CATALOG.get('casing_steel_firebox')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockcasings3', meta: 14, textures: {
+    top: 'blocks/iconsets/MACHINE_CASING_FIREBOX_STEEL_TOP.png', bottom: 'blocks/iconsets/MACHINE_CASING_FIREBOX_STEEL_TOP.png', side: 'blocks/iconsets/MACHINE_CASING_FIREBOX_STEEL.png' } });
+  expect(CATALOG.get('frame_steel')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockframes', meta: 305, color: '#808080', seeThrough: true, tint: true, notInSchematic: true,
+    textures: { side: 'blocks/materialicons/NONE/frameGt.png' } });
+});
+
+it('the Pyrolyse Oven controller wears its casing and front overlay', () => {
+  const e = generatedEntry({ key: 'gt_15546', name: 'Pyrolyse Oven', mID: 15546, multiblock: true });
+  expect(e).toMatchObject({ meta: 2, textures: { side: 'blocks/iconsets/MACHINE_ULV_SIDE.png', front: 'blocks/iconsets/OVERLAY_FRONT_PYROLYSE_OVEN.png' } });
+});

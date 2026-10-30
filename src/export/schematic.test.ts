@@ -1,4 +1,4 @@
-import { registerMachines } from '../catalog';
+import { CATALOG, registerMachines } from '../catalog';
 import { buildSchematic, buildSchematicTag } from './schematic';
 import { decodeNbt } from './nbtRead';
 import type { CompoundTag, ListTag, Tag } from './nbt';
@@ -219,4 +219,17 @@ test('an LV muffler hatch exports as a GT machine facing its front, meta 1', () 
   expect(num(te, 'mID')).toBe(91);
   expect(num(te, 'mFacing')).toBe(1);
   expect(Array.from((v(tag, 'Data') as { value: Uint8Array }).value)).toEqual([1]);
+});
+
+test('frame boxes stay out of the schematic; the bounds come from the rest', () => {
+  // A casing at the origin and a Steel Frame Box above it: only the casing is written, and the schematic is 1 tall.
+  const { tag } = buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'casing_steel_pipe' }, { pos: [0, 1, 0], key: 'frame_steel' }]));
+  expect(num(tag, 'Height')).toBe(1);
+  expect([...(v(tag, 'Data') as { value: Uint8Array }).value]).toEqual([13]);
+});
+
+test('a block with metadata above 255 is refused, not truncated', () => {
+  const catalog = new Map(CATALOG);
+  catalog.set('wide_meta', { ...CATALOG.get('casing_steel_pipe')!, key: 'wide_meta', name: 'Wide', meta: 305 });
+  expect(() => buildSchematicTag(mk([{ pos: [0, 0, 0], key: 'wide_meta' }]), catalog)).toThrow(/Wide.*305.*0-255/);
 });
