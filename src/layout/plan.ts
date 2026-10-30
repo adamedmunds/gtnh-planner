@@ -7,6 +7,7 @@ import { formatNumber } from '../calculator/format';
 import { resourceInfo } from '../calculator/graphModel';
 import type { RecipeDb } from '../recipes/db';
 import { EU, type MachineRef, type ResourceKey } from '../recipes/types';
+import { MULTIBLOCK_IDS } from './multiblock';
 import type { LayoutStyle, LinePlan, PlanMachine, PlanMarker, PlanNetwork, PowerPlan, PowerTier } from './types';
 
 const POWER_TIERS: readonly PowerTier[] = ['LV', 'MV', 'HV'];
@@ -78,21 +79,32 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     }
   }
 
-  const machine = (i: (typeof info)[number], count: number): PlanMachine => ({
-    nodeId: i.id,
-    key: i.ref.multiblock ? 'marker_multiblock' : keyFor(i.ref),
-    machine: { key: keyFor(i.ref), name: i.ref.name, mID: i.ref.mID, ...(i.tier ? { tier: i.tier } : {}) },
-    ...(i.tier ? { tier: i.tier } : {}),
-    count,
-    eut: i.perMachineEut,
-    avgEut: i.eut,
-    title: i.title,
-    kept: i.kept,
-    inputs: i.inputs,
-    outputs: i.outputs,
-    generator: i.node.kind === 'generator',
-    multiblock: i.ref.multiblock,
-  });
+  const machine = (i: (typeof info)[number], count: number): PlanMachine => {
+    const pm: PlanMachine = {
+      nodeId: i.id,
+      key: i.ref.multiblock ? 'marker_multiblock' : keyFor(i.ref),
+      machine: { key: keyFor(i.ref), name: i.ref.name, mID: i.ref.mID, ...(i.tier ? { tier: i.tier } : {}) },
+      ...(i.tier ? { tier: i.tier } : {}),
+      count,
+      eut: i.perMachineEut,
+      avgEut: i.eut,
+      title: i.title,
+      kept: i.kept,
+      inputs: i.inputs,
+      outputs: i.outputs,
+      generator: i.node.kind === 'generator',
+      multiblock: i.ref.multiblock,
+    };
+    if (!planned(i)) return pm;
+    // A multiblock we can build: its own controller, its fluid outputs in recipe order.
+    const recipe = i.node.kind === 'recipe' ? db.bySignature(i.node.recipeSig) : undefined;
+    const fluidOutputs = (recipe?.outputs ?? []).map((o) => o.key).filter((k) => k.startsWith('fluid:'));
+    return { ...pm, key: keyFor(i.ref), machine: { ...pm.machine, multiblock: true }, fluidOutputs };
+  };
+  /** A multiblock with a definition (known controller, tier up to HV) is laid out as itself; same rule as `structureFor`. */
+  function planned(i: (typeof info)[number]): boolean {
+    return i.ref.multiblock && MULTIBLOCK_IDS.includes(i.ref.mID) && (!i.tier || tierIndex(i.tier) <= tierIndex('HV'));
+  }
 
   // Markers: everything taken from outside comes in; the product and everything else made goes out.
   const markers: PlanMarker[] = [];
@@ -116,7 +128,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
   }
 
   // Power: the machines' tiers, from the line's generators or from outside, stepping down with transformers.
-  const users = info.filter((i) => i.node.kind !== 'generator' && !i.ref.multiblock && i.tier);
+  const users = info.filter((i) => i.node.kind !== 'generator' && (!i.ref.multiblock || planned(i)) && i.tier);
   const tiers = POWER_TIERS.filter((t) => users.some((i) => i.tier === t || (t === 'LV' && i.tier === 'ULV')));
   const demand: PowerPlan['demand'] = {};
   for (const i of users) {
@@ -139,7 +151,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
   const buildNotes = (machines: PlanMachine[], times: (m: PlanMachine) => number): string[] => [
     'Place every machine with its front (the face with its picture) toward the walkway, then wrench its output to the side shown in the 3D view.',
     'Turn on item and fluid auto-output on every machine.',
-    ...machines.flatMap((m) => m.kept.map((k) => {
+    ...machines.filter((m) => !(m.multiblock && m.key !== 'marker_multiblock')).flatMap((m) => m.kept.map((k) => {
       const n = times(m);
       return n === 1 ? `Put a ${k.name} in the ${m.title}` : `Put a ${k.name} in every ${m.title} (${n})`;
     })),
@@ -164,7 +176,15 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     ],
     ...(fallback ? { fallback } : {}),
   });
-  const multiblockNotes = () => info.filter((i) => i.ref.multiblock).map((i) => `Build the ${i.ref.name} here yourself (multiblocks aren't laid out yet)`);
+  const multiblockNotes = () => info.filter((i) => i.ref.multiblock).flatMap((i) => {
+    if (!planned(i)) return [`Build the ${i.ref.name} here yourself (multiblocks aren't laid out yet)`];
+    const name = i.ref.name;
+    return [
+      `Fix the ${name}'s maintenance hatch with tools after pasting it`,
+      ...(i.ref.mID === 1169 || i.ref.mID === 1160 ? [`The ${name}'s Heating Coils are Cupronickel; better ones can be swapped in`] : []),
+      ...i.kept.map((k) => `Put a ${k.name} in the ${name}'s controller or input bus`),
+    ];
+  });
 
   if (style === 'straight') return straightPlan();
 

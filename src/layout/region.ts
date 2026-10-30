@@ -2,6 +2,7 @@ import { CATALOG, registerMachines } from '../catalog';
 import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
 import { routeNetwork } from '../model/route';
 import type { Build, FaceSetting, Facing, LineNetwork, PlacedBlock, Vec3 } from '../model/types';
+import { structureFor } from './multiblock';
 import { VOLTAGE, cableFor, pipeFor } from './power';
 import type { GeneratedLine, LinePlan, PlanMachine, PlanMarker, PowerTier } from './types';
 
@@ -77,8 +78,9 @@ export interface Routed {
   notes: string[];
 }
 
+/** The power tier a machine runs on; a multiblock only has one when it's planned as itself. */
 export const tierOf = (pm?: PlanMachine): PowerTier | undefined =>
-  pm?.multiblock || !pm?.tier ? undefined : pm.tier === 'ULV' ? 'LV' : (pm.tier as PowerTier);
+  (pm?.multiblock && !structureFor(pm)) || !pm?.tier ? undefined : pm.tier === 'ULV' ? 'LV' : (pm.tier as PowerTier);
 
 const isWalkway = (c: Vec3) => c[2] === 0 && (c[1] === 0 || c[1] === 1);
 
