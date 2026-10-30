@@ -96,7 +96,10 @@ const netKeys = (n: Net) => n.parts?.map((p) => p.key) ?? [n.id.slice(2)];
 const portNets = (u: Placed, nets: Net[]) => nets.filter((n) => n.kind !== 'cable' && u.port && netKeys(n).some((k) => u.port!.keys.includes(k)) &&
   (u.port.kind === 'out' ? n.producers.has(u.role) : u.port.kind === 'in' && n.consumers.has(u.role)));
 
-const isWalkway = (c: Vec3) => c[2] === 0 && (c[1] === 0 || c[1] === 1);
+/** A multiblock's input bus: GT puts items into it through its front only (MTEHatchInputBus.allowPutStack). */
+const frontOnly = (u: Placed) => u.port?.kind === 'in' && u.key.startsWith('bus_input');
+
+const isWalkway =(c: Vec3) => c[2] === 0 && (c[1] === 0 || c[1] === 1);
 
 export const sideTo = (from: Vec3, to: Vec3) => DIRS.findIndex((d) => from[0] + d[0] === to[0] && from[1] + d[1] === to[1] && from[2] + d[2] === to[2]) as Facing;
 
@@ -315,8 +318,9 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
       ? powerEnds(n)
       : region.units.flatMap((u): { u: Placed; mode: 'facing' | 'other' | 'any' | 'cover' }[] => {
           if (u.marker) return n.producers.has(u.role) || n.consumers.has(u.role) ? [{ u, mode: 'any' }] : [];
-          // A hatch ends the networks it carries: an output only out of its front, an input on any free face.
-          if (u.fixed) return portNets(u, [n]).length ? [{ u, mode: u.facingNet === n.id || u.port!.kind === 'out' ? 'facing' : 'other' }] : [];
+          // A hatch ends the networks it carries: an output and an input bus only through their front (a second network
+          // into a bus then finds its front taken, and fails), an input hatch on any free face.
+          if (u.fixed) return portNets(u, [n]).length ? [{ u, mode: u.facingNet === n.id || u.port!.kind === 'out' || frontOnly(u) ? 'facing' : 'other' }] : [];
           if (n.producers.has(u.role)) return [{ u, mode: u.facingNet === n.id ? 'facing' : 'cover' }];
           if (n.consumers.has(u.role)) return [{ u, mode: 'other' }];
           return [];
@@ -329,7 +333,11 @@ export function routeRegion(region: Region, nets: Net[], plan: LinePlan, oneHigh
       terminals.push(sides.map((s) => addVec(u.pos, DIRS[s])).filter((c) => usable(c, n.id)));
     }
     const stuck = terminals.findIndex((t) => !t.length);
-    if (stuck >= 0) return { fail: `no free face on the ${ends[stuck - lanes.length]?.u.name ?? 'line'} for ${n.name}` };
+    if (stuck >= 0) {
+      const end = ends[stuck - lanes.length]?.u;
+      if (end && frontOnly(end)) return { fail: `the front of the ${end.name} is taken, and it takes ${n.name} only through its front` };
+      return { fail: `no free face on the ${end?.name ?? 'line'} for ${n.name}` };
+    }
     const blocked = blockedFor(n);
     // Steer clear of machine faces and of the cells around other machines' output faces, so no output gets boxed in.
     const avoid = new Set<string>();

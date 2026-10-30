@@ -108,6 +108,39 @@ test('a large chemical reactor and an oil cracker lay out and pass the checker',
   expect(checkLine(build, p)).toEqual([]);
 });
 
+test("a reactor's input bus gets its items through its front", () => {
+  const lcr = multi('lcr', 1169, 'Large Chemical Reactor', { inputs: ['fluid:oil', 'item:dust'], outputs: ['fluid:naphtha'] });
+  const p = plan(
+    [lcr],
+    [{ key: 'item:dust', name: 'Dust', kind: 'item', flow: 1, producers: ['in:dust'], consumers: ['lcr'] }, fluid('fluid:naphtha', ['lcr'], ['out:n'])],
+    [marker('in:dust', 'item:dust', 'in', 'item'), marker('out:n', 'fluid:naphtha', 'out')],
+  );
+  const { build } = buildLine(p, 'Reactor line');
+  expect(checkLine(build, p)).toEqual([]);
+  const bus = build.blocks.find((b) => b.key === 'bus_input_lv')!;
+  const at = new Map(build.blocks.map((b) => [posKey(b.pos), b]));
+  const piped = DIRS.map((d, side) => ({ side, b: at.get(posKey(addVec(bus.pos, d))) }))
+    .filter(({ b }) => b && CATALOG.get(b.key)?.kind === 'itemPipe').map(({ side }) => side);
+  expect(piped).toEqual([bus.facing]);
+});
+
+test('two item networks into one input bus fail loudly (a bus takes items through its front only)', () => {
+  // Salt also goes to a second machine, so dust and salt can't share a pipe: the bus would need two faces.
+  const lcr = multi('lcr', 1169, 'Large Chemical Reactor', { inputs: ['fluid:oil', 'item:dust', 'item:salt'], outputs: ['fluid:naphtha'] });
+  const salter = pm({ nodeId: 'salter', key: 'gt_583', machine: { key: 'gt_583', name: 'Advanced Mixer II', mID: 583, tier: 'HV' }, tier: 'HV', eut: 120, avgEut: 120,
+    inputs: ['item:salt'], outputs: ['fluid:brine'] });
+  const p = plan(
+    [lcr, salter],
+    [
+      { key: 'item:dust', name: 'Dust', kind: 'item', flow: 1, producers: ['in:dust'], consumers: ['lcr'] },
+      { key: 'item:salt', name: 'Salt', kind: 'item', flow: 1, producers: ['in:salt'], consumers: ['lcr', 'salter'] },
+      fluid('fluid:naphtha', ['lcr'], ['out:n']), fluid('fluid:brine', ['salter'], ['out:b']),
+    ],
+    [marker('in:dust', 'item:dust', 'in', 'item'), marker('in:salt', 'item:salt', 'in', 'item'), marker('out:n', 'fluid:naphtha', 'out'), marker('out:b', 'fluid:brine', 'out')],
+  );
+  expect(() => buildLine(p, 'Reactor line')).toThrow(/the LV Input Bus takes items through its front only, and another pipe already uses it \(it needed one for Salt\)/);
+});
+
 test("the energy hatch is cabled to the line's power", () => {
   const p = towerPlan();
   const { build } = buildLine(p, 'Tower line');

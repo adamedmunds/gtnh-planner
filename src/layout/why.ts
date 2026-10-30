@@ -37,6 +37,11 @@ const RULES: { test: RegExp; text: (m: RegExpMatchArray) => string; tips: string
     tips: (m) => [`Give the ${m[1]} an energy hatch with its power cable on the hatch's front`],
   },
   {
+    test: /the front of the (.+?) is taken, and it takes (.+) only through its front$/,
+    text: (m) => `The ${m[1]} takes items through its front only, and another pipe already uses it (it needed one for ${m[2]})`,
+    tips: [FEWER, SPLIT],
+  },
+  {
     test: /no free face on the (.+?) for (.+)$/,
     text: (m) => `The ${m[1]} has more pipes than free sides (it needed one for ${m[2]})`,
     tips: [FEWER, STRAIGHT],

@@ -12,6 +12,8 @@ const tierIdx = (t?: string) => (t ? TIERS.indexOf(t) : -1);
 const where = (p: Vec3) => `(${p.join(', ')})`;
 const isConduit = (e: CatalogEntry) => e.kind === 'cable' || e.kind === 'fluidPipe' || e.kind === 'itemPipe';
 const isTransformer = (e: CatalogEntry) => e.key.startsWith('transformer_');
+/** A multiblock's input bus: GT puts items into it through its front only (MTEHatchInputBus.allowPutStack). */
+const frontOnly = (c: Cell) => c.block.port?.kind === 'in' && c.entry.key.startsWith('bus_input');
 
 /**
  * Proves a line is buildable as laid out: every machine gets each input and can push out each output on the face
@@ -118,7 +120,8 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
         problems.push(`${byNode.get(id)?.machine.name ?? id} is missing (needed for ${net.name})`);
         return;
       }
-      // A multiblock's hatches are its only endpoints: outputs push out of their front, inputs take from any face.
+      // A multiblock's hatches are its only endpoints: outputs push out of their front; an input hatch takes fluid on any
+      // face, an input bus items through its front only.
       const ported = blocks.some((c) => c.block.port);
       const ends = ported ? blocks.filter((c) => c.block.port?.kind === (producing ? 'out' : 'in') && c.block.port.keys.includes(net.key)) : blocks;
       if (ported && !ends.length) {
@@ -129,16 +132,20 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
         const marker = c.entry.kind === 'marker';
         const ok = attachments(c).filter(({ side, comp }) => {
           if (comps[comp].kind !== kind) return false;
-          if (marker || c.block.port?.kind === 'in') return true;
+          if (marker) return true;
+          if (c.block.port?.kind === 'in') return !frontOnly(c) || side === c.block.facing;
           if (producing) return side === c.block.facing || setting(c, side, cover);
           return side !== c.block.facing || setting(c, side, 'inputFromOutput');
         });
         if (!ok.length) {
           const viaOutput = !producing && attachments(c).some(({ side, comp }) => comps[comp].kind === kind && side === c.block.facing);
+          const viaSide = !producing && frontOnly(c) && attachments(c).some(({ comp }) => comps[comp].kind === kind);
           problems.push(
             producing
               ? `${net.name} can't get out of the ${label(c)}`
-              : viaOutput
+              : viaSide
+                ? `The ${label(c)} takes ${net.name} only through its front — its pipe must meet the front`
+                : viaOutput
                 ? `The ${label(c)} gets ${net.name} through its output face — make sure "input from output side" is on (screwdriver), or feed it from another side`
                 : `The ${label(c)} gets no ${net.name}`,
           );

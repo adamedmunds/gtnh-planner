@@ -250,6 +250,53 @@ describe('multiblock ports', () => {
     expect(checkLine(lone, tower).join(' | ')).toMatch(/The Distillation Tower at \(0, 0, 0\) is a single block — it needs its casings and hatches to form/);
   });
 
+  describe('an input bus takes items only through its front (MTEHatchInputBus.allowPutStack)', () => {
+    const D = 'item:d';
+    const withBus: LinePlan = {
+      ...plan,
+      straight: [{ ...plan.straight![0], inputs: [A, D] }],
+      networks: [...plan.networks, { key: D, name: 'Dust', kind: 'item', flow: 1, producers: ['d_in'], consumers: ['mb'] }],
+    };
+    // The bus sits on top of the controller, its item pipe above it.
+    const busBuild = (facing: 0 | 1 | 2 | 3 | 4 | 5): Build => {
+      const b = multiblock();
+      b.blocks.push(
+        { pos: [0, 1, 0], key: 'bus_input_lv', role: 'mb', facing, port: { kind: 'in', keys: [D] } },
+        { pos: [0, 2, 0], key: 'tin_item_pipe_small' }, { pos: [0, 3, 0], key: 'marker_item_in', role: 'd_in' },
+      );
+      return b;
+    };
+
+    test('a bus fed through its front passes', () => {
+      expect(checkLine(busBuild(1), withBus)).toEqual([]);
+    });
+
+    test('an item pipe on the side of a bus is caught', () => {
+      expect(checkLine(busBuild(4), withBus).join(' | ')).toMatch(/Input Bus at \(0, 1, 0\) takes Dust only through its front/);
+    });
+
+    test('a fluid input hatch still takes its fluid on any face', () => {
+      const b = busBuild(1);
+      hatchAt(b, 1, 0).facing = 1; // the Fluid A hatch faces up; its pipe is on its east side
+      expect(checkLine(b, withBus)).toEqual([]);
+    });
+  });
+
+  test('a one-block stand-in for a multiblock the line can not build is left alone', () => {
+    // No structure for mID 9999: the player builds it by hand, so no single-block or energy-hatch problem, and no power.
+    const standIn: LinePlan = {
+      ...plan,
+      straight: [{ ...plan.straight![0], key: 'marker_multiblock', machine: { key: 'gt_9999', name: 'Mystery Multiblock', mID: 9999, tier: 'HV', multiblock: true } }],
+    };
+    const b: Build = { version: 1, name: 'mb', blocks: [
+      { pos: [0, 0, 0], key: 'marker_multiblock', role: 'mb' },
+      pipe([1, 0, 0]), { pos: [2, 0, 0], key: 'marker_fluid_in', role: 'a_in' },
+      pipe([-1, 0, 0]), { pos: [-2, 0, 0], key: 'marker_fluid_out', role: 'b_out' },
+      pipe([0, 0, 1]), { pos: [0, 0, 2], key: 'marker_fluid_out', role: 'c_out' },
+    ] };
+    expect(checkLine(b, standIn)).toEqual([]);
+  });
+
   test('an output hatch with nothing to output needs no pipe', () => {
     const b = multiblock();
     hatchAt(b, 0, 1).port = { kind: 'out', keys: [] };
