@@ -1,5 +1,5 @@
 import { registerMachines, type GeneratedMachine } from '../catalog';
-import type { Build, FaceSetting, Facing, LineNetwork, ManualMask, PlacedBlock } from './types';
+import type { Build, FaceSetting, Facing, LineNetwork, ManualMask, PlacedBlock, PortKind } from './types';
 
 export class BuildParseError extends Error {}
 
@@ -7,6 +7,7 @@ export function serializeBuild(build: Build): string {
   return JSON.stringify(build, null, 2);
 }
 
+const PORT_KINDS: readonly PortKind[] = ['in', 'out', 'energy', 'maintenance'];
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
 const isMaskBits = (v: unknown): v is number => isInt(v) && v >= 0 && v <= 63;
 
@@ -40,6 +41,10 @@ export function parseBuild(text: string): { build: Build; warnings: string[] } {
     if (typeof rb.role === 'string') block.role = rb.role;
     if (typeof rb.net === 'string') block.net = rb.net;
     if (rb.stepUp === true) block.stepUp = true;
+    const port = rb.port as { kind?: unknown; keys?: unknown } | null | undefined;
+    if (port && PORT_KINDS.includes(port.kind as PortKind) && Array.isArray(port.keys) && port.keys.every((k) => typeof k === 'string')) {
+      block.port = { kind: port.kind as PortKind, keys: [...(port.keys as string[])] };
+    }
     if (isInt(rb.mainFacing) && rb.mainFacing >= 2 && rb.mainFacing <= 5) block.mainFacing = rb.mainFacing as Facing;
     if (rb.facing !== undefined) {
       if (isInt(rb.facing) && rb.facing >= 0 && rb.facing <= 5) block.facing = rb.facing as Facing;

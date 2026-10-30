@@ -105,11 +105,18 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
         problems.push(`${byNode.get(id)?.machine.name ?? id} is missing (needed for ${net.name})`);
         return;
       }
-      for (const c of blocks) {
+      // A multiblock's hatches are its only endpoints: outputs push out of their front, inputs take from any face.
+      const ported = blocks.some((c) => c.block.port);
+      const ends = ported ? blocks.filter((c) => c.block.port?.kind === (producing ? 'out' : 'in') && c.block.port.keys.includes(net.key)) : blocks;
+      if (ported && !ends.length) {
+        const name = byNode.get(id)?.machine.name ?? id;
+        problems.push(producing ? `${net.name} can't get out of the ${name}: no output hatch for it` : `The ${name} gets no ${net.name}: no input hatch for it`);
+      }
+      for (const c of ends) {
         const marker = c.entry.kind === 'marker';
         const ok = attachments(c).filter(({ side, comp }) => {
           if (comps[comp].kind !== kind) return false;
-          if (marker) return true;
+          if (marker || c.block.port?.kind === 'in') return true;
           if (producing) return side === c.block.facing || setting(c, side, cover);
           return side !== c.block.facing || setting(c, side, 'inputFromOutput');
         });
@@ -200,6 +207,11 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
       }
       return;
     }
+    // A multiblock's energy hatch takes power through its front only; its controller and other hatches take none.
+    if (n.block.port || byNode.get(roleOf(n) ?? '')?.multiblock) {
+      if (n.block.port?.kind === 'energy' && fromSide === n.block.facing) raise(posKey(n.block.pos), tier);
+      return;
+    }
     // GT machines take power on every side but their front.
     if (n.entry.kind === 'machine' && !byNode.get(roleOf(n) ?? '')?.generator && fromSide !== frontOf(n)) raise(posKey(n.block.pos), tier);
   };
@@ -262,10 +274,12 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
   for (const c of cells.values()) {
     if (c.entry.kind !== 'machine' || isTransformer(c.entry)) continue;
     const m = byNode.get(roleOf(c) ?? '');
-    if (m?.generator || m?.multiblock) continue;
+    // A multiblock is powered through its energy hatch alone, which takes up to its own tier.
+    if (m?.generator || ((m?.multiblock || c.block.port) && c.block.port?.kind !== 'energy')) continue;
     const tier = fed.get(posKey(c.block.pos));
+    const limit = c.block.port ? tierIdx(c.entry.tier) : machineTier(c);
     if (tier === undefined) problems.push(`No power reaches the ${label(c)}`);
-    else if (tier > machineTier(c)) problems.push(`The ${label(c)} gets ${TIERS[tier]} power — too much voltage for an ${TIERS[machineTier(c)]} machine`);
+    else if (tier > limit) problems.push(`The ${label(c)} gets ${TIERS[tier]} power — too much voltage for an ${TIERS[limit]} machine`);
   }
 
   // Generated lines: a clear walkway, and every slice exactly like the first.

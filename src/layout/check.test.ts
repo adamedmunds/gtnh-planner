@@ -1,3 +1,4 @@
+import { registerMachines } from '../catalog';
 import { makeOilBerryLine } from '../presets/oilBerryLine';
 import type { Build, PlacedBlock } from '../model/types';
 import { K } from '../test/oilBerryDb';
@@ -176,5 +177,62 @@ describe('burn risk: higher voltage touching a lower-rated cable, connected or n
   test("an LV cable against a generator's other faces is fine", () => {
     const lv: PlacedBlock = { pos: [0, 1, 0], key: 'tin_cable_1x', manualMask: off };
     expect(checkLine(build([gen, ...mvRun, lv]), plan).join('\n')).not.toMatch(/burn/);
+  });
+});
+
+describe('multiblock ports', () => {
+  beforeAll(() => registerMachines([{ key: 'gt_1126', name: 'Distillation Tower', mID: 1126, tier: 'HV', multiblock: true }]));
+  const A = 'fluid:a';
+  const B = 'fluid:b';
+  const C = 'fluid:c';
+  const plan: LinePlan = {
+    ...presetPlan,
+    straight: [{ ...pm('mb', 'gt_1126', 'HV', [A], [B, C]), multiblock: true, eut: 480 }],
+    networks: [
+      { key: A, name: 'Fluid A', kind: 'fluid', flow: 1, producers: ['a_in'], consumers: ['mb'] },
+      { key: B, name: 'Fluid B', kind: 'fluid', flow: 1, producers: ['mb'], consumers: ['b_out'] },
+      { key: C, name: 'Fluid C', kind: 'fluid', flow: 1, producers: ['mb'], consumers: ['c_out'] },
+    ],
+    power: { tiers: ['HV'], source: { kind: 'outside', tier: 'HV', eut: 480 }, demand: { HV: 480 }, transformers: [] },
+  };
+  const pipe = (pos: [number, number, number]): PlacedBlock => ({ pos, key: 'steel_pipe_small' });
+  // A controller with an input hatch east, two output hatches west and south, an energy hatch north; each pipe runs to a marker.
+  const multiblock = (): Build => ({
+    version: 1, name: 'mb',
+    blocks: [
+      { pos: [0, 0, 0], key: 'gt_1126', role: 'mb' },
+      { pos: [1, 0, 0], key: 'hatch_input_lv', role: 'mb', facing: 5, port: { kind: 'in', keys: [A] } },
+      { pos: [-1, 0, 0], key: 'hatch_output_lv', role: 'mb', facing: 4, port: { kind: 'out', keys: [B] } },
+      { pos: [0, 0, 1], key: 'hatch_output_lv', role: 'mb', facing: 3, port: { kind: 'out', keys: [C] } },
+      { pos: [0, 0, -1], key: 'hatch_energy_hv', role: 'mb', facing: 2, port: { kind: 'energy', keys: [] } },
+      pipe([2, 0, 0]), { pos: [3, 0, 0], key: 'marker_fluid_in', role: 'a_in' },
+      pipe([-2, 0, 0]), { pos: [-3, 0, 0], key: 'marker_fluid_out', role: 'b_out' },
+      pipe([0, 0, 2]), { pos: [0, 0, 3], key: 'marker_fluid_out', role: 'c_out' },
+      { pos: [0, 0, -2], key: 'electrum_cable_1x' }, { pos: [0, 0, -3], key: 'marker_power_in' },
+    ],
+  });
+  const hatchAt = (b: Build, x: number, z: number) => b.blocks.find((p) => p.pos[0] === x && p.pos[2] === z)!;
+
+  test('a multiblock passes when each port has its own pipe', () => {
+    expect(checkLine(multiblock(), plan)).toEqual([]);
+  });
+
+  test('a multiblock output pipe on the wrong hatch is caught', () => {
+    const b = multiblock();
+    hatchAt(b, 0, 1).facing = 2; // the Fluid C hatch now faces the controller, away from its pipe
+    expect(checkLine(b, plan).join(' | ')).toMatch(/Fluid C can't get out of the .*Output Hatch/);
+  });
+
+  test('an energy hatch powered from its side is not powered', () => {
+    const b = multiblock();
+    hatchAt(b, 0, -1).facing = 3; // the cable now meets its side, not its front
+    expect(checkLine(b, plan).join(' | ')).toMatch(/No power reaches the .*Energy Hatch/);
+  });
+
+  test('an output hatch with nothing to output needs no pipe', () => {
+    const b = multiblock();
+    hatchAt(b, 0, 1).port = { kind: 'out', keys: [] };
+    b.blocks = b.blocks.filter((p) => p.pos[2] < 2 || p.pos[0] !== 0);
+    expect(checkLine(b, { ...plan, networks: plan.networks.filter((n) => n.key !== C) })).toEqual([]);
   });
 });

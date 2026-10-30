@@ -1,13 +1,13 @@
 import { CATALOG, type CatalogEntry } from '../catalog';
 import { computeConnections } from '../model/connections';
 import { DIRS, OPPOSITE, addVec, posKey } from '../model/directions';
-import type { Build, Vec3 } from '../model/types';
+import type { Build, PlacedBlock, Vec3 } from '../model/types';
 import { VOLTAGE } from './power';
 import type { LinePlan, PlanMachine, PowerTier } from './types';
 
 const TIER_ORDER: readonly PowerTier[] = ['LV', 'MV', 'HV'];
 
-interface Cell { pos: Vec3; entry: CatalogEntry; facing?: number; role?: string; stepUp?: boolean }
+interface Cell { pos: Vec3; entry: CatalogEntry; facing?: number; role?: string; stepUp?: boolean; port?: PlacedBlock['port'] }
 
 /**
  * EU/t lost in cables: every machine draws EU/t ÷ voltage amps on average over its shortest cable run from a power source
@@ -18,7 +18,7 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
   const cells = new Map<string, Cell>();
   for (const b of build.blocks) {
     const entry = CATALOG.get(b.key);
-    if (entry) cells.set(posKey(b.pos), { pos: b.pos, entry, facing: b.facing, role: b.role, stepUp: b.stepUp });
+    if (entry) cells.set(posKey(b.pos), { pos: b.pos, entry, facing: b.facing, role: b.role, stepUp: b.stepUp, port: b.port });
   }
   const masks = computeConnections(build.blocks);
   const byNode = new Map<string, PlanMachine>([...(plan.slice ?? []), ...plan.core, ...(plan.straight ?? [])].map((m) => [m.nodeId, m]));
@@ -61,7 +61,8 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
     let best: { d: number; loss: number; from: string } | undefined;
     DIRS.forEach((d, side) => {
       // A transformer takes power in on its facing (step-down) or on its other faces (step-up).
-      if (transformerHigh ? (c.stepUp ? side === c.facing : side !== c.facing) : side === c.facing) return;
+      // An energy hatch takes power through its front only.
+      if (c.port ? side !== c.facing : transformerHigh ? (c.stepUp ? side === c.facing : side !== c.facing) : side === c.facing) return;
       const n = cells.get(posKey(addVec(c.pos, d)));
       const nd = n && dist.get(posKey(n.pos));
       if (!n || !isCable(n) || nd === undefined || !connected(n, OPPOSITE[side])) return;
@@ -80,6 +81,7 @@ export function cableLoss(build: Build, plan: LinePlan): { total: number; perMac
   for (const c of cells.values()) {
     const pm = byNode.get(c.role ?? '');
     if (!pm || pm.generator || !pm.eut || isTransformer(c)) continue;
+    if (pm.multiblock && c.port?.kind !== 'energy') continue; // only a multiblock's energy hatch draws
     const best = nearest(c, false);
     if (best) {
       const lost = best.d * best.loss * (pm.eut / (VOLTAGE[tierOfVoltage(pm.tier)] ?? VOLTAGE.LV));

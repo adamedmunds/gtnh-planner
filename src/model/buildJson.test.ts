@@ -104,3 +104,10 @@ test('pipe networks round-trip; builds without them still load', () => {
   expect(build.networks).toEqual(b.networks);
   expect(parseBuild(serializeBuild(good)).build.networks).toBeUndefined();
 });
+
+test('round-trips a multiblock port and drops a malformed one', () => {
+  const b: Build = { version: 1, name: 'mb', blocks: [{ pos: [0, 0, 0], key: 'hatch_output_lv', facing: 4, role: 'mb', port: { kind: 'out', keys: ['fluid:a'] } }] };
+  expect(parseBuild(serializeBuild(b)).build).toEqual(b);
+  const bad = JSON.stringify({ ...b, blocks: [{ ...b.blocks[0], port: { kind: 'sideways', keys: [] } }] });
+  expect(parseBuild(bad).build.blocks[0].port).toBeUndefined();
+});

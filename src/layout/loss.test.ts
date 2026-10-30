@@ -1,3 +1,4 @@
+import { registerMachines } from '../catalog';
 import { createHighsSolver } from '../calc/solver/highs';
 import { solveForScreen } from '../calculator/drive';
 import { db, reference } from '../calculator/testChains';
@@ -76,4 +77,27 @@ test('a transformer draws only what the machines it feeds use: 30 EU/t of LV is 
   const plan = machinePlan(30);
   const mv: LinePlan = { ...plan, power: { ...plan.power, tiers: ['LV', 'MV'], source: { kind: 'outside', tier: 'MV', eut: 30 } } };
   expect(cableLoss(build, mv).total).toBeCloseTo((30 / 128) * 10);
+});
+
+test('only the energy hatch of a multiblock draws power', () => {
+  registerMachines([{ key: 'gt_1126', name: 'Distillation Tower', mID: 1126, tier: 'HV', multiblock: true }]);
+  const plan: LinePlan = {
+    ...machinePlan(480),
+    straight: [{ ...machinePlan(480).straight![0], nodeId: 'mb', key: 'gt_1126', tier: 'HV', multiblock: true }],
+    power: { tiers: ['HV'], source: { kind: 'outside', tier: 'HV', eut: 480 }, demand: { HV: 480 }, transformers: [] },
+  };
+  const cable = (x: number): PlacedBlock => ({ pos: [x, 0, 0], key: 'electrum_cable_1x' });
+  const build: Build = {
+    version: 1, name: 'mb',
+    blocks: [
+      { pos: [0, 0, 0], key: 'marker_power_in', role: 'power' }, cable(1), cable(2),
+      { pos: [3, 0, 0], key: 'hatch_energy_hv', role: 'mb', facing: 4, port: { kind: 'energy', keys: [] } },
+      { pos: [4, 0, 0], key: 'gt_1126', role: 'mb' },
+      { pos: [4, 0, 1], key: 'hatch_input_lv', role: 'mb', facing: 3, port: { kind: 'in', keys: [] } },
+      { pos: [3, 0, 1], key: 'electrum_cable_1x' }, { pos: [2, 0, 1], key: 'electrum_cable_1x' }, { pos: [1, 0, 1], key: 'electrum_cable_1x' },
+    ],
+  };
+  const { perMachine } = cableLoss(build, plan);
+  expect([...perMachine.keys()]).toEqual(['3,0,0']);
+  expect(perMachine.get('3,0,0')).toBeCloseTo(2 * 1 * (480 / 512));
 });
