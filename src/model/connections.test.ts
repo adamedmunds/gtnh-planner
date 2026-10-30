@@ -85,3 +85,12 @@ test('a pipe next to a marker connects to it', () => {
   ]);
   expect(masks.get(posKey([1, 0, 0]))).toBe(1 << 4);
 });
+
+test('a pipe next to a casing does not connect to it', () => {
+  const masks = computeConnections([
+    { pos: [0, 0, 0], key: 'casing_clean_stainless' },
+    { pos: [1, 0, 0], key: 'bronze_pipe_small' },
+  ]);
+  expect(masks.get(posKey([1, 0, 0]))).toBe(0);
+  expect(masks.has(posKey([0, 0, 0]))).toBe(false);
+});

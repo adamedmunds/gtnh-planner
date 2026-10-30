@@ -2,8 +2,8 @@ import { CATALOG, CATALOG_ENTRIES, getEntry, machineKey, registerMachines } from
 
 test('keys and mIDs are unique', () => {
   const keys = CATALOG_ENTRIES.map((e) => e.key);
-  // Markers are vanilla stand-ins with no GregTech id.
-  const ids = CATALOG_ENTRIES.filter((e) => e.kind !== 'marker').map((e) => e.mID);
+  // Markers and casings are plain blocks (or stand-ins) with no GregTech id.
+  const ids = CATALOG_ENTRIES.filter((e) => e.kind !== 'marker' && e.kind !== 'casing').map((e) => e.mID);
   expect(new Set(keys).size).toBe(keys.length);
   expect(new Set(ids).size).toBe(ids.length);
   expect(CATALOG.size).toBe(CATALOG_ENTRIES.length);
@@ -42,6 +42,12 @@ test.each([
   ['pvc_item_pipe_normal', 5690, 5, 'itemPipe'],
   ['combustion_generator_mv', 1111, 1, 'machine'],
   ['transformer_mv_lv', 21, 1, 'machine'],
+  ['hatch_input_lv', 51, 1, 'machine'],
+  ['hatch_output_lv', 61, 1, 'machine'],
+  ['bus_input_lv', 71, 1, 'machine'],
+  ['bus_output_lv', 81, 1, 'machine'],
+  ['hatch_energy_hv', 43, 1, 'machine'],
+  ['hatch_maintenance', 90, 1, 'machine'],
 ] as const)('%s has mID %i, meta %i, kind %s', (key, mID, meta, kind) => {
   const e = getEntry(key);
   expect(e).toBeDefined();
@@ -52,7 +58,7 @@ test.each([
 
 test('machines have tier casing + front overlay textures; conduits have thickness', () => {
   for (const e of CATALOG_ENTRIES) {
-    if (e.kind === 'marker') continue;
+    if (e.kind === 'marker' || e.kind === 'casing') continue;
     if (e.kind === 'machine') {
       expect(e.tier).toBeDefined();
       expect(e.textures.side).toBe(`blocks/iconsets/MACHINE_${e.tier}_SIDE.png`);
@@ -122,4 +128,20 @@ test('every cable size exists with GT ids, amps and loss', () => {
   expect(getEntry('electrum_cable_2x')).toMatchObject({ mID: 1447, cable: { tier: 'HV', ampsPerSize: 2, size: 2, lossPerBlock: 1 } });
   expect(getEntry('silver_cable_1x')).toMatchObject({ mID: 1466, cable: { tier: 'HV', ampsPerSize: 1, lossPerBlock: 1 } });
   expect(getEntry('tin_cable_12x')).toMatchObject({ mID: 1250 });
+});
+
+test.each([
+  ['casing_clean_stainless', 'gregtech:gt.blockcasings4', 1],
+  ['casing_chemically_inert', 'gregtech:gt.blockcasings8', 0],
+  ['casing_ptfe_pipe', 'gregtech:gt.blockcasings8', 1],
+  ['coil_cupronickel', 'gregtech:gt.blockcasings5', 0],
+] as const)('%s is a plain GT block with its meta', (key, vanilla, meta) => {
+  expect(getEntry(key)).toMatchObject({ kind: 'casing', vanilla, meta });
+});
+
+test('a multiblock controller is meta 2 with its front overlay', () => {
+  registerMachines([{ key: 'gt_1126', name: 'Distillation Tower', mID: 1126, tier: 'HV', multiblock: true }]);
+  const e = getEntry('gt_1126')!;
+  expect(e.meta).toBe(2);
+  expect(e.textures.front).toMatch(/OVERLAY_FRONT_DISTILLATION_TOWER\.png$/);
 });

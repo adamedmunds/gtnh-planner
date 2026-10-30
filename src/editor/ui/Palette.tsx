@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CATALOG_ENTRIES, type Tier } from '../../catalog';
 
-const GROUPS = ['Machines', 'Power', 'Cables', 'Fluid pipes', 'Item pipes'];
+const GROUPS = ['Machines', 'Power', 'Cables', 'Fluid pipes', 'Item pipes', 'Multiblock parts'];
 const TIERS: Tier[] = ['LV', 'MV', 'HV'];
 
 export function Palette({ selectedKey, onSelect }: { selectedKey: string; onSelect(key: string): void }) {

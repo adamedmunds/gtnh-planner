@@ -119,7 +119,7 @@ function Blocks(props: SceneProps) {
               </mesh>
             );
           }
-          return entry.kind === 'machine' || entry.kind === 'marker'
+          return entry.kind === 'machine' || entry.kind === 'marker' || entry.kind === 'casing'
             ? <MachineMesh key={posKey(b.pos)} block={b} entry={entry} />
             : <ConduitMesh key={posKey(b.pos)} block={b} entry={entry} mask={masks.get(posKey(b.pos)) ?? 0} />;
         })}

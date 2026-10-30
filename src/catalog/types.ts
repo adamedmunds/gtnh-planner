@@ -1,5 +1,8 @@
-/** `marker`: a stand-in for where something comes in or goes out (a drawer, glass, a tank, ...). */
-export type Kind = 'machine' | 'cable' | 'fluidPipe' | 'itemPipe' | 'marker';
+/**
+ * `marker`: a stand-in for where something comes in or goes out (a drawer, glass, a tank, ...).
+ * `casing`: a multiblock's casing or coil block, written as its plain GT block (`vanilla` + `meta`).
+ */
+export type Kind = 'machine' | 'cable' | 'fluidPipe' | 'itemPipe' | 'marker' | 'casing';
 export type Tier = 'LV' | 'MV' | 'HV';
 
 export interface CatalogEntry {
@@ -28,7 +31,7 @@ export interface CatalogEntry {
   pipeCapacity?: number;
   /** Item pipes: items per second one pipe carries. */
   itemCapacity?: number;
-  /** Markers: the block (Minecraft or mod name, `meta` its metadata) written instead of a GregTech one. */
+  /** Markers and casings: the block (Minecraft or mod name, `meta` its metadata) written instead of a GregTech one. */
   vanilla?: string;
   /** Markers: a Storage Drawers drawer, written with its tile data. */
   drawer?: boolean;
@@ -43,6 +46,8 @@ export interface GeneratedMachine {
   mID: number;
   /** GT tier name, e.g. "HV" (may be above HV; textures use the HV casing then). */
   tier?: string;
+  /** A multiblock controller: block meta 2 and its casing's textures. */
+  multiblock?: boolean;
 }
 
 export type Catalog = ReadonlyMap<string, CatalogEntry>;

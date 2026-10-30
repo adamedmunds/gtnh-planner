@@ -185,3 +185,17 @@ test('a pasted basic machine has auto-output on, and input from its output side 
   const needs: Build = { ...mk([{ pos: [0, 0, 0], key: 'distillery_lv', facing: 2, mainFacing: 3 }]), covers: [{ pos: [0, 0, 0], side: 2, kind: 'inputFromOutput' }] };
   expect(num(tes(buildSchematicTag(needs).tag)[0], 'mAllowInputFromOutputSide')).toBe(1);
 });
+
+test('multiblock parts export: casings as their GT block and meta, hatches as GT machines facing out', () => {
+  const { tag } = buildSchematicTag(mk([
+    { pos: [0, 0, 0], key: 'casing_clean_stainless' },
+    { pos: [1, 0, 0], key: 'hatch_output_lv', facing: 3 },
+  ]));
+  const mapping = (v(tag, 'SchematicaMapping') as CompoundTag).value;
+  expect(Object.keys(mapping)).toContain('gregtech:gt.blockcasings4');
+  expect((v(tag, 'Data') as { value: Uint8Array }).value[0]).toBe(1);
+  const entities = tes(tag);
+  expect(entities).toHaveLength(1);
+  expect(num(entities[0], 'mID')).toBe(61);
+  expect(num(entities[0], 'mFacing')).toBe(3);
+});

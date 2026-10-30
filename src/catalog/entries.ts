@@ -238,9 +238,53 @@ const MARKERS: CatalogEntry[] = [
   marker('marker_multiblock', 'Multiblock goes here', '#ab47bc', 'minecraft:bookshelf'),
 ];
 
+const MB = 'Multiblock parts';
+const iconset = (name: string) => `blocks/iconsets/${name}.png`;
+const casingBlock = (key: string, name: string, vanilla: string, meta: number, texture: string, color: string): CatalogEntry => {
+  const t = iconset(texture);
+  return { key, name, kind: 'casing', mID: 0, meta, group: MB, color, vanilla, textures: { top: t, side: t, bottom: t } };
+};
+// Casings and the coil are plain GT blocks; their metadata is the block's (confirmed in the user's world save).
+const CASINGS: CatalogEntry[] = [
+  casingBlock('casing_clean_stainless', 'Clean Stainless Steel Casing', 'gregtech:gt.blockcasings4', 1, 'MACHINE_CASING_CLEAN_STAINLESSSTEEL', '#c9ced6'),
+  casingBlock('casing_chemically_inert', 'Chemically Inert Casing', 'gregtech:gt.blockcasings8', 0, 'MACHINE_CASING_CHEMICALLY_INERT', '#7a8a6e'),
+  casingBlock('casing_ptfe_pipe', 'PTFE Pipe Casing', 'gregtech:gt.blockcasings8', 1, 'MACHINE_CASING_PIPE_POLYTETRAFLUOROETHYLENE', '#e8e4d0'),
+  casingBlock('coil_cupronickel', 'Cupronickel Coil Block', 'gregtech:gt.blockcasings5', 0, 'MACHINE_COIL_CUPRONICKEL', '#c9824a'),
+];
+
+const hatch = (key: string, name: string, mID: number, tier: Tier, overlay: string): CatalogEntry => ({
+  key, name, kind: 'machine', mID, meta: 1, tier, group: MB, color: '#8a93a0',
+  textures: { ...casing(tier), front: iconset(overlay) },
+});
+const HATCHES: CatalogEntry[] = [
+  hatch('hatch_input_lv', 'LV Input Hatch', 51, 'LV', 'OVERLAY_PIPE_IN'),
+  hatch('hatch_output_lv', 'LV Output Hatch', 61, 'LV', 'OVERLAY_PIPE_OUT'),
+  hatch('bus_input_lv', 'LV Input Bus', 71, 'LV', 'OVERLAY_PIPE_IN'),
+  hatch('bus_output_lv', 'LV Output Bus', 81, 'LV', 'OVERLAY_PIPE_OUT'),
+  hatch('hatch_energy_lv', 'LV Energy Hatch', 41, 'LV', 'OVERLAY_ENERGY_IN_MULTI'),
+  hatch('hatch_energy_mv', 'MV Energy Hatch', 42, 'MV', 'OVERLAY_ENERGY_IN_MULTI'),
+  hatch('hatch_energy_hv', 'HV Energy Hatch', 43, 'HV', 'OVERLAY_ENERGY_IN_MULTI'),
+  hatch('hatch_maintenance', 'Maintenance Hatch', 90, 'LV', 'OVERLAY_MAINTENANCE'),
+];
+
+// Multiblock controllers: block meta 2, wearing their casing with the controller's front overlay.
+const CONTROLLERS: Record<number, { casing: string; overlay: string }> = {
+  1126: { casing: 'MACHINE_CASING_CLEAN_STAINLESSSTEEL', overlay: 'OVERLAY_FRONT_DISTILLATION_TOWER' },
+  1169: { casing: 'MACHINE_CASING_CHEMICALLY_INERT', overlay: 'OVERLAY_FRONT_LARGE_CHEMICAL_REACTOR' },
+  1160: { casing: 'MACHINE_CASING_CLEAN_STAINLESSSTEEL', overlay: 'OVERLAY_FRONT_OIL_CRACKER' },
+};
+
 /** Catalog entry for a recipe machine without a hand-made entry: tier casing (HV casing above HV), no front overlay. */
-export function generatedEntry(m: { key: string; name: string; mID: number; tier?: string }): CatalogEntry {
+export function generatedEntry(m: { key: string; name: string; mID: number; tier?: string; multiblock?: boolean }): CatalogEntry {
   const tier = m.tier === 'LV' || m.tier === 'MV' || m.tier === 'HV' ? m.tier : m.tier === 'ULV' ? 'LV' : 'HV';
+  const mb = m.multiblock ? CONTROLLERS[m.mID] : undefined;
+  if (mb) {
+    const t = iconset(mb.casing);
+    return {
+      key: m.key, name: m.name, kind: 'machine', mID: m.mID, meta: 2, tier, group: 'Recipe machines', color: '#7a8290',
+      textures: { top: t, side: t, bottom: t, front: iconset(mb.overlay) },
+    };
+  }
   return { key: m.key, name: m.name, kind: 'machine', mID: m.mID, meta: 1, tier, group: 'Recipe machines', color: '#7a8290', textures: casing(tier) };
 }
 
@@ -248,6 +292,8 @@ export const CATALOG_ENTRIES: readonly CatalogEntry[] = [
   ...machineEntries(),
   ...POWER,
   ...MARKERS,
+  ...CASINGS,
+  ...HATCHES,
   ...cableEntries(),
   ...fluidPipeEntries(),
   ...itemPipeEntries(),

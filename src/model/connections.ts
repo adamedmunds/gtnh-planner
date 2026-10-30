@@ -26,7 +26,7 @@ export function computeConnections(
 
   const result = new Map<string, number>();
   for (const [key, { block, entry }] of cells) {
-    if (entry.kind === 'machine' || entry.kind === 'marker') continue;
+    if (entry.kind === 'machine' || entry.kind === 'marker' || entry.kind === 'casing') continue;
     const own = block.manualMask ?? { forcedOn: 0, forcedOff: 0 };
     let mask = 0;
     for (let side = 0; side < 6; side++) {
