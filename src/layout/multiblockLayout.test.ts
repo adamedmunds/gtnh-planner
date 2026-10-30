@@ -290,5 +290,6 @@ test('beside a taller Distillation Tower the muffler is still uncovered', () => 
   ]);
   const b = buildLine(p, 'tower and ebf');
   expect(checkLine(b.build, p)).toEqual([]);
+  expect(b.build.blocks.some((x) => x.pos[1] >= 4)).toBe(true); // the tower rises past the EBF's top, so the cell above the muffler is routable
   mufflerUncovered(b.build);
 });

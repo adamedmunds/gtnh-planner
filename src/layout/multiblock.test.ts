@@ -131,14 +131,16 @@ describe('multiblock structures', () => {
     ['tower', () => tower(FLUIDS, { outputs: [...FLUIDS, 'item:i'], inputs: ['fluid:x', 'fluid:y', 'item:z'] })],
     ['lcr', () => structureFor(mb(1169, { inputs: ['fluid:a', 'fluid:b', 'item:c'], outputs: ['fluid:d', 'item:e'] }))!],
     ['cracker', () => structureFor(mb(1160, { inputs: ['fluid:oil', 'fluid:steam'], outputs: ['fluid:o'] }))!],
+    ['ebf', () => structureFor(mb(1000, { tier: 'MV', heat: 1000, inputs: ['item:a', 'fluid:b', 'fluid:c'], outputs: ['item:d', 'fluid:e'] }))!],
+    ['freezer', () => structureFor(mb(1002, { tier: 'MV', inputs: ['item:hot'], outputs: ['item:cold'] }))!],
   ])('%s: no shared cells, ports face out of the box', (_n, make) => {
     const s = make();
     const [w, , d] = s.size;
     const cells = [...s.blocks.map((b) => b.rel), ...s.ports.map((p) => p.rel)].map((r) => r.join(','));
     expect(new Set(cells).size).toBe(cells.length);
     for (const p of s.ports) {
-      const [x, , z] = p.rel;
-      const out = p.facing === 3 ? z === d - 1 : p.facing === 2 ? z === 0 : p.facing === 4 ? x === 0 : p.facing === 5 ? x === w - 1 : false;
+      const [x, y, z] = p.rel;
+      const out = p.facing === 1 ? y === s.size[1] - 1 : p.facing === 3 ? z === d - 1 : p.facing === 2 ? z === 0 : p.facing === 4 ? x === 0 : p.facing === 5 ? x === w - 1 : false;
       expect(out).toBe(true);
     }
   });
@@ -205,6 +207,11 @@ describe('electric blast furnace and vacuum freezer', () => {
     const s = structureFor(mb(1002, { tier: 'MV', inputs: fluids, outputs: ['item:cold'] }))!;
     expect(countKey(s, 'casing_frost_proof')).toBe(16);
     expect(s.ports.some((p) => p.kind === 'energy')).toBe(true);
-    expect(s.notes.length).toBeGreaterThan(0);
+    expect(s.notes).toEqual([
+      'No room on the vacuum freezer for another in hatch.',
+      'No room on the vacuum freezer for another in hatch.',
+      'No room on the vacuum freezer for another in hatch.',
+      'No room on the vacuum freezer for another out hatch.',
+    ]);
   });
 });

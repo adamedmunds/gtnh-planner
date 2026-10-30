@@ -280,8 +280,6 @@ const DEFINITIONS: Partial<Record<number, Definition>> = {
   [VACUUM_FREEZER_ID]: vacuumFreezer,
 };
 
-export const MULTIBLOCK_IDS: readonly number[] = Object.keys(DEFINITIONS).map(Number);
-
 /** Whether the machine gets a structure: a definition, an energy hatch for the tier, and (EBF) a coil that reaches `heat`. */
 export function buildable(mID: number, tier: string | undefined, heat = 0): boolean {
   if (!DEFINITIONS[mID] || !energyHatch(tier)) return false;

@@ -244,7 +244,7 @@ const casingBlock = (key: string, name: string, vanilla: string, meta: number, t
   const t = iconset(texture);
   return { key, name, kind: 'casing', mID: 0, meta, group: MB, color, vanilla, textures: { top: t, side: t, bottom: t } };
 };
-// Casings and the coil are plain GT blocks; their metadata is the block's (confirmed in the user's world save).
+// Casings and coils are plain GT blocks; their metadata is the block's (confirmed in the user's world save).
 const CASINGS: CatalogEntry[] = [
   casingBlock('casing_clean_stainless', 'Clean Stainless Steel Casing', 'gregtech:gt.blockcasings4', 1, 'MACHINE_CASING_CLEAN_STAINLESSSTEEL', '#c9ced6'),
   casingBlock('casing_chemically_inert', 'Chemically Inert Casing', 'gregtech:gt.blockcasings8', 0, 'MACHINE_CASING_CHEMICALLY_INERT', '#7a8a6e'),
