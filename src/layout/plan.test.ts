@@ -81,12 +81,12 @@ test('an EV machine is refused in plain words', async () => {
 
 // A Distillation Tower (HV) fed by the oil extractor: Oil -> five fluids, in a fixed order.
 const TOWER_FLUIDS = ['fluid:fraction_a', 'fluid:fraction_b', 'fluid:fraction_c', 'fluid:fraction_d', 'fluid:fraction_e'];
-const towerSetup = (mID = 1126, tier: number | null = 3, eut = 120) => {
+const towerSetup = (mID = 1126, tier: number | null = 3, eut = 120, specialValue = 0) => {
   const data = oilBerryData();
   for (const k of TOWER_FLUIDS) data.resources.push({ key: k, name: `Fraction ${k.slice(-1).toUpperCase()}`, kind: 'fluid' });
   data.maps.push({ index: 5, id: 'gt.recipe.distillationtower', name: 'Distillation Tower', amperage: 1,
     machines: [{ mID, name: 'Distillation Tower', ...(tier === null ? {} : { tier }), multiblock: true }] });
-  data.recipes.push({ id: 5, map: 5, eut, duration: 100, specialValue: 0,
+  data.recipes.push({ id: 5, map: 5, eut, duration: 100, specialValue,
     inputs: [{ key: K.oil, amount: 1000, consumed: true }],
     outputs: TOWER_FLUIDS.map((key) => ({ key, amount: 100, chance: 1 })) });
   const towerDb = new RecipeDb(data);
@@ -101,11 +101,26 @@ const towerSetup = (mID = 1126, tier: number | null = 3, eut = 120) => {
   };
   return { towerDb, chain };
 };
-const towerPlan = async (mID = 1126, tier: number | null = 3, style: 'modular' | 'straight' = 'modular', eut = 120) => {
-  const { towerDb, chain } = towerSetup(mID, tier, eut);
+const towerPlan = async (mID = 1126, tier: number | null = 3, style: 'modular' | 'straight' = 'modular', eut = 120, specialValue = 0) => {
+  const { towerDb, chain } = towerSetup(mID, tier, eut, specialValue);
   return ok(await plan(chain, style, towerDb));
 };
 const inPlan = (p: LinePlan) => [...(p.slice ?? []), ...p.core, ...(p.straight ?? [])].find((m) => m.nodeId === 'tower')!;
+
+test('an EBF is planned as itself with its recipe heat, and the notes name its coils and muffler', async () => {
+  const p = await towerPlan(1000, 2, 'modular', 120, 2000);
+  expect(inPlan(p)).toMatchObject({ key: 'gt_1000', heat: 2000 });
+  expect(p.notes).toContain('The Distillation Tower uses Kanthal Heating Coils (its recipe needs 2,000 K)');
+  expect(p.notes).toContain("Keep the block above the Distillation Tower's muffler hatch empty");
+});
+
+test('an EBF hotter than Nichrome keeps the stand-in, says why, and uses no power', async () => {
+  const p = await towerPlan(1000, 3, 'modular', 120, 4500);
+  expect(inPlan(p).key).toBe('marker_multiblock');
+  expect(p.notes).toContain("The Distillation Tower's recipe needs 4,500 K; Nichrome coils with an HV energy hatch give 3,701 K. Build it yourself with better coils");
+  expect(p.notes.some((n) => n.includes("multiblocks aren't laid out yet"))).toBe(false);
+  expect(p.power.demand.HV ?? 0).toBe(0);
+});
 
 test('a distillation tower is planned as itself, its fluids in recipe order', async () => {
   const p = await towerPlan();

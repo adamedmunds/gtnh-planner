@@ -7,7 +7,7 @@ import { formatNumber } from '../calculator/format';
 import { resourceInfo } from '../calculator/graphModel';
 import type { RecipeDb } from '../recipes/db';
 import { EU, type MachineRef, type ResourceKey } from '../recipes/types';
-import { MULTIBLOCK_IDS } from './multiblock';
+import { COILS, EBF_ID, buildable, coilFor, ebfHeat } from './multiblock';
 import type { LayoutStyle, LinePlan, PlanMachine, PlanMarker, PlanNetwork, PowerPlan, PowerTier } from './types';
 
 const POWER_TIERS: readonly PowerTier[] = ['LV', 'MV', 'HV'];
@@ -52,6 +52,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
       build: solved.get(node.id)!.build,
       title,
       kept,
+      heat: recipe?.specialValue ?? 0,
       node,
       ref,
       tier,
@@ -96,15 +97,16 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
       generator: i.node.kind === 'generator',
       multiblock: i.ref.multiblock,
     };
+    if (i.ref.mID === EBF_ID) pm.heat = i.heat;
     if (!planned(i)) return pm;
     // A multiblock we can build: its own controller, its fluid outputs in recipe order.
     const recipe = i.node.kind === 'recipe' ? db.bySignature(i.node.recipeSig) : undefined;
     const fluidOutputs = (recipe?.outputs ?? []).map((o) => o.key).filter((k) => k.startsWith('fluid:'));
     return { ...pm, key: keyFor(i.ref), machine: { ...pm.machine, multiblock: true }, fluidOutputs };
   };
-  /** A multiblock with a definition (known controller, tier up to HV) is laid out as itself; same rule as `structureFor`. */
+  /** A multiblock we can build (a definition, a tier up to HV, for an EBF coils hot enough) is laid out as itself; same rule as `structureFor`. */
   function planned(i: (typeof info)[number]): boolean {
-    return i.ref.multiblock && MULTIBLOCK_IDS.includes(i.ref.mID) && (!i.tier || tierIndex(i.tier) <= tierIndex('HV'));
+    return i.ref.multiblock && buildable(i.ref.mID, i.tier, i.heat);
   }
 
   // Markers: everything taken from outside comes in; the product and everything else made goes out.
@@ -178,10 +180,19 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     ...(fallback ? { fallback } : {}),
   });
   const multiblockNotes = () => info.filter((i) => i.ref.multiblock).flatMap((i) => {
-    if (!planned(i)) return [`Build the ${i.ref.name} here yourself (multiblocks aren't laid out yet)`];
+    if (!planned(i)) {
+      if (i.ref.mID === EBF_ID && buildable(i.ref.mID, i.tier)) {
+        const hatch = !i.tier || i.tier === 'ULV' ? 'LV' : i.tier;
+        const max = ebfHeat(COILS[COILS.length - 1].heat, i.tier);
+        return [`The ${i.ref.name}'s recipe needs ${formatNumber(i.heat)} K; ${COILS[COILS.length - 1].name} coils with an ${hatch} energy hatch give ${formatNumber(max)} K. Build it yourself with better coils`];
+      }
+      return [`Build the ${i.ref.name} here yourself (multiblocks aren't laid out yet)`];
+    }
     const name = i.ref.name;
+    const coil = i.ref.mID === EBF_ID ? coilFor(i.heat, i.tier) : undefined;
     return [
       `Fix the ${name}'s maintenance hatch with tools after pasting it`,
+      ...(coil ? [`The ${name} uses ${coil.name} Heating Coils (its recipe needs ${formatNumber(i.heat)} K)`, `Keep the block above the ${name}'s muffler hatch empty`] : []),
       ...(i.ref.mID === 1169 || i.ref.mID === 1160 ? [`The ${name}'s Heating Coils are Cupronickel; better ones can be swapped in`] : []),
       ...i.kept.map((k) => `Put a ${k.name} in the ${name}'s controller or input bus`),
     ];
