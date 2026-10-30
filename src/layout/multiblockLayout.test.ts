@@ -293,3 +293,21 @@ test('beside a taller Distillation Tower the muffler is still uncovered', () => 
   expect(b.build.blocks.some((x) => x.pos[1] >= 4)).toBe(true); // the tower rises past the EBF's top, so the cell above the muffler is routable
   mufflerUncovered(b.build);
 });
+
+const pyro = (o: Partial<PlanMachine> = {}) =>
+  multi('pyro', 15546, 'Pyrolyse Oven', { inputs: ['item:log', 'fluid:nitrogen'], outputs: ['item:charcoal', 'fluid:creosote'], ...o });
+
+test('a Pyrolyse Oven line builds, checks clean, keeps its muffler open and shows its frames', () => {
+  const p = plan([pyro()], [
+    item('item:log', ['in:log'], ['pyro']), fluid('fluid:nitrogen', ['in:n'], ['pyro']),
+    item('item:charcoal', ['pyro'], ['out:charcoal']), fluid('fluid:creosote', ['pyro'], ['out:creosote']),
+  ], [
+    marker('out:oil', 'fluid:oil', 'out'), marker('in:log', 'item:log', 'in', 'item'), marker('in:n', 'fluid:nitrogen', 'in'),
+    marker('out:charcoal', 'item:charcoal', 'out', 'item'), marker('out:creosote', 'fluid:creosote', 'out'),
+  ]);
+  const b = buildLine(p, 'pyro');
+  expect(checkLine(b.build, p)).toEqual([]);
+  mufflerUncovered(b.build);
+  expect(b.build.blocks.filter((x) => x.key === 'frame_steel')).toHaveLength(2);
+  expect(b.build.blocks.filter((x) => x.key === 'coil_kanthal')).toHaveLength(12);
+});
