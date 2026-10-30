@@ -380,16 +380,23 @@ function withCore(
     // A marker sits right beside the through-run it fills or empties (no pipe needed), else in the end column.
     const corePlaced: Placed[] = [];
     const roomy = (c: Vec3) => !taken.has(posKey(c)) && c[0] >= coreMin && c[0] < 0 && inBounds(c);
-    for (const [i, u] of markers.entries()) {
+    for (const u of markers) {
       const net = coreNets.find((n) => n.producers.has(u.role) || n.consumers.has(u.role));
       const beside = (lanes.get(net?.id ?? '') ?? []).flat()
         .flatMap((c) => DIRS.map((d) => addVec(c, d)))
         .filter(roomy)
         .sort((a, b) => a[0] - b[0])[0];
-      const end = Array.from({ length: 8 }, (_, k): Vec3 => [coreMin + Math.floor(k / 4), ROW_SPOTS[k % 4][0], ROW_SPOTS[k % 4][1]]).find(roomy);
-      const pos = beside ?? end ?? [coreMin, 0, i % 2];
+      // The end columns hold four markers each, as many columns as the core set aside for them.
+      const end = Array.from({ length: markerColumns * 4 }, (_, k): Vec3 => [coreMin + Math.floor(k / 4), ROW_SPOTS[k % 4][0], ROW_SPOTS[k % 4][1]]).find(roomy);
+      const pos = beside ?? end;
+      // Never two markers in one cell: no room for this one fails this core.
+      if (!pos) break;
       corePlaced.push({ ...u, pos });
       taken.add(posKey(pos));
+    }
+    if (corePlaced.length < markers.length) {
+      lastWhy = 'core: no room for every marker';
+      continue;
     }
     const core = placeTidyCore(coreUnits, coreMin + markerColumns, C - markerColumns, coreSide, taken, step);
     if (!core) {

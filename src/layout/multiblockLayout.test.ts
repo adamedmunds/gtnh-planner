@@ -240,3 +240,15 @@ test('side by side, multiblocks whose side hatches face each other get a two-wid
   expect(new Set(cells).size).toBe(cells.length);
   for (const c of cells) expect(taken.has(c)).toBe(true);
 });
+
+test('a line with more markers than two end columns hold gives each its own cell', () => {
+  // Nine outputs, each to its own marker, plus A and power: eleven markers, more than the end columns' first eight spots.
+  const nine = Array.from({ length: 9 }, (_, i) => `fluid:g${i}`);
+  const t = tower({ outputs: nine, fluidOutputs: nine });
+  const p = plan([t], nine.map((k, i) => fluid(k, ['dt'], [`out:${i}`])), nine.map((k, i) => marker(`out:${i}`, k, 'out')));
+  const { build } = buildLine(p, 'Tall tower line');
+  const markers = build.blocks.filter((b) => CATALOG.get(b.key)?.kind === 'marker');
+  expect(markers).toHaveLength(11);
+  expect(new Set(markers.map((b) => posKey(b.pos))).size).toBe(11);
+  expect(checkLine(build, p)).toEqual([]);
+});
