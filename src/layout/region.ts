@@ -99,7 +99,7 @@ const portNets = (u: Placed, nets: Net[]) => nets.filter((n) => n.kind !== 'cabl
 /** A multiblock's input bus: GT puts items into it through its front only (MTEHatchInputBus.allowPutStack). */
 const frontOnly = (u: Placed) => u.port?.kind === 'in' && u.key.startsWith('bus_input');
 
-const isWalkway =(c: Vec3) => c[2] === 0 && (c[1] === 0 || c[1] === 1);
+const isWalkway = (c: Vec3) => c[2] === 0 && (c[1] === 0 || c[1] === 1);
 
 export const sideTo = (from: Vec3, to: Vec3) => DIRS.findIndex((d) => from[0] + d[0] === to[0] && from[1] + d[1] === to[1] && from[2] + d[2] === to[2]) as Facing;
 
