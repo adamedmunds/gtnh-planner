@@ -55,9 +55,11 @@ The map is reshaped when the recipe data is loaded (in `RecipeDb`, so it needs n
   duration in ticks, which stays the same, and the recipe still uses 0 EU/t.
 - **Example:** Benzene has d = 365, so its recipe becomes 1000 L Benzene + 5,475 L Water → 876,000 L Steam every
   18.25 s. That is 54.8 L/s of Benzene for 48,000 L/s of Steam.
-- **The map's machines:** only `{mID 15530, Large Steel Boiler}`.
-- **Everything else is unchanged:** other recipes on the map (solid fuels, and Short Mead with its bucket) and every
-  other map.
+- **Which map:** the rewritten recipes move to a map of their own, `planner.largesteelboiler` ("Large Steel Boiler"),
+  whose only machine is `{mID 15530, Large Steel Boiler}`.
+- **GT's map** keeps its other recipes (solid fuels, and Short Mead with its bucket) and its other boilers, but loses
+  15530, so the Steel boiler is never laid out for a recipe that makes no steam (found in review).
+- **Every other map is unchanged.**
 
 ## The shape (`MTELargeBoilerBase`)
 
@@ -103,7 +105,8 @@ input hatch and an output hatch. There is **no energy hatch**.
 The boiler's recipe uses 0 EU/t, so:
 
 - **Plan:** a multiblock whose recipe uses 0 EU/t gets **no tier**, which keeps it out of the line's power plan. It
-  gets no cable, and it adds nothing to the power demand or tiers. A line that has only a boiler gets no power at all.
+  gets no cable, and it adds nothing to the power demand or tiers. A line that has only a boiler gets no power at all:
+  no power marker and no "Power in" note.
 - **Structure:** `buildable` and `structureFor` don't need an energy hatch for it.
 - **Checker:** it doesn't report "has no energy hatch" for a multiblock whose recipe uses no EU.
 
@@ -111,7 +114,12 @@ The boiler's recipe uses 0 EU/t, so:
 
 - The usual multiblock notes: maintenance, and keeping the block above the muffler empty (through `hasMuffler`).
 - "Fill the Large Steel Boiler with water before its fuel: a Large Boiler that runs dry explodes".
-- "The Large Steel Boiler burns at full rate (48,000 L/s of steam) whenever it has fuel, even if the steam isn't used".
+- "The Large Steel Boiler burns at full rate (N L/s of steam) whenever it has fuel". When the line uses less than that,
+  the note adds "this line uses X L/s of it, and the rest is lost with its fuel".
+- **Pipes (checked on real lines):** the biggest line pipe, Huge Titanium, carries 38,400 L/s, which is less than one
+  boiler's 48,000 L/s. A line that takes more than that from one boiler gets this note: "One Huge Titanium Fluid Pipe
+  can't carry all the steam this line takes from a Large Steel Boiler: give each one a second output hatch and pipe for
+  its steam".
 
 ## 3D view
 
@@ -123,4 +131,3 @@ The boiler's recipe uses 0 EU/t, so:
 
 - Where the map reshaping lives: its own module, called from the `RecipeDb` constructor.
 - Test layout, mirroring the other multiblocks.
-- Whether pipes can carry 48,000 L/s. Check this on real lines and report what happens.
