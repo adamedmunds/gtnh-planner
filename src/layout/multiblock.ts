@@ -35,6 +35,7 @@ const PTFE = 'casing_ptfe_pipe';
 const COIL = 'coil_cupronickel';
 const HEAT_PROOF = 'casing_heat_proof';
 const FROST_PROOF = 'casing_frost_proof';
+const SOLID_STEEL = 'casing_solid_steel';
 
 const isFluid = (k: ResourceKey) => k.startsWith('fluid:');
 const isItem = (k: ResourceKey) => k.startsWith('item:');
@@ -192,12 +193,13 @@ export const COILS: readonly { key: string; name: string; heat: number }[] = [
 ];
 
 export const EBF_ID = 1000;
+const IMPLOSION_COMPRESSOR_ID = 1001;
 const VACUUM_FREEZER_ID = 1002;
 export const PYROLYSE_OVEN_ID = 15546;
 
-/** Controllers whose structure has a muffler hatch (the EBF's, and the Pyrolyse Oven's on top). */
+/** Controllers whose structure has a muffler hatch (on top of the EBF, the Implosion Compressor and the Pyrolyse Oven). */
 export function hasMuffler(mID: number): boolean {
-  return mID === EBF_ID || mID === PYROLYSE_OVEN_ID;
+  return mID === EBF_ID || mID === IMPLOSION_COMPRESSOR_ID || mID === PYROLYSE_OVEN_ID;
 }
 
 /** Energy hatches go up to HV; ULV takes an LV one. Above that, no structure. */
@@ -275,6 +277,21 @@ function vacuumFreezer(pm: PlanMachine, tier: string): Structure {
   return b.done();
 }
 
+/**
+ * Implosion Compressor: 3x3x3 Solid Steel casings round an air centre, controller at the middle front, the muffler in
+ * the middle of the top facing up. GT needs 16 casings (MTEImplosionCompressor.checkMachine: checkCasingMin(errors,
+ * mCasing, 16)); the maintenance hatch, the muffler and at most 7 more hatches leave exactly 16.
+ */
+function implosionCompressor(pm: PlanMachine, tier: string): Structure {
+  const b = new Builder([3, 3, 3], tier);
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let z = 0; z < 3; z++) if (x !== 1 || y !== 1 || z !== 1) b.block([x, y, z], SOLID_STEEL);
+  b.block([1, 1, 2], pm.key);
+  b.port([1, 0, 0], 2, 'maintenance', 'hatch_maintenance');
+  b.port([1, 2, 1], 1, 'muffler', 'hatch_muffler_lv');
+  placeHatches(b, pm, tier, 7, 'implosion compressor');
+  return b.done();
+}
+
 /** MTEPyrolyseOven's shape: [c][b], c 0 the front layer, b 0 the top row; the character's index is x. */
 const PYROLYSE_SHAPE = [
   ['       ', '       ', ' F   F ', 'FBF FBF', 'DBD~DBD', 'GGGGGGG'],
@@ -324,9 +341,15 @@ const DEFINITIONS: Partial<Record<number, Definition>> = {
   1169: largeChemicalReactor,
   1160: oilCrackingUnit,
   [EBF_ID]: electricBlastFurnace,
+  [IMPLOSION_COMPRESSOR_ID]: implosionCompressor,
   [VACUUM_FREEZER_ID]: vacuumFreezer,
   [PYROLYSE_OVEN_ID]: pyrolyseOven,
 };
+
+/** Whether Build in 3D has a block-for-block layout for this controller (at some tier). */
+export function hasLayout(mID: number): boolean {
+  return DEFINITIONS[mID] !== undefined;
+}
 
 /** Whether the machine gets a structure: a definition, an energy hatch for the tier, and (EBF) a coil that reaches `heat`. */
 export function buildable(mID: number, tier: string | undefined, heat = 0): boolean {

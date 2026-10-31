@@ -253,6 +253,7 @@ const CASINGS: CatalogEntry[] = [
   casingBlock('coil_cupronickel', 'Cupronickel Coil Block', 'gregtech:gt.blockcasings5', 0, 'MACHINE_COIL_CUPRONICKEL', '#c9824a'),
   casingBlock('casing_heat_proof', 'Heat Proof Machine Casing', 'gregtech:gt.blockcasings', 11, 'MACHINE_HEATPROOFCASING', '#9a8f84'),
   casingBlock('casing_frost_proof', 'Frost Proof Machine Casing', 'gregtech:gt.blockcasings2', 1, 'MACHINE_CASING_FROST_PROOF', '#c8dce8'),
+  casingBlock('casing_solid_steel', 'Solid Steel Machine Casing', 'gregtech:gt.blockcasings2', 0, 'MACHINE_CASING_SOLID_STEEL', '#9a9da2'),
   casingBlock('coil_kanthal', 'Kanthal Coil Block', 'gregtech:gt.blockcasings5', 1, 'MACHINE_COIL_KANTHAL', '#b5b0a0'),
   casingBlock('coil_nichrome', 'Nichrome Coil Block', 'gregtech:gt.blockcasings5', 2, 'MACHINE_COIL_NICHROME', '#8f8a7a'),
   casingBlock('casing_pyrolyse', 'Pyrolyse Oven Casing', 'gregtech:gt.blockcasingsNH', 2, 'MACHINE_ULV_SIDE', '#8a8a86'),
@@ -289,6 +290,7 @@ const CONTROLLERS: Record<number, { casing: string; overlay: string }> = {
   1160: { casing: 'MACHINE_CASING_CLEAN_STAINLESSSTEEL', overlay: 'OVERLAY_FRONT_OIL_CRACKER' },
   1000: { casing: 'MACHINE_HEATPROOFCASING', overlay: 'OVERLAY_FRONT_ELECTRIC_BLAST_FURNACE' },
   1002: { casing: 'MACHINE_CASING_FROST_PROOF', overlay: 'OVERLAY_FRONT_VACUUM_FREEZER' },
+  1001: { casing: 'MACHINE_CASING_SOLID_STEEL', overlay: 'OVERLAY_FRONT_IMPLOSION_COMPRESSOR' },
   15546: { casing: 'MACHINE_ULV_SIDE', overlay: 'OVERLAY_FRONT_PYROLYSE_OVEN' },
 };
 

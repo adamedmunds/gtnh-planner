@@ -1,16 +1,19 @@
 import type { RecipeDb } from '../recipes/db';
 import type { MachineRef, Recipe } from '../recipes/types';
+import { hasLayout } from '../layout/multiblock';
 import { V, tierForEut } from './tiers';
 
 export const machineTier = (m: MachineRef) =>
   m.tier ?? (m.voltage !== undefined ? tierForEut(m.voltage) : Number.MAX_SAFE_INTEGER);
 
-const byTier = (a: MachineRef, b: MachineRef) => Number(a.multiblock) - Number(b.multiblock) || machineTier(a) - machineTier(b);
+/** Multiblocks have no tier, so among them one that Build in 3D lays out (GT's own, not GT++'s) comes first. */
+const laidOut = (m: MachineRef) => Number(!(m.multiblock && hasLayout(m.mID)));
+const byTier = (a: MachineRef, b: MachineRef) => Number(a.multiblock) - Number(b.multiblock) || machineTier(a) - machineTier(b) || laidOut(a) - laidOut(b);
 
 /** Legacy machine -> the craftable one replacing it; GT's "Pyrolyse Oven Conversion Recipe" (MTERecipeLoader) only converts the old oven into the new one. */
 const REPLACED_BY: Record<number, number> = { 1159: 15546 };
 
-/** Machines on the recipe's map with enough voltage for it: single blocks first, lowest tier first. */
+/** Machines on the recipe's map with enough voltage for it: single blocks first, lowest tier first, laid-out multiblocks first. */
 export function machineOptions(recipe: Recipe, db: RecipeDb): MachineRef[] {
   const map = db.map(recipe.map);
   const eutPerAmp = recipe.eut / Math.max(1, map.amperage);

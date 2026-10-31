@@ -177,3 +177,10 @@ it('the Pyrolyse Oven controller wears its casing and front overlay', () => {
   const e = generatedEntry({ key: 'gt_15546', name: 'Pyrolyse Oven', mID: 15546, multiblock: true });
   expect(e).toMatchObject({ meta: 2, textures: { side: 'blocks/iconsets/MACHINE_ULV_SIDE.png', front: 'blocks/iconsets/OVERLAY_FRONT_PYROLYSE_OVEN.png' } });
 });
+
+it('has the Implosion Compressor casing, and its controller wears that casing and its front overlay', () => {
+  expect(CATALOG.get('casing_solid_steel')).toMatchObject({ kind: 'casing', vanilla: 'gregtech:gt.blockcasings2', meta: 0, textures: { side: 'blocks/iconsets/MACHINE_CASING_SOLID_STEEL.png' } });
+  const e = generatedEntry({ key: 'gt_1001', name: 'Implosion Compressor', mID: 1001, multiblock: true });
+  expect(e).toMatchObject({ meta: 2, textures: { side: 'blocks/iconsets/MACHINE_CASING_SOLID_STEEL.png', front: 'blocks/iconsets/OVERLAY_FRONT_IMPLOSION_COMPRESSOR.png' } });
+  expect(CONTROLLER_TEXTURE_PATHS).toContain('blocks/iconsets/OVERLAY_FRONT_IMPLOSION_COMPRESSOR.png');
+});

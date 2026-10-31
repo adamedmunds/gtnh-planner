@@ -311,3 +311,18 @@ test('a Pyrolyse Oven line builds, checks clean, keeps its muffler open and show
   expect(b.build.blocks.filter((x) => x.key === 'frame_steel')).toHaveLength(2);
   expect(b.build.blocks.filter((x) => x.key === 'coil_kanthal')).toHaveLength(12);
 });
+
+test('an Implosion Compressor line builds, checks clean and keeps its muffler open', () => {
+  const ic = multi('ic', 1001, 'Implosion Compressor', { tier: 'LV', eut: 30, avgEut: 30, inputs: ['item:dust', 'item:tnt'], outputs: ['item:gem', 'item:ash'] });
+  const p = plan([ic], [
+    item('item:dust', ['in:dust'], ['ic']), item('item:tnt', ['in:tnt'], ['ic']),
+    item('item:gem', ['ic'], ['out:gem']), item('item:ash', ['ic'], ['out:ash']),
+  ], [
+    marker('out:oil', 'fluid:oil', 'out'), marker('in:dust', 'item:dust', 'in', 'item'), marker('in:tnt', 'item:tnt', 'in', 'item'),
+    marker('out:gem', 'item:gem', 'out', 'item'), marker('out:ash', 'item:ash', 'out', 'item'),
+  ]);
+  const b = buildLine(p, 'implosion');
+  expect(checkLine(b.build, p)).toEqual([]);
+  mufflerUncovered(b.build);
+  expect(b.build.blocks.filter((x) => x.key === 'casing_solid_steel')).toHaveLength(20);
+});

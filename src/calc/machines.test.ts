@@ -30,6 +30,18 @@ test('machineOptions leaves out the legacy Pyrolyse Oven when the new one is on 
   expect(machineOptions(pyroDb.recipe(6)!, pyroDb).map((m) => m.mID)).toEqual([1159]);
 });
 
+test('machineOptions puts a multiblock Build in 3D can lay out before ones it cannot', () => {
+  const data = oilBerryData();
+  data.resources.push({ key: 'item:dust_in', name: 'Dust', kind: 'item' }, { key: 'item:gem_out', name: 'Gem', kind: 'item' });
+  const machines = [{ mID: 964, name: 'Density^2', multiblock: true }, { mID: 1001, name: 'Implosion Compressor', multiblock: true }, { mID: 15547, name: 'Density^2', multiblock: true }];
+  data.maps.push({ index: 5, id: 'gt.recipe.implosioncompressor', name: 'Implosion Compressor', amperage: 1, machines });
+  data.recipes.push({ id: 5, map: 5, eut: 30, duration: 20, specialValue: 0,
+    inputs: [{ key: 'item:dust_in', amount: 4, consumed: true }], outputs: [{ key: 'item:gem_out', amount: 3, chance: 1 }] });
+  const implosionDb = new RecipeDb(data);
+  expect(machineOptions(implosionDb.recipe(5)!, implosionDb).map((m) => m.mID)).toEqual([1001, 964, 15547]);
+  expect(defaultMachine(implosionDb.recipe(5)!, implosionDb)?.mID).toBe(1001);
+});
+
 test('generatorOptions lists the generators on a fuel map by tier', () => {
   expect(generatorOptions(4, db).map((m) => m.mID)).toEqual([1110, 1111]);
 });

@@ -1,4 +1,4 @@
-import { buildable, ebfHeat, hasMuffler, structureFor, type Structure } from './multiblock';
+import { buildable, ebfHeat, hasLayout, hasMuffler, structureFor, type Structure } from './multiblock';
 import type { PlanMachine } from './types';
 
 const mb = (mID: number, over: Partial<PlanMachine> = {}): PlanMachine => ({
@@ -134,6 +134,7 @@ describe('multiblock structures', () => {
     ['ebf', () => structureFor(mb(1000, { tier: 'MV', heat: 1000, inputs: ['item:a', 'fluid:b', 'fluid:c'], outputs: ['item:d', 'fluid:e'] }))!],
     ['freezer', () => structureFor(mb(1002, { tier: 'MV', inputs: ['item:hot'], outputs: ['item:cold'] }))!],
     ['pyrolyse oven', () => structureFor(mb(15546, { tier: 'MV', inputs: ['item:log', 'fluid:a', 'fluid:b'], outputs: ['item:c', 'fluid:x', 'fluid:y'] }))!],
+    ['implosion compressor', () => structureFor(mb(1001, { tier: 'LV', inputs: ['item:dust', 'item:tnt'], outputs: ['item:gem', 'item:ash'] }))!],
   ])('%s: no shared cells, ports face out of the box', (_n, make) => {
     const s = make();
     const [w, , d] = s.size;
@@ -274,5 +275,54 @@ describe('pyrolyse oven', () => {
     expect(hasMuffler(15546)).toBe(true);
     expect(hasMuffler(1000)).toBe(true);
     expect(hasMuffler(1002)).toBe(false);
+  });
+});
+
+describe('implosion compressor', () => {
+  const ic = (over: Partial<PlanMachine> = {}) =>
+    structureFor(mb(1001, { tier: 'LV', inputs: ['item:dust', 'item:tnt'], outputs: ['item:gem', 'item:ash'], ...over }))!;
+
+  it('is 3x3x3 solid steel round an air centre, controller at the middle front, a muffler facing up on top', () => {
+    const s = ic();
+    expect(s.size).toEqual([3, 3, 3]);
+    expect(at(s, 1, 1, 1)).toBeUndefined();
+    expect(s.ports.some((p) => p.rel.join() === '1,1,1')).toBe(false);
+    expect(at(s, 1, 1, 2)?.key).toBe('gt_1001');
+    expect(s.ports.find((p) => p.kind === 'muffler')).toMatchObject({ rel: [1, 2, 1], facing: 1, key: 'hatch_muffler_lv', keys: [] });
+    expect(s.ports.find((p) => p.kind === 'maintenance')).toMatchObject({ rel: [1, 0, 0], facing: 2 });
+    expect(countKey(s, 'casing_solid_steel') + s.ports.length + 1).toBe(26);
+  });
+
+  it('puts the energy hatch, then the buses, on the front', () => {
+    const s = ic();
+    expect(s.ports.find((p) => p.kind === 'energy')).toMatchObject({ rel: [0, 1, 2], facing: 3, key: 'hatch_energy_lv' });
+    expect(s.ports.find((p) => p.kind === 'in')).toMatchObject({ rel: [2, 1, 2], facing: 3, key: 'bus_input_lv', keys: ['item:dust', 'item:tnt'] });
+    expect(s.ports.find((p) => p.kind === 'out')).toMatchObject({ rel: [0, 0, 2], facing: 3, key: 'bus_output_lv', keys: ['item:gem', 'item:ash'] });
+    expect(s.notes).toEqual([]);
+  });
+
+  it('with too many hatches keeps 16 casings, its energy hatch and muffler, and says so', () => {
+    const fluids = Array.from({ length: 8 }, (_, i) => `fluid:f${i}`);
+    const s = ic({ inputs: ['item:dust', ...fluids] });
+    expect(countKey(s, 'casing_solid_steel')).toBe(16);
+    expect(s.ports.some((p) => p.kind === 'energy')).toBe(true);
+    expect(s.ports.some((p) => p.kind === 'muffler')).toBe(true);
+    // Energy, 8 fluid hatches and two buses: 11 wanted, 7 fit.
+    expect(s.notes).toEqual([
+      'No room on the implosion compressor for another in hatch.',
+      'No room on the implosion compressor for another in hatch.',
+      'No room on the implosion compressor for another in hatch.',
+      'No room on the implosion compressor for another out hatch.',
+    ]);
+  });
+
+  it('is buildable up to HV, has a muffler, and counts as laid out', () => {
+    expect(buildable(1001, 'HV')).toBe(true);
+    expect(buildable(1001, 'EV')).toBe(false);
+    expect(hasMuffler(1001)).toBe(true);
+    expect(hasLayout(1001)).toBe(true);
+    expect(hasLayout(1000)).toBe(true);
+    expect(hasLayout(964)).toBe(false);
+    expect(hasLayout(1159)).toBe(false);
   });
 });
