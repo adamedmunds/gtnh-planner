@@ -196,10 +196,11 @@ export const EBF_ID = 1000;
 const IMPLOSION_COMPRESSOR_ID = 1001;
 const VACUUM_FREEZER_ID = 1002;
 export const PYROLYSE_OVEN_ID = 15546;
+export const LARGE_STEEL_BOILER_ID = 15530;
 
-/** Controllers whose structure has a muffler hatch (on top of the EBF, the Implosion Compressor and the Pyrolyse Oven). */
+/** Controllers whose structure has a muffler hatch (on top of the EBF, Implosion Compressor, Pyrolyse Oven and Large Steel Boiler). */
 export function hasMuffler(mID: number): boolean {
-  return mID === EBF_ID || mID === IMPLOSION_COMPRESSOR_ID || mID === PYROLYSE_OVEN_ID;
+  return mID === EBF_ID || mID === IMPLOSION_COMPRESSOR_ID || mID === PYROLYSE_OVEN_ID || mID === LARGE_STEEL_BOILER_ID;
 }
 
 /** Energy hatches go up to HV; ULV takes an LV one. Above that, no structure. */
@@ -323,13 +324,45 @@ function pyrolyseOven(pm: PlanMachine, tier: string): Structure {
   const itemOut = outs.find((p) => isItem(p.keys[0]));
   if (itemIn) b.port([0, 2, 2], 4, 'in', itemIn.key, itemIn.keys);
   if (itemOut) b.port([6, 0, 2], 5, 'out', itemOut.key, itemOut.keys);
-  const side = (list: typeof ins, kind: 'in' | 'out', spots: Vec3[], facing: Facing, word: string, noun: string) => {
-    const fluids = list.filter((p) => isFluid(p.keys[0]));
-    fluids.slice(0, spots.length).forEach((p, i) => b.port(spots[i], facing, kind, p.key, p.keys));
-    if (fluids.length > spots.length) b.notes.push(`${fluids.length - spots.length} fluid ${word} don't fit on the oven's ${noun} side.`);
-  };
-  side(ins, 'in', [[0, 2, 3], [0, 2, 1]], 4, 'inputs', 'left');
-  side(outs, 'out', [[6, 0, 3], [6, 0, 1]], 5, 'outputs', 'right');
+  sideFluids(b, ins, 'in', [[0, 2, 3], [0, 2, 1]], 4, 'oven');
+  sideFluids(b, outs, 'out', [[6, 0, 3], [6, 0, 1]], 5, 'oven');
+  return b.done();
+}
+
+/** One fluid hatch per spot on one side (inputs left, facing 4; outputs right, facing 5); the rest get a note naming `noun`. */
+function sideFluids(b: Builder, list: { key: string; keys: ResourceKey[] }[], kind: 'in' | 'out', spots: Vec3[], facing: Facing, noun: string): void {
+  const fluids = list.filter((p) => isFluid(p.keys[0]));
+  fluids.slice(0, spots.length).forEach((p, i) => b.port(spots[i], facing, kind, p.key, p.keys));
+  const [word, side] = kind === 'in' ? ['inputs', 'left'] : ['outputs', 'right'];
+  if (fluids.length > spots.length) b.notes.push(`${fluids.length - spots.length} fluid ${word} don't fit on the ${noun}'s ${side} side.`);
+}
+
+/** MTELargeBoilerBase's shape: [c][b], c 0 the front layer, b 0 the top row; the character's index is x. */
+const BOILER_SHAPE = [
+  ['   C ', '   C ', '   C ', ' CCC ', 'CC~CC', 'FFFFF'],
+  ['  CCC', '  C C', 'PPC C', 'PCC P', 'C   C', 'FFFFF'],
+  ['   C ', '   C ', '   C ', ' CCC ', 'CCCCC', 'FFFFF'],
+];
+const BOILER_BLOCKS: Record<string, string> = { C: SOLID_STEEL, F: 'casing_steel_firebox', P: 'casing_steel_pipe' };
+
+/**
+ * Large Steel Boiler: 5x6x3, a firebox layer, a ring of Solid Steel casings round the controller and a chimney; shape
+ * and minimums from MTELargeBoilerBase (checkCasingMin 20 casings and 5 fireboxes; 32 casing cells, so at most 12
+ * hatches on them). No energy hatch: it burns fuel. Fuel and water come in on the left, steam goes out on the right,
+ * and the muffler sits on top of the chimney facing up.
+ */
+function largeSteelBoiler(pm: PlanMachine, tier: string): Structure {
+  const b = new Builder([5, 6, 3], tier);
+  BOILER_SHAPE.forEach((rows, c) => rows.forEach((row, r) => [...row].forEach((ch, x) => {
+    if (ch !== ' ') b.block([x, 5 - r, 2 - c], ch === '~' ? pm.key : BOILER_BLOCKS[ch]);
+  })));
+  b.port([2, 1, 0], 2, 'maintenance', 'hatch_maintenance');
+  b.port([3, 5, 1], 1, 'muffler', 'hatch_muffler_lv');
+  const ins = hatchesFor(pm.inputs, 'in');
+  const itemIn = ins.find((p) => isItem(p.keys[0]));
+  if (itemIn) b.port([0, 0, 1], 4, 'in', itemIn.key, itemIn.keys);
+  sideFluids(b, ins, 'in', [[0, 1, 1], [0, 1, 0], [0, 1, 2]], 4, 'boiler');
+  sideFluids(b, hatchesFor(pm.outputs, 'out'), 'out', [[4, 1, 1], [4, 1, 0], [4, 1, 2]], 5, 'boiler');
   return b.done();
 }
 
@@ -344,6 +377,7 @@ const DEFINITIONS: Partial<Record<number, Definition>> = {
   [IMPLOSION_COMPRESSOR_ID]: implosionCompressor,
   [VACUUM_FREEZER_ID]: vacuumFreezer,
   [PYROLYSE_OVEN_ID]: pyrolyseOven,
+  [LARGE_STEEL_BOILER_ID]: largeSteelBoiler,
 };
 
 /** Whether Build in 3D has a block-for-block layout for this controller (at some tier). */

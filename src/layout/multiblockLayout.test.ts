@@ -326,3 +326,17 @@ test('an Implosion Compressor line builds, checks clean and keeps its muffler op
   mufflerUncovered(b.build);
   expect(b.build.blocks.filter((x) => x.key === 'casing_solid_steel')).toHaveLength(20);
 });
+
+test('a Large Steel Boiler line builds and checks clean with no power to the boiler, its muffler open', () => {
+  const boiler = multi('boiler', 15530, 'Large Steel Boiler', { tier: undefined, eut: 0, avgEut: 0, inputs: ['fluid:oil', 'fluid:water'], outputs: ['fluid:steam'] });
+  const p = plan([boiler], [
+    fluid('fluid:water', ['in:water'], ['boiler']), fluid('fluid:steam', ['boiler'], ['out:steam']),
+  ], [marker('in:water', 'fluid:water', 'in'), marker('out:steam', 'fluid:steam', 'out')]);
+  const b = buildLine(p, 'boiler');
+  expect(checkLine(b.build, p)).toEqual([]);
+  mufflerUncovered(b.build);
+  const own = b.build.blocks.filter((x) => x.role === 'boiler');
+  expect(own.some((x) => x.port?.kind === 'energy')).toBe(false);
+  expect(b.build.blocks.filter((x) => x.key === 'casing_steel_firebox')).toHaveLength(15);
+  expect(b.build.blocks.filter((x) => x.key === 'casing_steel_pipe')).toHaveLength(4);
+});

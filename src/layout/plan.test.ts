@@ -191,3 +191,45 @@ test("the core's slice limit counts its multiblocks", async () => {
   expect(p.coreServes).toBe(2);
   expect(p.notes).toContain('This core handles up to 2 slices');
 });
+
+// A Large Steel Boiler burning the oil extractor's Oil (1000 L lasts 40 ticks): 0.1 boilers make 4,800 L/s of steam.
+const boilerSetup = (withExtractor: boolean) => {
+  const data = oilBerryData();
+  data.maps.push({ index: 5, id: 'gt.recipe.largeboilerfakefuels', name: 'Large Boiler', amperage: 1,
+    machines: [{ mID: 15530, name: 'Large Steel Boiler', multiblock: true }] });
+  data.recipes.push({ id: 5, map: 5, eut: 0, duration: 40, specialValue: 40, inputs: [{ key: K.oil, amount: 1000, consumed: true }], outputs: [] });
+  const boilerDb = new RecipeDb(data);
+  const node = (id: string, recipeId: number, machineMID: number) =>
+    ({ id, kind: 'recipe', recipeSig: recipeSignature(boilerDb.recipe(recipeId)!, boilerDb), machineMID, overclock: false, position: { x: 0, y: 0 } }) as const;
+  const chain: Chain = {
+    ...emptyChain(),
+    nodes: [...(withExtractor ? [node('fe', 0, 511)] : []), node('boiler', 5, 15530)],
+    targets: [{ key: 'fluid:steam', rate: 4800 }],
+  };
+  return { boilerDb, chain };
+};
+
+test('a Large Steel Boiler is planned as itself with no tier and no power, with its water and full-rate notes', async () => {
+  const { boilerDb, chain } = boilerSetup(true);
+  const p = ok(await plan(chain, 'straight', boilerDb));
+  const boiler = p.straight!.find((m) => m.nodeId === 'boiler')!;
+  expect(boiler).toMatchObject({ key: 'gt_15530', inputs: [K.oil, 'fluid:water'], outputs: ['fluid:steam'] });
+  expect(boiler.tier).toBeUndefined();
+  expect(p.power.tiers).toEqual(['LV']);
+  expect(p.power.source).toMatchObject({ kind: 'outside', tier: 'LV' });
+  expect(p.notes).toEqual(expect.arrayContaining([
+    'Fill the Large Steel Boiler with water before its fuel: a Large Boiler that runs dry explodes',
+    'The Large Steel Boiler burns at full rate (48,000 L/s of steam) whenever it has fuel; this line uses 4,800 L/s of it, and the rest is lost with its fuel',
+    "Keep the block above the Large Steel Boiler's muffler hatch empty",
+  ]));
+  expect(p.markers).toEqual(expect.arrayContaining([{ id: 'in:fluid:water', key: 'fluid:water', dir: 'in', kind: 'fluid' }]));
+});
+
+test('a line with only a Large Steel Boiler needs no power; a fully used boiler gets the plain full-rate note', async () => {
+  const { boilerDb, chain } = boilerSetup(false);
+  const p = ok(await plan({ ...chain, targets: [{ key: 'fluid:steam', rate: 96_000 }] }, 'straight', boilerDb));
+  expect(p.straight!.find((m) => m.nodeId === 'boiler')!.count).toBe(2);
+  expect(p.notes).toContain('The Large Steel Boiler burns at full rate (96,000 L/s of steam) whenever it has fuel');
+  expect(p.power.tiers).toEqual([]);
+  expect(Object.values(p.power.demand).every((v) => !v)).toBe(true);
+});

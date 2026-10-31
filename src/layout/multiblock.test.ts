@@ -135,6 +135,7 @@ describe('multiblock structures', () => {
     ['freezer', () => structureFor(mb(1002, { tier: 'MV', inputs: ['item:hot'], outputs: ['item:cold'] }))!],
     ['pyrolyse oven', () => structureFor(mb(15546, { tier: 'MV', inputs: ['item:log', 'fluid:a', 'fluid:b'], outputs: ['item:c', 'fluid:x', 'fluid:y'] }))!],
     ['implosion compressor', () => structureFor(mb(1001, { tier: 'LV', inputs: ['item:dust', 'item:tnt'], outputs: ['item:gem', 'item:ash'] }))!],
+    ['large steel boiler', () => structureFor(mb(15530, { tier: undefined, eut: 0, inputs: ['item:coal', 'fluid:a', 'fluid:b', 'fluid:c'], outputs: ['fluid:x', 'fluid:y', 'fluid:z'] }))!],
   ])('%s: no shared cells, ports face out of the box', (_n, make) => {
     const s = make();
     const [w, , d] = s.size;
@@ -324,5 +325,58 @@ describe('implosion compressor', () => {
     expect(hasLayout(1000)).toBe(true);
     expect(hasLayout(964)).toBe(false);
     expect(hasLayout(1159)).toBe(false);
+  });
+});
+
+describe('large steel boiler', () => {
+  const boiler = (over: Partial<PlanMachine> = {}) =>
+    structureFor(mb(15530, { tier: undefined, eut: 0, inputs: ['fluid:benzene', 'fluid:water'], outputs: ['fluid:steam'], ...over }))!;
+  /** MTELargeBoilerBase's shape: [c][b], c 0 the front layer, b 0 the top row; the character's index is x. */
+  const GT_SHAPE = [
+    ['   C ', '   C ', '   C ', ' CCC ', 'CC~CC', 'FFFFF'],
+    ['  CCC', '  C C', 'PPC C', 'PCC P', 'C   C', 'FFFFF'],
+    ['   C ', '   C ', '   C ', ' CCC ', 'CCCCC', 'FFFFF'],
+  ];
+  const BLOCK: Record<string, string> = { C: 'casing_solid_steel', F: 'casing_steel_firebox', P: 'casing_steel_pipe', '~': 'gt_15530' };
+
+  it("matches GT's shape cell for cell, with hatches only on casing and firebox cells", () => {
+    const s = boiler();
+    expect(s.size).toEqual([5, 6, 3]);
+    GT_SHAPE.forEach((rows, c) => rows.forEach((row, b) => [...row].forEach((ch, x) => {
+      const rel = [x, 5 - b, 2 - c];
+      const block = at(s, rel[0], rel[1], rel[2]);
+      const port = s.ports.find((p) => p.rel.join() === rel.join());
+      if (ch === ' ') { expect(block).toBeUndefined(); expect(port).toBeUndefined(); return; }
+      if (port) expect('CF').toContain(ch);
+      else expect(block?.key).toBe(BLOCK[ch]);
+    })));
+    expect(countKey(s, 'casing_solid_steel')).toBeGreaterThanOrEqual(20);
+    expect(countKey(s, 'casing_steel_firebox')).toBeGreaterThanOrEqual(5);
+  });
+
+  it('has no energy hatch; maintenance at the back, muffler on the chimney, fuel and water left, steam right', () => {
+    const s = boiler();
+    expect(s.ports.some((p) => p.kind === 'energy')).toBe(false);
+    expect(s.ports.find((p) => p.kind === 'maintenance')).toMatchObject({ rel: [2, 1, 0], facing: 2 });
+    expect(s.ports.find((p) => p.kind === 'muffler')).toMatchObject({ rel: [3, 5, 1], facing: 1, key: 'hatch_muffler_lv' });
+    expect(s.ports.filter((p) => p.kind === 'in').map((p) => [p.rel, p.facing, p.keys])).toEqual([
+      [[0, 1, 1], 4, ['fluid:benzene']], [[0, 1, 0], 4, ['fluid:water']],
+    ]);
+    expect(s.ports.filter((p) => p.kind === 'out').map((p) => [p.rel, p.facing, p.keys])).toEqual([[[4, 1, 1], 5, ['fluid:steam']]]);
+    expect(s.notes).toEqual([]);
+  });
+
+  it('too many fluids get a note; an item bus goes in the firebox', () => {
+    const s = boiler({ inputs: ['item:coal', 'fluid:a', 'fluid:b', 'fluid:c', 'fluid:d'], outputs: ['fluid:x', 'fluid:y', 'fluid:z', 'fluid:w'] });
+    expect(s.ports.find((p) => p.key === 'bus_input_lv')).toMatchObject({ rel: [0, 0, 1], facing: 4 });
+    expect(s.notes).toEqual(["1 fluid inputs don't fit on the boiler's left side.", "1 fluid outputs don't fit on the boiler's right side."]);
+    expect(countKey(s, 'casing_solid_steel')).toBeGreaterThanOrEqual(20);
+  });
+
+  it('is buildable without a tier, has a muffler and a layout', () => {
+    expect(buildable(15530, undefined)).toBe(true);
+    expect(hasMuffler(15530)).toBe(true);
+    expect(hasLayout(15530)).toBe(true);
+    expect(hasLayout(1021)).toBe(false);
   });
 });

@@ -292,6 +292,7 @@ const CONTROLLERS: Record<number, { casing: string; overlay: string }> = {
   1002: { casing: 'MACHINE_CASING_FROST_PROOF', overlay: 'OVERLAY_FRONT_VACUUM_FREEZER' },
   1001: { casing: 'MACHINE_CASING_SOLID_STEEL', overlay: 'OVERLAY_FRONT_IMPLOSION_COMPRESSOR' },
   15546: { casing: 'MACHINE_ULV_SIDE', overlay: 'OVERLAY_FRONT_PYROLYSE_OVEN' },
+  15530: { casing: 'MACHINE_CASING_SOLID_STEEL', overlay: 'OVERLAY_FRONT_LARGE_BOILER' },
 };
 
 /** Multiblock controllers exist in the catalog only once registered, but their textures must still be extracted. */

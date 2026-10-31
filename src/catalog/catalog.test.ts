@@ -184,3 +184,8 @@ it('has the Implosion Compressor casing, and its controller wears that casing an
   expect(e).toMatchObject({ meta: 2, textures: { side: 'blocks/iconsets/MACHINE_CASING_SOLID_STEEL.png', front: 'blocks/iconsets/OVERLAY_FRONT_IMPLOSION_COMPRESSOR.png' } });
   expect(CONTROLLER_TEXTURE_PATHS).toContain('blocks/iconsets/OVERLAY_FRONT_IMPLOSION_COMPRESSOR.png');
 });
+
+it('the Large Steel Boiler controller wears Solid Steel and the large boiler front', () => {
+  const e = generatedEntry({ key: 'gt_15530', name: 'Large Steel Boiler', mID: 15530, multiblock: true });
+  expect(e).toMatchObject({ meta: 2, textures: { side: 'blocks/iconsets/MACHINE_CASING_SOLID_STEEL.png', front: 'blocks/iconsets/OVERLAY_FRONT_LARGE_BOILER.png' } });
+});

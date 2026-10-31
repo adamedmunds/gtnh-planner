@@ -1,3 +1,4 @@
+import { withBoilerSteam } from './boilers';
 import type { AppRecipeData, Fuel, Recipe, RecipeMapInfo, Resource, ResourceKey } from './types';
 
 const stackPart = (stacks: { key: string; amount: number; chance?: number }[]) =>
@@ -27,7 +28,8 @@ export class RecipeDb {
   private signatures?: Map<string, Recipe>;
   private readonly searchable: { lower: string; resource: Resource }[];
 
-  constructor(data: AppRecipeData) {
+  constructor(raw: AppRecipeData) {
+    const data = withBoilerSteam(raw);
     this.gregtech = data.gregtech;
     this.dumpFormat = data.dumpFormat;
     this.recipes = data.recipes;

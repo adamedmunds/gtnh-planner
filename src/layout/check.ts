@@ -81,7 +81,7 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
     if (r) blocksOf.set(r, [...(blocksOf.get(r) ?? []), c]);
   }
   // A multiblock forms only whole: a lone controller of one the line can build does nothing in game, and one without an
-  // energy hatch never runs.
+  // energy hatch never runs (unless it uses no EU, like a Large Boiler).
   for (const m of planMachines.filter((x) => x.multiblock)) {
     const blocks = blocksOf.get(m.nodeId) ?? [];
     if (!blocks.length) continue;
@@ -90,7 +90,7 @@ export function checkLine(build: Build, plan: LinePlan): string[] {
       if (structureFor(m)) {
         for (const c of blocks) problems.push(`The ${name} at ${where(c.block.pos)} is a single block — it needs its casings and hatches to form`);
       }
-    } else if (!blocks.some((c) => c.block.port?.kind === 'energy')) problems.push(`The ${name} has no energy hatch`);
+    } else if (m.eut > 0 && !blocks.some((c) => c.block.port?.kind === 'energy')) problems.push(`The ${name} has no energy hatch`);
   }
   // A muffler hatch needs the cell it faces open to the air.
   for (const c of cells.values()) {
