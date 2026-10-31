@@ -217,6 +217,8 @@ test('a Large Steel Boiler is planned as itself with no tier and no power, with 
   expect(boiler.tier).toBeUndefined();
   expect(p.power.tiers).toEqual(['LV']);
   expect(p.power.source).toMatchObject({ kind: 'outside', tier: 'LV' });
+  expect(p.markers.some((m) => m.kind === 'power')).toBe(true);
+  expect(p.notes.some((n) => n.includes("can't carry all the steam"))).toBe(false);
   expect(p.notes).toEqual(expect.arrayContaining([
     'Fill the Large Steel Boiler with water before its fuel: a Large Boiler that runs dry explodes',
     'The Large Steel Boiler burns at full rate (48,000 L/s of steam) whenever it has fuel; this line uses 4,800 L/s of it, and the rest is lost with its fuel',
@@ -225,11 +227,14 @@ test('a Large Steel Boiler is planned as itself with no tier and no power, with 
   expect(p.markers).toEqual(expect.arrayContaining([{ id: 'in:fluid:water', key: 'fluid:water', dir: 'in', kind: 'fluid' }]));
 });
 
-test('a line with only a Large Steel Boiler needs no power; a fully used boiler gets the plain full-rate note', async () => {
+test('a line with only a Large Steel Boiler needs no power; a fully used boiler gets the plain full-rate and pipe notes', async () => {
   const { boilerDb, chain } = boilerSetup(false);
   const p = ok(await plan({ ...chain, targets: [{ key: 'fluid:steam', rate: 96_000 }] }, 'straight', boilerDb));
   expect(p.straight!.find((m) => m.nodeId === 'boiler')!.count).toBe(2);
   expect(p.notes).toContain('The Large Steel Boiler burns at full rate (96,000 L/s of steam) whenever it has fuel');
+  expect(p.notes).toContain("One Huge Titanium Fluid Pipe can't carry all the steam this line takes from a Large Steel Boiler: give each one a second output hatch and pipe for its steam");
+  expect(p.markers.some((m) => m.kind === 'power')).toBe(false);
+  expect(p.notes.some((n) => n.startsWith('Power in'))).toBe(false);
   expect(p.power.tiers).toEqual([]);
   expect(Object.values(p.power.demand).every((v) => !v)).toBe(true);
 });

@@ -1,5 +1,5 @@
 import { K, oilBerryData } from '../test/oilBerryDb';
-import { LARGE_BOILER_MAP, LARGE_STEEL_BOILER, withBoilerSteam } from './boilers';
+import { LARGE_BOILER_MAP, LARGE_STEEL_BOILER, STEEL_BOILER_MAP, withBoilerSteam } from './boilers';
 import { RecipeDb } from './db';
 import type { AppRecipeData } from './types';
 
@@ -22,12 +22,13 @@ function withFakeFuels(): AppRecipeData {
   return data;
 }
 
-test('a fluid fuel recipe becomes fuel + water -> steam at the Large Steel Boiler rate', () => {
+test('a fluid fuel recipe becomes fuel + water -> steam at the Large Steel Boiler rate, on a map of its own', () => {
   const data = withFakeFuels();
   const benzene = data.recipes.length - 3;
   const out = withBoilerSteam(data);
+  expect(out.maps[data.maps.length]).toEqual({ index: data.maps.length, id: STEEL_BOILER_MAP, name: 'Large Steel Boiler', amperage: 1, machines: [LARGE_STEEL_BOILER] });
   expect(out.recipes[benzene]).toEqual({
-    id: benzene, map: data.maps.length - 1, eut: 0, duration: 365, specialValue: 350,
+    id: benzene, map: data.maps.length, eut: 0, duration: 365, specialValue: 350,
     inputs: [{ key: 'fluid:benzene', amount: 1000, consumed: true }, { key: 'fluid:water', amount: 15 * 365, consumed: true }],
     outputs: [{ key: 'fluid:steam', amount: 2400 * 365, chance: 1 }],
   });
@@ -35,13 +36,13 @@ test('a fluid fuel recipe becomes fuel + water -> steam at the Large Steel Boile
   expect((2400 * 365 * 20) / 365).toBe(48_000);
 });
 
-test('the map offers only the Large Steel Boiler; solid fuels, odd recipes and other maps are untouched', () => {
+test("GT's map keeps solid fuels and odd recipes, without the Steel boiler; other maps are untouched", () => {
   const data = withFakeFuels();
   const out = withBoilerSteam(data);
-  expect(out.maps[data.maps.length - 1].machines).toEqual([LARGE_STEEL_BOILER]);
+  expect(out.maps[data.maps.length - 1].machines.map((m) => m.mID)).toEqual([1021, 15529]);
   expect(out.recipes.slice(-2)).toEqual(data.recipes.slice(-2));
   expect(out.recipes.slice(0, 5)).toEqual(oilBerryData().recipes);
-  expect(out.maps.slice(0, -1)).toEqual(oilBerryData().maps);
+  expect(out.maps.slice(0, -2)).toEqual(oilBerryData().maps);
   expect(out.resources.find((r) => r.key === 'fluid:steam')).toEqual({ key: 'fluid:steam', name: 'Steam', kind: 'fluid' });
   expect(out.resources.find((r) => r.key === 'fluid:water')).toEqual({ key: 'fluid:water', name: 'Water', kind: 'fluid' });
 });

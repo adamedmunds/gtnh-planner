@@ -1,7 +1,7 @@
 import type { Chain } from '../calc/chain';
 import { nodeRates } from '../calc/rates';
 import { V, tierName, tierForEut, TIER_NAMES } from '../calc/tiers';
-import { CATALOG_ENTRIES, machineKey } from '../catalog';
+import { CATALOG, CATALOG_ENTRIES, machineKey } from '../catalog';
 import { haveBoxes, type ScreenSolve } from '../calculator/drive';
 import { formatNumber } from '../calculator/format';
 import { resourceInfo } from '../calculator/graphModel';
@@ -9,6 +9,7 @@ import { BOILER_STEAM } from '../recipes/boilers';
 import type { RecipeDb } from '../recipes/db';
 import { EU, type MachineRef, type ResourceKey } from '../recipes/types';
 import { COILS, EBF_ID, LARGE_STEEL_BOILER_ID, PYROLYSE_OVEN_ID, buildable, coilFor, ebfHeat, hasMuffler } from './multiblock';
+import { pipeFor } from './power';
 import type { LayoutStyle, LinePlan, PlanMachine, PlanMarker, PlanNetwork, PowerPlan, PowerTier } from './types';
 
 const POWER_TIERS: readonly PowerTier[] = ['LV', 'MV', 'HV'];
@@ -150,7 +151,9 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     const below = POWER_TIERS.slice(0, t + 1).reduce((s, x) => s + (demand[x] ?? 0), 0);
     if (below > 0) transformers.push({ from: POWER_TIERS[t + 1], to: POWER_TIERS[t], count: Math.ceil(below / (V[t + 1] * 4) - 1e-9) });
   }
-  if (source.kind === 'outside') markers.push({ id: 'power', key: EU, dir: 'in', kind: 'power' });
+  // A line where nothing takes EU (only a Large Boiler) gets no power at all.
+  const outsidePower = source.kind === 'outside' && tiers.length > 0;
+  if (outsidePower) markers.push({ id: 'power', key: EU, dir: 'in', kind: 'power' });
 
   /** What to set on the machines in game: fronts, auto-output, circuits, outside power. */
   const buildNotes = (machines: PlanMachine[], times: (m: PlanMachine) => number): string[] => [
@@ -160,7 +163,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
       const n = times(m);
       return n === 1 ? `Put a ${k.name} in the ${m.title}` : `Put a ${k.name} in every ${m.title} (${n})`;
     })),
-    ...(source.kind === 'outside'
+    ...(outsidePower && source.kind === 'outside'
       ? [`Power in: bring ${source.tier}, ${formatNumber(source.eut)} EU/t (${Math.max(1, Math.ceil(source.eut / V[POWER_TIERS.indexOf(source.tier) + 1] - 1e-9))} A)`]
       : []),
   ];
@@ -186,9 +189,12 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
     const built = Math.ceil(i.machines - 1e-9);
     const full = `The ${i.ref.name} burns at full rate (${formatNumber(BOILER_STEAM * built)} L/s of steam) whenever it has fuel`;
     const used = BOILER_STEAM * i.machines;
-    return used < BOILER_STEAM * built * 0.99
-      ? `${full}; this line uses ${formatNumber(used)} L/s of it, and the rest is lost with its fuel`
-      : full;
+    // The biggest line pipe (Huge Titanium) carries less than one boiler makes.
+    const pipe = pipeFor('fluid', used / built);
+    return [
+      used < BOILER_STEAM * built * 0.99 ? `${full}; this line uses ${formatNumber(used)} L/s of it, and the rest is lost with its fuel` : full,
+      ...(pipe.warning ? [`One ${CATALOG.get(pipe.key)?.name ?? pipe.key} can't carry all the steam this line takes from a ${i.ref.name}: give each one a second output hatch and pipe for its steam`] : []),
+    ];
   };
   const multiblockNotes = () => info.filter((i) => i.ref.multiblock).flatMap((i) => {
     if (!planned(i)) {
@@ -206,7 +212,7 @@ export function planLine(chain: Chain, db: RecipeDb, screen: ScreenSolve, style:
       ...(coil ? [`The ${name} uses ${coil.name} Heating Coils (its recipe needs ${formatNumber(i.heat)} K)`] : []),
       ...(i.ref.mID === PYROLYSE_OVEN_ID ? [`The ${name} uses Kanthal Heating Coils so it runs at the recipe's speed (Cupronickel would halve it)`] : []),
       ...(hasMuffler(i.ref.mID) ? [`Keep the block above the ${name}'s muffler hatch empty`] : []),
-      ...(i.ref.mID === LARGE_STEEL_BOILER_ID ? [`Fill the ${name} with water before its fuel: a Large Boiler that runs dry explodes`, boilerNote(i)] : []),
+      ...(i.ref.mID === LARGE_STEEL_BOILER_ID ? [`Fill the ${name} with water before its fuel: a Large Boiler that runs dry explodes`, ...boilerNote(i)] : []),
       ...(i.ref.mID === PYROLYSE_OVEN_ID ? [`Place a Steel Frame Box on top of each of the ${name}'s two back pipe columns (Schematica can't hold frame boxes)`] : []),
       ...(i.ref.mID === 1169 || i.ref.mID === 1160 ? [`The ${name}'s Heating Coils are Cupronickel; better ones can be swapped in`] : []),
       ...i.kept.map((k) => `Put a ${k.name} in the ${name}'s controller or input bus`),
