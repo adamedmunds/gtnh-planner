@@ -28,6 +28,7 @@ import { Calculator } from './calculator/ui/Calculator';
 const restored = loadFromStorage(safeStorage());
 const restoredChain = loadChain(safeStorage());
 
+const REPO_URL = 'https://github.com/adamedmunds/gtnh-planner';
 const DISCLAIMER =
   'NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT. ' +
   'Not affiliated with or endorsed by GregTech or the GT New Horizons team. ' +
@@ -271,6 +272,9 @@ export function App() {
       <nav className="tabbar">
         <button data-testid="tab-calculator" className={tab === 'calculator' ? 'on' : ''} onClick={() => setTab('calculator')}>Calculator</button>
         <button data-testid="tab-editor" className={tab === 'editor' ? 'on' : ''} onClick={() => setTab('editor')}>3D Editor</button>
+        <a className="source-link" data-testid="source-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          Source on GitHub
+        </a>
         <p className="disclaimer" data-testid="disclaimer" title={DISCLAIMER}>
           Unofficial fan tool. Not affiliated with Mojang, Microsoft, GregTech or GT New Horizons.
         </p>

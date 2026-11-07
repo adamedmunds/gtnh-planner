@@ -38,6 +38,9 @@ button.primary { background: #1f4f66; border-color: var(--accent); }
 .tabbar { display: flex; gap: 4px; padding: 6px 12px 0; background: var(--bg); border-bottom: 1px solid var(--line); }
 .tabbar button { border-radius: 6px 6px 0 0; border-bottom: none; }
 .tabbar button.on { border-color: var(--accent); background: var(--panel); }
+.tabbar .source-link { margin-left: auto; align-self: center; padding-bottom: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.tabbar .source-link:hover { color: var(--accent); }
+.tabbar .source-link + .disclaimer { margin-left: 12px; }
 .tabbar .disclaimer { margin: 0 0 0 auto; align-self: center; padding-bottom: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .calc-root { min-height: 0; display: flex; flex-direction: column; }
 .calc-status { padding: 24px; max-width: 640px; line-height: 1.6; }
