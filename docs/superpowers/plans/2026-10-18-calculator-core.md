@@ -90,7 +90,7 @@ src/test/oilBerryDb.ts        fixture AppRecipeData with the verified oil berry 
   - `format-1 dump: machines have no generator; fuels still found by map id` and `dumpFormat` is 1.
   - `bad recipe index is skipped with a warning`.
 - [ ] **Step 2:** `npx vitest run src/recipes/importDump.test.ts` → FAIL (module missing).
-- [ ] **Step 3:** Implement `importDump`; the script reads `--dump <path>` (default `C:\Users\adam\AppData\Roaming\PrismLauncher\instances\export v2\.minecraft\gtnh-planner\recipes.json.gz`), gunzips (fflate), writes `public/data/recipes.json.gz` and `public/data/recipes-meta.json` (`{ gregtech, dumpFormat, exportedAt, counts }`), prints counts and warnings count.
+- [ ] **Step 3:** Implement `importDump`; the script reads `--dump <path>` (or `GTNH_DUMP`), gunzips (fflate), writes `public/data/recipes.json.gz` and `public/data/recipes-meta.json` (`{ gregtech, dumpFormat, exportedAt, counts }`), prints counts and warnings count.
 - [ ] **Step 4:** tests pass; `npm run recipes` on the real format-1 dump prints ≈176k recipes and a non-zero fuel count.
 - [ ] **Step 5: Commit** `feat: recipe dump importer`.
 

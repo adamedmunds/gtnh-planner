@@ -40,7 +40,9 @@ at either end. Up to 15 extractors per chemical reactor.
 
 ```bash
 npm install
+cp .env.example .env  # once: point GTNH_INSTANCE / GTNH_DUMP at your own game files (.env is not committed)
 npm run textures      # once: copies textures from your GTNH GregTech jar into public/textures (not committed)
+npm run recipes       # imports your /gtnhplanner dump into public/data (not committed)
 npm run dev           # open the printed URL
 ```
 
@@ -51,3 +53,9 @@ Save/Load .json to keep several. "Oil berry example" loads the generated line fo
 downloads a `.schematic` for Schematica.
 
 Tests: `npm test` (unit), `npm run e2e` (drives the real app in Chromium; first run `npx playwright install chromium`).
+
+Deploying: see [DEPLOY.md](DEPLOY.md).
+
+## License
+
+[MIT](LICENSE). The license covers this code only, not Minecraft's or any mod's textures, icons or recipe data.

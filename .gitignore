@@ -4,6 +4,12 @@ coverage/
 *.log
 .DS_Store
 
+# Local machine paths (see .env.example)
+.env
+
+# Playwright MCP browser checks
+.playwright-mcp/
+
 # Textures are extracted locally from your GTNH mod jars - never commit them
 public/textures/
 

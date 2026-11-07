@@ -1,18 +1,19 @@
 /**
  * Imports a `/gtnhplanner dump` file into the planner.
- * Usage: npm run recipes [-- --dump "<path to recipes.json.gz>"]
+ * Usage: npm run recipes [-- --dump "<path to recipes.json.gz>"]   (or set GTNH_DUMP, e.g. in .env)
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import { importDump } from '../src/recipes/importDump';
+import { loadLocalEnv } from './localEnv';
 
-const DEFAULT_DUMP =
-  'C:/Users/adam/AppData/Roaming/PrismLauncher/instances/export v2/.minecraft/gtnh-planner/recipes.json.gz';
+loadLocalEnv();
 const i = process.argv.indexOf('--dump');
-const dumpPath = i !== -1 ? process.argv[i + 1] : process.env.GTNH_DUMP ?? DEFAULT_DUMP;
-if (!existsSync(dumpPath)) {
-  console.error(`No dump at ${dumpPath}\nRun /gtnhplanner dump in-game, or pass --dump "<path to recipes.json.gz>".`);
+const dumpPath = i !== -1 ? process.argv[i + 1] : process.env.GTNH_DUMP;
+if (!dumpPath || !existsSync(dumpPath)) {
+  console.error(`${dumpPath ? `No dump at ${dumpPath}` : 'No dump path given.'}
+Run /gtnhplanner dump in-game, then pass --dump "<path to recipes.json.gz>" or set GTNH_DUMP (see .env.example).`);
   process.exit(1);
 }
 

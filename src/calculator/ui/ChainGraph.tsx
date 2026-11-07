@@ -118,7 +118,6 @@ function Graph({ active, chain, db, screen, greyed, canUndo, canRedo, dispatch, 
         fitView
         fitViewOptions={FIT}
         minZoom={0.5}
-        proOptions={{ hideAttribution: true }}
       >
         <Background />
         <Panel position="top-left" className="graph-toolbar">

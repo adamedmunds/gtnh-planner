@@ -12,3 +12,7 @@ mod
 # Game content is mounted at runtime, never baked into the image
 public/data
 public/textures
+.env
+.env.*
+!.env.example
+.playwright-mcp

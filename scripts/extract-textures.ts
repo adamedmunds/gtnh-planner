@@ -1,18 +1,23 @@
 /**
  * Copies the textures the catalog needs from your GregTech, Storage Drawers and Minecraft 1.7.10 jars into
  * public/textures/ (git-ignored).
- * Usage: npm run textures [-- --instance "<path to .minecraft>"]   (or set GTNH_INSTANCE)
+ * Usage: npm run textures [-- --instance "<path to .minecraft>"]   (or set GTNH_INSTANCE, e.g. in .env)
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
 import { CATALOG_ENTRIES } from '../src/catalog';
+import { loadLocalEnv } from './localEnv';
 import { selectTextures, textureSource, wantedTexturePaths } from './textureSelect';
 
-const DEFAULT_INSTANCE =
-  'C:\\Users\\adam\\AppData\\Roaming\\PrismLauncher\\instances\\GT_New_Horizons_2.9.0-RC-1_Java_17-26\\.minecraft';
+loadLocalEnv();
 const argIdx = process.argv.indexOf('--instance');
-const instance = argIdx !== -1 ? process.argv[argIdx + 1] : process.env.GTNH_INSTANCE ?? DEFAULT_INSTANCE;
+const instance = argIdx !== -1 ? process.argv[argIdx + 1] : process.env.GTNH_INSTANCE;
+if (!instance) {
+  console.error(`No GTNH instance given.
+Pass your instance's .minecraft folder: npm run textures -- --instance "<path>" (or set GTNH_INSTANCE, see .env.example).`);
+  process.exit(1);
+}
 const modsDir = join(instance, 'mods');
 let modFiles: string[];
 try {

@@ -14,8 +14,8 @@ First real use: the user's oil berry → light fuel line (6× LV Fluid Extractor
 - **Stack:** Vite + React + TypeScript, react-three-fiber / drei for 3D. No backend (user preference: React; Next.js only if full stack is needed — it isn't).
 - **Local only.** Not published. Textures are extracted from the user's own mod jars and are git-ignored; they are never committed or distributed.
 - **Target game:** GTNH 2.9.0-RC-1, GregTech `5.09.54.183`, Schematica `1.12.6-GTNH`.
-  Instance: `C:\Users\adam\AppData\Roaming\PrismLauncher\instances\GT_New_Horizons_2.9.0-RC-1_Java_17-26\.minecraft`
-- **Repo:** `C:\Users\adam\Desktop\coding\claude\gtnh-planner`, private GitHub repo `adamedmunds/gtnh-planner`.
+  Instance: `<your GTNH instance>/.minecraft`
+- **Repo:** GitHub repo `adamedmunds/gtnh-planner`.
 
 ## Verified facts (from the user's world save and GT source)
 
