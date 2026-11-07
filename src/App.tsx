@@ -28,6 +28,11 @@ import { Calculator } from './calculator/ui/Calculator';
 const restored = loadFromStorage(safeStorage());
 const restoredChain = loadChain(safeStorage());
 
+const DISCLAIMER =
+  'NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT. ' +
+  'Not affiliated with or endorsed by GregTech or the GT New Horizons team. ' +
+  'Minecraft and mod textures, icons and recipe data belong to their respective owners.';
+
 type Tab = 'editor' | 'calculator';
 const TAB_KEY = 'gtnh-planner:tab';
 const LABELS_KEY = 'gtnh-planner:labels';
@@ -266,6 +271,9 @@ export function App() {
       <nav className="tabbar">
         <button data-testid="tab-calculator" className={tab === 'calculator' ? 'on' : ''} onClick={() => setTab('calculator')}>Calculator</button>
         <button data-testid="tab-editor" className={tab === 'editor' ? 'on' : ''} onClick={() => setTab('editor')}>3D Editor</button>
+        <p className="disclaimer" data-testid="disclaimer" title={DISCLAIMER}>
+          Unofficial fan tool. Not affiliated with Mojang, Microsoft, GregTech or GT New Horizons.
+        </p>
       </nav>
     <div className="app" hidden={tab !== 'editor'}>
       <Toolbar

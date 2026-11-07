@@ -4,6 +4,12 @@ A local 3D build planner for GregTech: New Horizons. Lay out GT machines, cables
 
 Textures are extracted from your own GTNH install and are never committed.
 
+> **Disclaimer:** GTNH Planner is an unofficial fan tool. NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR
+> ASSOCIATED WITH MOJANG OR MICROSOFT. It is not affiliated with or endorsed by GregTech or the GT New Horizons team.
+> Minecraft and mod textures, icons and recipe data belong to their respective owners. This repository contains none
+> of them. If you own any of that content and want it removed from the hosted version, open an issue and it will be
+> taken down.
+
 ## Test hologram (in-game check)
 
 ```bash
