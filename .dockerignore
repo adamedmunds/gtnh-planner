@@ -1,0 +1,14 @@
+node_modules
+dist
+out
+coverage
+test-results
+playwright-report
+.superpowers
+.git
+mod
+*.log
+*.schematic
+# Game content is mounted at runtime, never baked into the image
+public/data
+public/textures
